@@ -9,6 +9,7 @@ localhost hosts).
 from __future__ import annotations
 
 import os
+from datetime import timedelta
 from urllib.parse import urlparse, parse_qsl, urlencode, urlunparse
 
 _LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1", ""}
@@ -58,3 +59,12 @@ class Config:
             "DOCUMENTS_DIR", os.path.join(os.getcwd(), "instance", "documents")
         )
         self.MAX_CONTENT_LENGTH = 25 * 1024 * 1024  # 25 MB upload cap
+
+        # Session / login security.
+        self.SESSION_COOKIE_HTTPONLY = True
+        self.SESSION_COOKIE_SAMESITE = "Lax"
+        # Enable secure cookies in production (behind HTTPS on Render).
+        self.SESSION_COOKIE_SECURE = os.environ.get("SESSION_COOKIE_SECURE", "").lower() in (
+            "1", "true", "yes",
+        )
+        self.PERMANENT_SESSION_LIFETIME = timedelta(hours=12)

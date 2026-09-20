@@ -22,6 +22,114 @@ def _utcnow() -> datetime:
     return datetime.utcnow()
 
 
+class User(db.Model):
+    __tablename__ = "users"
+
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(64), unique=True, nullable=False, index=True)
+    password_hash = db.Column(db.String(255), nullable=False)
+    full_name = db.Column(db.String(255))
+    email = db.Column(db.String(255))
+    role = db.Column(db.String(16), nullable=False, default="USER")
+    active = db.Column(db.Boolean, nullable=False, default=True)
+    must_change_password = db.Column(db.Boolean, default=True)
+    failed_login_count = db.Column(db.Integer, default=0)
+    locked_until = db.Column(db.DateTime)
+    last_login_at = db.Column(db.DateTime)
+    created_at = db.Column(db.DateTime, default=_utcnow, nullable=False)
+    created_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+    updated_at = db.Column(db.DateTime, default=_utcnow, onupdate=_utcnow)
+    updated_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+
+    permissions = db.relationship(
+        "UserPermission", backref="user", cascade="all, delete-orphan",
+        foreign_keys="UserPermission.user_id",
+    )
+
+    # --- Flask-Login integration ---
+    @property
+    def is_active(self) -> bool:
+        return bool(self.active)
+
+    @property
+    def is_authenticated(self) -> bool:
+        return True
+
+    @property
+    def is_anonymous(self) -> bool:
+        return False
+
+    def get_id(self) -> str:
+        return str(self.id)
+
+    def is_admin(self) -> bool:
+        return self.role == "ADMIN"
+
+    def has_permission(self, code: str) -> bool:
+        if self.is_admin():
+            return True
+        return (
+            UserPermission.query.filter_by(
+                user_id=self.id, permission_id=_permission_id(code), granted=True
+            ).first()
+            is not None
+        )
+
+    def permission_count(self) -> int:
+        if self.is_admin():
+            return len(_all_permission_codes())
+        return UserPermission.query.filter_by(user_id=self.id, granted=True).count()
+
+
+def _permission_id(code: str):
+    perm = Permission.query.filter_by(code=code).first()
+    return perm.id if perm else -1
+
+
+def _all_permission_codes():
+    return [p.code for p in Permission.query.all()]
+
+
+class Permission(db.Model):
+    __tablename__ = "permissions"
+
+    id = db.Column(db.Integer, primary_key=True)
+    code = db.Column(db.String(64), unique=True, nullable=False, index=True)
+    description = db.Column(db.String(255))
+    module = db.Column(db.String(64))
+
+
+class UserPermission(db.Model):
+    __tablename__ = "user_permissions"
+    __table_args__ = (
+        db.UniqueConstraint("user_id", "permission_id", name="uq_user_permission"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    permission_id = db.Column(db.Integer, db.ForeignKey("permissions.id"), nullable=False)
+    granted = db.Column(db.Boolean, nullable=False, default=True)
+    created_at = db.Column(db.DateTime, default=_utcnow, nullable=False)
+    created_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+
+    permission = db.relationship("Permission")
+
+
+class AuditEvent(db.Model):
+    __tablename__ = "audit_events"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    username = db.Column(db.String(64))
+    event_type = db.Column(db.String(48), nullable=False, index=True)
+    module = db.Column(db.String(48))
+    entity_type = db.Column(db.String(48))
+    entity_id = db.Column(db.String(64))
+    ip_address = db.Column(db.String(64))
+    detail = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=_utcnow, nullable=False, index=True)
+
+
 class Client(db.Model):
     __tablename__ = "clients"
 
@@ -81,6 +189,8 @@ class ImportBatch(db.Model):
     message = db.Column(db.Text)
     detail = db.Column(db.Text)
     created_by = db.Column(db.String(128))
+    created_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+    created_by_username = db.Column(db.String(64))
     created_at = db.Column(db.DateTime, default=_utcnow, nullable=False)
 
 
@@ -149,6 +259,10 @@ class Order(db.Model):
     import_batch_id = db.Column(
         db.Integer, db.ForeignKey("import_batches.id"), nullable=True
     )
+    validated_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+    validated_by_username = db.Column(db.String(64))
+    closed_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+    closed_by_username = db.Column(db.String(64))
     created_at = db.Column(db.DateTime, default=_utcnow, nullable=False)
     updated_at = db.Column(db.DateTime, default=_utcnow, onupdate=_utcnow, nullable=False)
 
@@ -216,6 +330,10 @@ class Box(db.Model):
     height_cm = db.Column(db.Float)
     weight_kg = db.Column(db.Float)
     status = db.Column(db.String(20), default=BoxStatus.OPEN, nullable=False)
+    created_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+    created_by_username = db.Column(db.String(64))
+    closed_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+    closed_by_username = db.Column(db.String(64))
     created_at = db.Column(db.DateTime, default=_utcnow, nullable=False)
     closed_at = db.Column(db.DateTime)
 
@@ -257,6 +375,8 @@ class Transaction(db.Model):
     barcode = db.Column(db.String(128))
     quantity = db.Column(db.Integer)
     detail = db.Column(db.Text)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    username = db.Column(db.String(64))
     created_at = db.Column(db.DateTime, default=_utcnow, nullable=False)
 
 
@@ -278,6 +398,8 @@ class InventoryMovement(db.Model):
     to_location = db.Column(db.String(64))
     order_id = db.Column(db.Integer, db.ForeignKey("orders.id"), nullable=True)
     actor = db.Column(db.String(128))
+    created_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    created_by_username = db.Column(db.String(64))
     reason = db.Column(db.String(255))
     created_at = db.Column(db.DateTime, default=_utcnow, nullable=False)
 
@@ -296,6 +418,8 @@ class OrderException(db.Model):
     type = db.Column(db.String(48), nullable=False)
     message = db.Column(db.Text)
     resolved = db.Column(db.Boolean, default=False, nullable=False)
+    created_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+    created_by_username = db.Column(db.String(64), default="SYSTEM")
     created_at = db.Column(db.DateTime, default=_utcnow, nullable=False)
 
     order = db.relationship("Order", backref="exceptions")
@@ -332,6 +456,8 @@ class Document(db.Model):
     type = db.Column(db.String(48), nullable=False)
     filename = db.Column(db.String(255), nullable=False)
     path = db.Column(db.String(512), nullable=False)
+    created_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+    created_by_username = db.Column(db.String(64))
     created_at = db.Column(db.DateTime, default=_utcnow, nullable=False)
 
     order = db.relationship("Order", backref="documents")
@@ -361,6 +487,8 @@ class Invoice(db.Model):
     status = db.Column(db.String(20), default=InvoiceStatus.ISSUED, nullable=False)
     created_at = db.Column(db.DateTime, default=_utcnow, nullable=False)
     created_by = db.Column(db.String(128))
+    created_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+    created_by_username = db.Column(db.String(64))
 
     client = db.relationship("Client")
     warehouse = db.relationship("Warehouse")
