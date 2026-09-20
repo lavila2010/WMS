@@ -42,11 +42,28 @@ NEW → VALIDATED → ALLOCATING → ALLOCATED → READY_TO_PICK
 Select order → create/select box → scan units into box → close box → enter box
 weight → repeat until all units packed → close order after quantity reconciliation.
 
+## Multi-client isolation
+
+The operational scope is **Client + Warehouse + Order Type**. Master tables
+`clients`, `warehouses`, and `order_types` keep clients independent. No
+allocation, scan, packing, exception, inventory query, or report crosses that
+boundary. Barcodes remain globally unique; order numbers are unique only within
+`(client, warehouse, order_type, order_number)`.
+
+## Invoicing
+
+Closing an order is atomic: validate quantities → validate all boxes closed →
+close order → create exactly one invoice → mark units shipped → record
+transactions. If invoice creation fails, the whole close is rolled back.
+Invoice numbering (`INV-YYYY-000001`) is isolated in `app/services/invoices.py`
+so client-specific schemes can be added later.
+
 ## Database tables
 
-`inventory_units`, `orders`, `order_lines`, `allocations`, `boxes`,
-`box_contents`, `transactions`, `inventory_movements`, `order_exceptions`,
-`documents`, `import_batches`.
+`clients`, `warehouses`, `order_types`, `inventory_units`, `orders`,
+`order_lines`, `allocations`, `boxes`, `box_contents`, `invoices`,
+`transactions`, `inventory_movements`, `order_exceptions`, `documents`,
+`import_batches`.
 
 ## Local development
 
