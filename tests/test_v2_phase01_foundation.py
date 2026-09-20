@@ -15,7 +15,7 @@ from app.services.masters import (
     map_division_warehouse,
     update_client,
 )
-from tests.conftest import create_user, login
+from tests.conftest import create_user, form_data, login
 
 
 def test_p1_01_client_sequence_concurrency(app, db):
@@ -153,24 +153,28 @@ def test_p1_09_rbac_denies_client_create(app, db, client):
     create_user("limited", perms=["DASHBOARD_VIEW", "CLIENTS_VIEW"])
     login(client, "limited")
     assert client.get("/admin/clients/new").status_code == 403
-    resp = client.post("/admin/clients/new", data={"name": "X", "initials": "XXX"})
+    resp = client.post("/admin/clients/new", data=form_data(client, {"name": "X", "initials": "XXX"}))
     assert resp.status_code == 403
     assert Client.query.count() == 0
 
 
 def test_p1_10_admin_crud_masters(app, db, admin_client):
-    resp = admin_client.post("/admin/clients/new", data={"name": "Valentino", "initials": "val"}, follow_redirects=True)
+    resp = admin_client.post(
+        "/admin/clients/new",
+        data=form_data(admin_client, {"name": "Valentino", "initials": "val"}),
+        follow_redirects=True,
+    )
     assert resp.status_code == 200
     client_row = Client.query.filter_by(initials="VAL").one()
     assert client_row.client_code == "01-VAL"
     admin_client.post(
         "/admin/divisions",
-        data={"client_id": client_row.id, "name": "Ecom", "operation_type": "ECOM"},
+        data=form_data(admin_client, {"client_id": client_row.id, "name": "Ecom", "operation_type": "ECOM"}),
         follow_redirects=True,
     )
     admin_client.post(
         "/admin/warehouses",
-        data={"client_id": client_row.id, "warehouse_symbol": "ny", "name": "NYC"},
+        data=form_data(admin_client, {"client_id": client_row.id, "warehouse_symbol": "ny", "name": "NYC"}),
         follow_redirects=True,
     )
     div = Division.query.one()
@@ -179,13 +183,17 @@ def test_p1_10_admin_crud_masters(app, db, admin_client):
     assert wh.warehouse_code == "01-VAL-NY"
     admin_client.post(
         "/admin/mappings",
-        data={"division_id": div.id, "warehouse_id": wh.id},
+        data=form_data(admin_client, {"division_id": div.id, "warehouse_id": wh.id}),
         follow_redirects=True,
     )
     assert DivisionWarehouse.query.count() == 1
     create_user("pat", role="USER")
     user = db.session.execute(text("SELECT id FROM users WHERE username='pat'")).scalar()
-    admin_client.post("/admin/client-access", data={"user_id": user, f"client_{client_row.id}": "on"}, follow_redirects=True)
+    admin_client.post(
+        "/admin/client-access",
+        data=form_data(admin_client, {"user_id": user, f"client_{client_row.id}": "on"}),
+        follow_redirects=True,
+    )
     from app.models import UserClient
 
     assert UserClient.query.filter_by(user_id=user, client_id=client_row.id).first()

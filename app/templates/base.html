@@ -4,10 +4,12 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{% block title %}WMS{% endblock %} · WMS</title>
+    <meta name="csrf-token" content="{{ csrf_token() }}" />
     <link
       rel="stylesheet"
       href="{{ url_for('static', filename='css/styles.css') }}"
     />
+    <script src="{{ url_for('static', filename='js/csrf.js') }}" defer></script>
     {% block head %}{% endblock %}
   </head>
   <body>
@@ -30,7 +32,7 @@
           <div class="usermenu-panel">
             <a href="{{ url_for('auth.profile') }}">My Profile</a>
             <a href="{{ url_for('auth.change_password') }}">Change Password</a>
-            <form method="post" action="{{ url_for('auth.logout') }}"><button type="submit">Logout</button></form>
+            <form method="post" action="{{ url_for('auth.logout') }}">{% include "_csrf.html" %}<button type="submit">Logout</button></form>
           </div>
         </details>
       </div>

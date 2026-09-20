@@ -17,6 +17,7 @@
   <h2>Run allocation</h2>
   {% if order.status in ['UNALLOCATED', 'PARTIALLY_ALLOCATED'] and can('ALLOCATION_EXECUTE') %}
     <form method="post" action="{{ url_for('allocation.run', order_id=order.id) }}">
+      {% include "_csrf.html" %}
       <button type="submit">Reserve available units</button>
     </form>
   {% else %}
@@ -59,7 +60,7 @@
           <td>{{ a.location }}</td>
           <td class="right">
             {% if can('ALLOCATION_RELEASE') %}
-            <form method="post" action="{{ url_for('allocation.release', allocation_id=a.id) }}"><button class="btn-danger btn" type="submit">Release</button></form>
+            <form method="post" action="{{ url_for('allocation.release', allocation_id=a.id) }}">{% include "_csrf.html" %}<button class="btn-danger btn" type="submit">Release</button></form>
             {% endif %}
           </td>
         </tr>

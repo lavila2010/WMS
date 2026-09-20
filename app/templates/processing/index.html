@@ -10,6 +10,7 @@
   <h2>Start Order</h2>
   <p class="sub" style="margin-bottom:1rem;">Enter or scan the Pick Ticket number associated with the client order.</p>
   <form method="post" action="{{ url_for('processing.find') }}" class="inline-form">
+    {% include "_csrf.html" %}
     <label>Pick Ticket Number
       <input id="pick-ticket" name="pick_ticket_number" value="{{ pick_ticket_number or '' }}" autocomplete="off" autofocus />
     </label>

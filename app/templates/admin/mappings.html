@@ -6,6 +6,7 @@
 <div class="card">
   <h2>Map division to warehouse</h2>
   <form method="post" class="form-grid">
+    {% include "_csrf.html" %}
     <label>Division
       <select name="division_id" required>
         {% for d in divisions %}<option value="{{ d.id }}">{{ d.code }}</option>{% endfor %}

@@ -7,6 +7,7 @@
 <div class="card">
   <h2>Create User</h2>
   <form method="post" action="{{ url_for('admin.create_user') }}">
+    {% include "_csrf.html" %}
     <div class="grid">
       <label>Username<input name="username" required /></label>
       <label>Full Name<input name="full_name" /></label>
@@ -31,6 +32,7 @@
 <div class="card">
   <h2>Edit User — <span class="mono">{{ user.username }}</span> <span class="badge">{{ user.role }}</span></h2>
   <form method="post" action="{{ url_for('admin.update_user', user_id=user.id) }}">
+    {% include "_csrf.html" %}
     <div class="grid">
       <label>Username<input value="{{ user.username }}" disabled /></label>
       <label>Full Name<input name="full_name" value="{{ user.full_name or '' }}" /></label>
@@ -47,6 +49,7 @@
 <div class="card">
   <h2>Reset Password</h2>
   <form method="post" action="{{ url_for('admin.reset_password', user_id=user.id) }}" class="inline-form">
+    {% include "_csrf.html" %}
     <label>New temporary password<input type="password" name="new_password" required /></label>
     <button type="submit">Reset Password</button>
   </form>
@@ -61,6 +64,7 @@
     <p class="muted">ADMIN users automatically have all permissions.</p>
   {% else %}
   <form method="post" action="{{ url_for('admin.assign_permissions', user_id=user.id) }}">
+    {% include "_csrf.html" %}
     {% include "admin/_permission_matrix.html" %}
     <div class="btn-row"><button type="submit">Save permissions</button></div>
   </form>

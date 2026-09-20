@@ -6,6 +6,7 @@
   <h2>Upload Orders</h2>
   <p class="muted">Select Client and Division first. Spreadsheet columns: Warehouse, OrderNumber, Customer, CustomerAddress, CustomerPhone, UPC, Qty, Carrier, ShippingService. Same OrderNumber rows become one header. Header fields must match. Preview writes nothing. Confirm imports atomically.</p>
   <form method="post" action="{{ url_for('orders.import_preview') }}" enctype="multipart/form-data" class="inline-form">
+    {% include "_csrf.html" %}
     <label>Client
       <select name="client_id" required>
         <option value="">Select client</option>
@@ -70,9 +71,11 @@
 
   <div class="btn-row">
     <form method="post" action="{{ url_for('orders.import_confirm') }}">
+      {% include "_csrf.html" %}
       <button class="btn-success" type="submit" {{ 'disabled' if preview.has_blocking }}>Confirm Import</button>
     </form>
     <form method="post" action="{{ url_for('orders.import_cancel') }}">
+      {% include "_csrf.html" %}
       <button class="btn-secondary btn" type="submit">Cancel</button>
     </form>
   </div>

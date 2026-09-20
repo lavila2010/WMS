@@ -14,7 +14,7 @@ from app.services.inventory_ledger import LedgerError, create_available_unit, tr
 from app.services.inventory_query import aggregate_rows, status_counts
 from app.services.invariants import assert_invariants
 from app.services.masters import create_client, create_warehouse
-from tests.conftest import create_user, login
+from tests.conftest import create_user, form_data, login
 
 
 def _xlsx(rows):
@@ -211,17 +211,24 @@ def test_p2_http_import_and_isolation(app, db, admin_client):
     )
     preview_resp = admin_client.post(
         "/inventory/upload/preview",
-        data={
-            "client_id": celine.id,
-            "warehouse_id": cel_ny.id,
-            "file": (_xlsx([_row(qty=3)]), "stock.xlsx"),
-        },
+        data=form_data(
+            admin_client,
+            {
+                "client_id": celine.id,
+                "warehouse_id": cel_ny.id,
+                "file": (_xlsx([_row(qty=3)]), "stock.xlsx"),
+            },
+        ),
         content_type="multipart/form-data",
         follow_redirects=True,
     )
     assert preview_resp.status_code == 200
     assert b"Physical Units" in preview_resp.data
-    confirm = admin_client.post("/inventory/upload/confirm", follow_redirects=True)
+    confirm = admin_client.post(
+        "/inventory/upload/confirm",
+        data=form_data(admin_client),
+        follow_redirects=True,
+    )
     assert confirm.status_code == 200
     assert InventoryUnit.query.count() == 3
 

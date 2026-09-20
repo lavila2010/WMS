@@ -1,7 +1,7 @@
 from app.constants import OrderStatus
 from app.models import AuditEvent, Document, Order
 from app.services.documents import get_store, persist_closure_pdf
-from tests.conftest import create_user, login
+from tests.conftest import create_user, form_data, login
 from tests.test_v2_phase06_processing import _processing_order
 from app.services.processing import close_order, request_close, scan_upc, set_weight
 
@@ -46,7 +46,11 @@ def test_p7_03_04_cartons_and_closed_by(app, db, admin_user):
 
 def test_p7_05_reprint_audit(app, db, admin_user, admin_client):
     _, order = _closed(db, admin_user)
-    resp = admin_client.post(f"/reports/{order.id}/closure", follow_redirects=False)
+    resp = admin_client.post(
+        f"/reports/{order.id}/closure",
+        data=form_data(admin_client),
+        follow_redirects=False,
+    )
     assert resp.status_code in {302, 200}
     assert AuditEvent.query.filter_by(event_type="PDF_PRINTED").count() >= 1
 

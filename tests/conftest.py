@@ -1,4 +1,5 @@
 import os
+import re
 
 import pytest
 from sqlalchemy import text
@@ -7,6 +8,13 @@ from app import create_app
 from app.config import Config
 from app.extensions import db as _db
 from app.schema import ensure_v2_schema
+
+_CSRF_RE = re.compile(
+    r'(?:name=["\']csrf_token["\'][^>]*value=["\']([^"\']+)["\']'
+    r'|value=["\']([^"\']+)["\'][^>]*name=["\']csrf_token["\']'
+    r'|name=["\']csrf-token["\'][^>]*content=["\']([^"\']+)["\'])',
+    re.I,
+)
 
 TEST_DB_URL = os.environ.get(
     "TEST_DATABASE_URL", "postgresql://wms:wms@127.0.0.1:5432/wms_test"
@@ -75,10 +83,44 @@ def create_user(username, role="USER", password="password123", perms=None,
     return user
 
 
+def extract_csrf_token(html: str) -> str:
+    match = _CSRF_RE.search(html)
+    if not match:
+        raise AssertionError("CSRF token not found in HTML")
+    return next(group for group in match.groups() if group)
+
+
+def csrf_token(client, path="/login"):
+    """Return a signed CSRF token bound to this test client's session cookie.
+
+    Flask test clients created while an app context is already pushed do not
+    always persist Set-Cookie from a GET. session_transaction writes the
+    cookie onto this client explicitly so a later POST can validate.
+    """
+    import hashlib
+
+    from flask import current_app
+    from itsdangerous import URLSafeTimedSerializer
+
+    if path:
+        client.get(path, follow_redirects=True)
+    with client.session_transaction() as sess:
+        if "csrf_token" not in sess:
+            sess["csrf_token"] = hashlib.sha1(os.urandom(64)).hexdigest()
+        raw = sess["csrf_token"]
+    return URLSafeTimedSerializer(current_app.secret_key, salt="wtf-csrf-token").dumps(raw)
+
+
+def form_data(client, data=None, path="/"):
+    payload = dict(data or {})
+    payload["csrf_token"] = csrf_token(client, path)
+    return payload
+
+
 def login(client, username, password="password123"):
     return client.post(
         "/login",
-        data={"username": username, "password": password},
+        data=form_data(client, {"username": username, "password": password}, path="/login"),
         follow_redirects=False,
     )
 

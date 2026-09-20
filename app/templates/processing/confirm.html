@@ -27,6 +27,7 @@
   <div class="btn-row" style="margin-top:1rem;">
     <a class="btn btn-secondary" href="{{ url_for('processing.index') }}">Cancel</a>
     <form method="post" action="{{ url_for('processing.confirm', order_id=order.id) }}">
+      {% include "_csrf.html" %}
       <button type="submit">OK - Confirm Order</button>
     </form>
   </div>

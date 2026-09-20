@@ -28,7 +28,7 @@
           <td>{{ o.customer or '—' }}</td>
           <td class="right">
             {% if can('PICK_TICKET_GENERATE') %}
-            <form method="post" action="{{ url_for('orders.generate_pick_ticket', order_id=o.id) }}"><button type="submit">Create Pick Ticket</button></form>
+            <form method="post" action="{{ url_for('orders.generate_pick_ticket', order_id=o.id) }}">{% include "_csrf.html" %}<button type="submit">Create Pick Ticket</button></form>
             {% endif %}
           </td>
         </tr>

@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 from flask import Flask
 
 from .config import Config
-from .extensions import db
+from .extensions import csrf, db
 
 
 def create_app(config: Config | None = None) -> Flask:
@@ -18,6 +18,7 @@ def create_app(config: Config | None = None) -> Flask:
     os.makedirs(app.config["DOCUMENTS_DIR"], exist_ok=True)
 
     db.init_app(app)
+    csrf.init_app(app)
     from . import models  # noqa: F401
 
     from .auth import init_auth
@@ -54,11 +55,31 @@ def create_app(config: Config | None = None) -> Flask:
     app.register_blueprint(kpi_bp)
     app.register_blueprint(admin_bp)
 
+    csrf.exempt(health_bp)
+
     @app.errorhandler(403)
     def _forbidden(_e):
         from flask import render_template
 
         return render_template("403.html"), 403
+
+    from flask_wtf.csrf import CSRFError
+
+    @app.errorhandler(CSRFError)
+    def _csrf_failure(_e):
+        from flask import jsonify, render_template, request
+
+        # Safe client message only. Do not log tokens, cookies, or credentials.
+        payload = {"error": "CSRF validation failed"}
+        wants_json = (
+            request.is_json
+            or request.headers.get("X-Requested-With") == "XMLHttpRequest"
+            or request.accept_mimetypes.best_match(["application/json", "text/html"])
+            == "application/json"
+        )
+        if wants_json:
+            return jsonify(payload), 400
+        return render_template("400.html"), 400
 
     _register_cli(app)
     return app

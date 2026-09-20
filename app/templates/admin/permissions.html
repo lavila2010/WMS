@@ -22,6 +22,7 @@
     <p class="muted">ADMIN users automatically have all permissions.</p>
   {% else %}
   <form method="post" action="{{ url_for('admin.assign_permissions', user_id=user.id) }}">
+    {% include "_csrf.html" %}
     {% include "admin/_permission_matrix.html" %}
     <div class="btn-row"><button type="submit">Save permissions</button></div>
   </form>

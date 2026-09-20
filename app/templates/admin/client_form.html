@@ -5,6 +5,7 @@
 <div class="card">
   <h2>{{ 'Edit client' if client else 'Create client' }}</h2>
   <form method="post" class="form-grid">
+    {% include "_csrf.html" %}
     <label>Name
       <input name="name" required value="{{ client.name if client else '' }}">
     </label>

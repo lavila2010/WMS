@@ -57,6 +57,11 @@ class Config:
             "yes",
         )
         self.PERMANENT_SESSION_LIFETIME = timedelta(hours=12)
+        self.WTF_CSRF_ENABLED = True
+        self.WTF_CSRF_TIME_LIMIT = int(os.environ.get("WTF_CSRF_TIME_LIMIT", str(8 * 3600)))
+        self.WTF_CSRF_SSL_STRICT = bool(self.SESSION_COOKIE_SECURE)
+        self.WTF_CSRF_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
+        self.WTF_CSRF_HEADERS = ["X-CSRFToken", "X-CSRF-Token"]
         self.OPERATIONAL_TIMEZONE = os.environ.get("WMS_TIMEZONE", "America/New_York")
         self.WMS_ENV = os.environ.get("WMS_ENV", "development")
         self.DOCUMENT_STORE = os.environ.get("DOCUMENT_STORE", "local")

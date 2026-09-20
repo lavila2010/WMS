@@ -5,6 +5,7 @@
 <div class="card">
   <p class="muted">Required columns: <b>Client</b>, <b>Warehouse</b>, <b>OrderType</b>, <b>OrderNumber</b>, <b>SKU</b>, <b>QtyOrdered</b>. Optional: Customer, Description, Carrier, ShippingService. Rows sharing Client+Warehouse+OrderType+OrderNumber form one order; their Customer/Carrier/ShippingService must agree or the import is rejected.</p>
   <form method="post" enctype="multipart/form-data" class="inline-form">
+    {% include "_csrf.html" %}
     <label>Orders workbook
       <input type="file" name="file" accept=".xlsx" required />
     </label>

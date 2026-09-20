@@ -6,6 +6,7 @@
 <div class="card">
   <h2>Create warehouse</h2>
   <form method="post" action="{{ url_for('admin.create_warehouse_view') }}" class="form-grid">
+    {% include "_csrf.html" %}
     <label>Client
       <select name="client_id" required>
         {% for c in clients %}<option value="{{ c.id }}">{{ c.client_code }} · {{ c.name }}</option>{% endfor %}

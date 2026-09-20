@@ -29,7 +29,7 @@
   <div class="btn-row">
     <a class="btn-secondary btn" href="{{ url_for('orders.pick_ticket_pdf', ticket_id=ticket.id) }}">Download PDF</a>
     {% if can('PICK_TICKET_PRINT') %}
-    <form method="post" action="{{ url_for('orders.pick_ticket_print', ticket_id=ticket.id) }}"><button type="submit">Record print / reprint</button></form>
+    <form method="post" action="{{ url_for('orders.pick_ticket_print', ticket_id=ticket.id) }}">{% include "_csrf.html" %}<button type="submit">Record print / reprint</button></form>
     {% endif %}
     <a class="btn-secondary btn" href="{{ url_for('orders.pick_tickets', client_id=order.client_id) }}">Back</a>
   </div>

@@ -26,6 +26,7 @@
               {% if can('USERS_EDIT') %}<a class="btn-secondary btn" href="{{ url_for('admin.edit_user', user_id=u.id) }}">Edit</a>{% endif %}
               {% if can('USERS_DISABLE') %}
               <form method="post" action="{{ url_for('admin.toggle_user', user_id=u.id) }}">
+                {% include "_csrf.html" %}
                 <button class="btn {{ 'btn-danger' if u.active else '' }}" type="submit">{{ 'Disable' if u.active else 'Enable' }}</button>
               </form>
               {% endif %}

@@ -6,6 +6,7 @@
   <h2>Select Context, Then File</h2>
   <p class="sub">Required columns: UPC, SKU, Style, Color, Size, Quantity, Location. Client and Warehouse come from the selected context. If the file includes Client or Warehouse columns they are validated only and cannot override context. Quantity N creates N physical units.</p>
   <form method="post" action="{{ url_for('inventory.import_preview') }}" enctype="multipart/form-data" class="scopebar" style="border:none;padding:0;background:none;">
+    {% include "_csrf.html" %}
     <div>
       <label>Client</label><br />
       <select name="client_id" id="inv-client" required>
@@ -77,9 +78,11 @@
 
   <div style="margin-top:1rem; display:flex; gap:0.6rem;">
     <form method="post" action="{{ url_for('inventory.import_confirm') }}">
+      {% include "_csrf.html" %}
       <button class="btn {{ 'disabled' if preview.has_blocking }}" type="submit" {{ 'disabled' if preview.has_blocking }}>Confirm Import</button>
     </form>
     <form method="post" action="{{ url_for('inventory.import_cancel') }}">
+      {% include "_csrf.html" %}
       <button class="btn btn-danger" type="submit">Cancel</button>
     </form>
   </div>

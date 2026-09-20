@@ -19,6 +19,7 @@
   <p class="muted">ADMIN users have access to every client.</p>
   {% else %}
   <form method="post">
+    {% include "_csrf.html" %}
     <input type="hidden" name="user_id" value="{{ user.id }}">
     {% for c in clients %}
     <label class="check">

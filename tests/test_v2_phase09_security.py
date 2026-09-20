@@ -3,7 +3,7 @@ from werkzeug.security import check_password_hash
 from app.config import Config
 from app.models import Order, User
 from app.services.processing import LOCK_MESSAGE, ProcessingError, acquire_lock, scan_upc
-from tests.conftest import create_user, login
+from tests.conftest import create_user, form_data, login
 from tests.test_v2_phase06_processing import _processing_order
 
 
@@ -24,8 +24,14 @@ def test_p9_idor_and_escalation(app, db, admin_user, client):
     )
     login(client, "cel")
     assert client.get(f"/admin/clients/{w['dior'].id}/edit").status_code == 404
-    assert client.post("/admin/clients/new", data={"name": "X", "initials": "XXX"}).status_code == 403
-    assert client.post(f"/allocation/{order.id}/run").status_code == 403
+    assert client.post(
+        "/admin/clients/new",
+        data=form_data(client, {"name": "X", "initials": "XXX"}),
+    ).status_code == 403
+    assert client.post(
+        f"/allocation/{order.id}/run",
+        data=form_data(client),
+    ).status_code == 403
 
 
 def test_p9_health_no_secrets(client):

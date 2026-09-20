@@ -65,7 +65,7 @@
           <td><span class="badge badge-{{ o.status }}">{{ o.status }}</span></td>
           <td>
             {% if can('DOCUMENT_REPRINT') %}
-            <form method="post" action="{{ url_for('reports.closure', order_id=o.id) }}"><button type="submit">Closure PDF</button></form>
+            <form method="post" action="{{ url_for('reports.closure', order_id=o.id) }}">{% include "_csrf.html" %}<button type="submit">Closure PDF</button></form>
             {% else %}<span class="muted">view only</span>{% endif %}
           </td>
         </tr>
