@@ -42,13 +42,25 @@ NEW → VALIDATED → ALLOCATING → ALLOCATED → READY_TO_PICK
 Select order → create/select box → scan units into box → close box → enter box
 weight → repeat until all units packed → close order after quantity reconciliation.
 
-## Multi-client isolation
+## Scope model
 
-The operational scope is **Client + Warehouse + Order Type**. Master tables
-`clients`, `warehouses`, and `order_types` keep clients independent. No
-allocation, scan, packing, exception, inventory query, or report crosses that
-boundary. Barcodes remain globally unique; order numbers are unique only within
-`(client, warehouse, order_type, order_number)`.
+- **Physical inventory** is partitioned by **Client + Warehouse only**. Order
+  Type is not an inventory dimension — an ECOM, RETAIL, or WHOLESALE order for
+  the same client/warehouse draws from the same physical pool. (`InventoryUnit`
+  keeps a deprecated, nullable `order_type_id` compatibility column that is no
+  longer read/written/filtered; a later migration will drop it.)
+- **Orders** remain scoped by **Client + Warehouse + Order Type + Order
+  Number**. Master tables `clients`, `warehouses`, `order_types` keep clients
+  independent. Barcodes are globally unique.
+
+## Inventory Control module
+
+Tabbed operational UI (Overview, Upload Inventory, Inventory Search,
+Transactions, Import History, Exceptions) with Client/Warehouse selectors.
+Inventory upload is a two-step **preview → confirm** flow: preview validates and
+summarizes with no DB writes; only explicit confirmation imports atomically.
+Inventory Excel columns: **Client, Warehouse, UPC, SKU, Description, Barcode,
+Location**.
 
 ## Invoicing
 
@@ -62,8 +74,8 @@ so client-specific schemes can be added later.
 
 `clients`, `warehouses`, `order_types`, `inventory_units`, `orders`,
 `order_lines`, `allocations`, `boxes`, `box_contents`, `invoices`,
-`transactions`, `inventory_movements`, `order_exceptions`, `documents`,
-`import_batches`.
+`transactions`, `inventory_movements`, `order_exceptions`,
+`inventory_exceptions`, `documents`, `import_batches`.
 
 ## Local development
 
