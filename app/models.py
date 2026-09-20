@@ -299,6 +299,7 @@ class Order(db.Model):
     client = db.relationship("Client")
     warehouse = db.relationship("Warehouse")
     division = db.relationship("Division")
+    invoice = db.relationship("Invoice", uselist=False)
 
 
 class OrderLine(db.Model):

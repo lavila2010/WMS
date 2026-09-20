@@ -59,3 +59,4 @@ class Config:
         self.PERMANENT_SESSION_LIFETIME = timedelta(hours=12)
         self.OPERATIONAL_TIMEZONE = os.environ.get("WMS_TIMEZONE", "America/New_York")
         self.WMS_ENV = os.environ.get("WMS_ENV", "development")
+        self.DOCUMENT_STORE = os.environ.get("DOCUMENT_STORE", "local")

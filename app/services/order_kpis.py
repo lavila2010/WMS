@@ -1,12 +1,4 @@
-"""PostgreSQL-backed KPI Orders aggregates.
-
-Population is orders whose local operational *creation* date falls in the
-inclusive From/To range. Closure later the same day moves the order from
-Open to Processed; it does not create a second order.
-
-Channel is an ORDER attribute from ``OrderType.channel`` (normalized from
-OrderType.code). Inventory OrderType is never used.
-"""
+"""KPI Orders: Client + Division grouping, no join duplication."""
 
 from __future__ import annotations
 
@@ -14,11 +6,11 @@ from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
 from flask import current_app
-from sqlalchemy import Date, case, cast, func, or_
+from sqlalchemy import Date, case, cast, func
 
-from ..constants import Channel, OrderStatus
+from ..constants import OperationType, OrderStatus
 from ..extensions import db
-from ..models import Client, Division, Order, OrderLine, OrderType
+from ..models import Client, Division, Order, OrderLine
 
 
 def operational_timezone() -> str:
@@ -29,8 +21,7 @@ def operational_timezone() -> str:
 
 
 def operational_today(tz_name: str | None = None) -> date:
-    zone = ZoneInfo(tz_name or operational_timezone())
-    return datetime.now(zone).date()
+    return datetime.now(ZoneInfo(tz_name or operational_timezone())).date()
 
 
 def parse_iso_date(value, default: date) -> date:
@@ -46,67 +37,80 @@ def parse_iso_date(value, default: date) -> date:
 
 
 def created_local_date(tz_name: str | None = None):
-    """SQL expression: calendar date of ``orders.created_at`` in the ops TZ.
-
-    Naive timestamps are treated as UTC, then converted to the operational
-    timezone before the date is taken.
-    """
     tz_name = tz_name or operational_timezone()
     as_utc = func.timezone("UTC", Order.created_at)
     local_ts = func.timezone(tz_name, as_utc)
     return cast(local_ts, Date)
 
 
-def _channel_expr():
-    mapped = case(
-        (
-            func.upper(OrderType.code).in_(
-                [k for k, v in Channel.ALIASES.items() if v == Channel.ECOMMERCE]
-            ),
-            Channel.ECOMMERCE,
-        ),
-        (
-            func.upper(OrderType.code).in_(
-                [k for k, v in Channel.ALIASES.items() if v == Channel.RETAIL]
-            ),
-            Channel.RETAIL,
-        ),
-        (
-            func.upper(OrderType.code).in_(
-                [k for k, v in Channel.ALIASES.items() if v == Channel.WHOLESALE]
-            ),
-            Channel.WHOLESALE,
-        ),
-        else_=None,
+def _units_subquery():
+    return (
+        db.session.query(
+            OrderLine.order_id.label("order_id"),
+            func.coalesce(func.sum(OrderLine.qty_ordered), 0).label("units"),
+        )
+        .group_by(OrderLine.order_id)
+        .subquery()
     )
-    return func.coalesce(OrderType.channel, mapped)
 
 
-def _empty_channel():
-    return {"orders": 0, "units": 0, "open_orders": 0}
+def summarize(client_ids=None, client_id=None, division_id=None, from_date=None, to_date=None, q=""):
+    today = operational_today()
+    from_date = parse_iso_date(from_date, today)
+    to_date = parse_iso_date(to_date, today)
+    units = _units_subquery()
+    local_day = created_local_date()
+    filters = [local_day >= from_date, local_day <= to_date]
+    if client_id:
+        filters.append(Order.client_id == client_id)
+    elif client_ids is not None:
+        filters.append(Order.client_id.in_(client_ids or [-1]))
+    if division_id:
+        filters.append(Order.division_id == division_id)
+    if q:
+        like = f"%{q}%"
+        filters.append(db.or_(Client.name.ilike(like), Client.client_code.ilike(like), Division.name.ilike(like), Division.code.ilike(like)))
 
+    open_flag = case((Order.status.notin_([OrderStatus.CLOSED, OrderStatus.CANCELLED]), 1), else_=0)
+    closed_flag = case((Order.status == OrderStatus.CLOSED, 1), else_=0)
+    ecom = case((Division.operation_type == OperationType.ECOM, 1), else_=0)
+    rtl = case((Division.operation_type == OperationType.RTL, 1), else_=0)
+    whls = case((Division.operation_type == OperationType.WHLS, 1), else_=0)
+    unit_expr = func.coalesce(units.c.units, 0)
 
-def _empty_overall():
-    return {
+    rows_q = (
+        db.session.query(
+            Client.client_code.label("client"),
+            Division.code.label("division"),
+            Division.operation_type.label("operation_type"),
+            func.count(Order.id).label("total_orders"),
+            func.sum(open_flag).label("open_orders"),
+            func.sum(closed_flag).label("processed_orders"),
+            func.coalesce(func.sum(unit_expr), 0).label("total_units"),
+            func.coalesce(func.sum(case((open_flag == 1, unit_expr), else_=0)), 0).label("open_units"),
+            func.coalesce(func.sum(case((closed_flag == 1, unit_expr), else_=0)), 0).label("processed_units"),
+            func.coalesce(func.sum(ecom), 0).label("ecommerce_orders"),
+            func.coalesce(func.sum(case((ecom == 1, unit_expr), else_=0)), 0).label("ecommerce_units"),
+            func.coalesce(func.sum(rtl), 0).label("retail_orders"),
+            func.coalesce(func.sum(case((rtl == 1, unit_expr), else_=0)), 0).label("retail_units"),
+            func.coalesce(func.sum(whls), 0).label("wholesale_orders"),
+            func.coalesce(func.sum(case((whls == 1, unit_expr), else_=0)), 0).label("wholesale_units"),
+        )
+        .join(Client, Client.id == Order.client_id)
+        .join(Division, Division.id == Order.division_id)
+        .outerjoin(units, units.c.order_id == Order.id)
+        .filter(*filters)
+        .group_by(Client.client_code, Division.code, Division.operation_type)
+        .order_by(Client.client_code, Division.code)
+    )
+    rows = []
+    totals = {
         "total_orders": 0,
         "open_orders": 0,
         "processed_orders": 0,
         "total_units": 0,
         "open_units": 0,
         "processed_units": 0,
-    }
-
-
-def _empty_row(client_name, division_name, client_id=None, division_id=None):
-    return {
-        "client_id": client_id,
-        "division_id": division_id,
-        "client": client_name,
-        "division": division_name,
-        "total_orders": 0,
-        "open_orders": 0,
-        "total_units": 0,
-        "open_units": 0,
         "ecommerce_orders": 0,
         "ecommerce_units": 0,
         "retail_orders": 0,
@@ -114,167 +118,41 @@ def _empty_row(client_name, division_name, client_id=None, division_id=None):
         "wholesale_orders": 0,
         "wholesale_units": 0,
     }
-
-
-def _int(value):
-    try:
-        if value is None or value == "":
-            return None
-        return int(value)
-    except (TypeError, ValueError):
-        return None
-
-
-def get_order_kpis(
-    from_date=None,
-    to_date=None,
-    client_id=None,
-    division_id=None,
-    search=None,
-    tz_name: str | None = None,
-) -> dict:
-    tz_name = tz_name or operational_timezone()
-    today = operational_today(tz_name)
-    from_date = parse_iso_date(from_date, today)
-    to_date = parse_iso_date(to_date, today)
-    if to_date < from_date:
-        from_date, to_date = to_date, from_date
-
-    client_id = _int(client_id)
-    division_id = _int(division_id)
-    search = (search or "").strip()
-
-    units_sub = (
-        db.session.query(
-            OrderLine.order_id.label("order_id"),
-            func.coalesce(func.sum(OrderLine.quantity), 0).label("units"),
-        )
-        .group_by(OrderLine.order_id)
-        .subquery()
-    )
-    channel = _channel_expr()
-    local_date = created_local_date(tz_name)
-    open_pred = Order.status != OrderStatus.CLOSED
-    closed_pred = Order.status == OrderStatus.CLOSED
-
-    query = (
-        db.session.query(
-            Client.id.label("client_id"),
-            Client.name.label("client_name"),
-            Division.id.label("division_id"),
-            Division.name.label("division_name"),
-            func.count(func.distinct(Order.id)).label("total_orders"),
-            func.count(func.distinct(Order.id)).filter(open_pred).label("open_orders"),
-            func.count(func.distinct(Order.id)).filter(closed_pred).label("processed_orders"),
-            func.coalesce(func.sum(units_sub.c.units), 0).label("total_units"),
-            func.coalesce(func.sum(units_sub.c.units).filter(open_pred), 0).label("open_units"),
-            func.coalesce(func.sum(units_sub.c.units).filter(closed_pred), 0).label("processed_units"),
-            func.count(func.distinct(Order.id)).filter(channel == Channel.ECOMMERCE).label("ecommerce_orders"),
-            func.coalesce(func.sum(units_sub.c.units).filter(channel == Channel.ECOMMERCE), 0).label("ecommerce_units"),
-            func.count(func.distinct(Order.id)).filter(channel == Channel.RETAIL).label("retail_orders"),
-            func.coalesce(func.sum(units_sub.c.units).filter(channel == Channel.RETAIL), 0).label("retail_units"),
-            func.count(func.distinct(Order.id)).filter(channel == Channel.WHOLESALE).label("wholesale_orders"),
-            func.coalesce(func.sum(units_sub.c.units).filter(channel == Channel.WHOLESALE), 0).label("wholesale_units"),
-            func.count(func.distinct(Order.id)).filter(
-                (channel == Channel.ECOMMERCE) & open_pred
-            ).label("ecommerce_open"),
-            func.count(func.distinct(Order.id)).filter(
-                (channel == Channel.RETAIL) & open_pred
-            ).label("retail_open"),
-            func.count(func.distinct(Order.id)).filter(
-                (channel == Channel.WHOLESALE) & open_pred
-            ).label("wholesale_open"),
-        )
-        .select_from(Order)
-        .join(Client, Client.id == Order.client_id)
-        .join(Division, Division.id == Order.division_id)
-        .join(OrderType, OrderType.id == Order.order_type_id)
-        .outerjoin(units_sub, units_sub.c.order_id == Order.id)
-        .filter(local_date >= from_date, local_date <= to_date)
-    )
-    if client_id:
-        query = query.filter(Order.client_id == client_id)
-    if division_id:
-        query = query.filter(Order.division_id == division_id)
-    if search:
-        like = f"%{search}%"
-        query = query.filter(or_(Client.name.ilike(like), Division.name.ilike(like)))
-
-    query = query.group_by(Client.id, Client.name, Division.id, Division.name).order_by(
-        Client.name.asc(), Division.name.asc()
-    )
-    fetched = query.all()
-
-    rows = []
-    overall = _empty_overall()
-    channels = {
-        "ecommerce": _empty_channel(),
-        "retail": _empty_channel(),
-        "wholesale": _empty_channel(),
-    }
-    for row in fetched:
-        item = {
-            "client_id": row.client_id,
-            "division_id": row.division_id,
-            "client": row.client_name,
-            "division": row.division_name,
-            "total_orders": int(row.total_orders or 0),
-            "open_orders": int(row.open_orders or 0),
-            "total_units": int(row.total_units or 0),
-            "open_units": int(row.open_units or 0),
-            "ecommerce_orders": int(row.ecommerce_orders or 0),
-            "ecommerce_units": int(row.ecommerce_units or 0),
-            "retail_orders": int(row.retail_orders or 0),
-            "retail_units": int(row.retail_units or 0),
-            "wholesale_orders": int(row.wholesale_orders or 0),
-            "wholesale_units": int(row.wholesale_units or 0),
-        }
+    for row in rows_q:
+        item = {k: int(getattr(row, k) or 0) if k not in {"client", "division", "operation_type"} else getattr(row, k) for k in row._mapping}
         rows.append(item)
-        overall["total_orders"] += item["total_orders"]
-        overall["open_orders"] += item["open_orders"]
-        overall["processed_orders"] += int(row.processed_orders or 0)
-        overall["total_units"] += item["total_units"]
-        overall["open_units"] += item["open_units"]
-        overall["processed_units"] += int(row.processed_units or 0)
-        channels["ecommerce"]["orders"] += item["ecommerce_orders"]
-        channels["ecommerce"]["units"] += item["ecommerce_units"]
-        channels["ecommerce"]["open_orders"] += int(row.ecommerce_open or 0)
-        channels["retail"]["orders"] += item["retail_orders"]
-        channels["retail"]["units"] += item["retail_units"]
-        channels["retail"]["open_orders"] += int(row.retail_open or 0)
-        channels["wholesale"]["orders"] += item["wholesale_orders"]
-        channels["wholesale"]["units"] += item["wholesale_units"]
-        channels["wholesale"]["open_orders"] += int(row.wholesale_open or 0)
-
-    totals = {
-        "client": "TOTAL",
-        "division": "",
-        "total_orders": overall["total_orders"],
-        "open_orders": overall["open_orders"],
-        "total_units": overall["total_units"],
-        "open_units": overall["open_units"],
-        "ecommerce_orders": channels["ecommerce"]["orders"],
-        "ecommerce_units": channels["ecommerce"]["units"],
-        "retail_orders": channels["retail"]["orders"],
-        "retail_units": channels["retail"]["units"],
-        "wholesale_orders": channels["wholesale"]["orders"],
-        "wholesale_units": channels["wholesale"]["units"],
+        for key in totals:
+            totals[key] += int(item.get(key) or 0)
+    overall = {
+        "total_orders": totals["total_orders"],
+        "open_orders": totals["open_orders"],
+        "processed_orders": totals["processed_orders"],
+        "total_units": totals["total_units"],
+        "open_units": totals["open_units"],
+        "processed_units": totals["processed_units"],
+    }
+    channels = {
+        "ecommerce": {
+            "orders": totals["ecommerce_orders"],
+            "units": totals["ecommerce_units"],
+            "open_orders": sum(r["open_orders"] for r in rows if r["operation_type"] == OperationType.ECOM),
+        },
+        "retail": {
+            "orders": totals["retail_orders"],
+            "units": totals["retail_units"],
+            "open_orders": sum(r["open_orders"] for r in rows if r["operation_type"] == OperationType.RTL),
+        },
+        "wholesale": {
+            "orders": totals["wholesale_orders"],
+            "units": totals["wholesale_units"],
+            "open_orders": sum(r["open_orders"] for r in rows if r["operation_type"] == OperationType.WHLS),
+        },
     }
     return {
-        "from_date": from_date,
-        "to_date": to_date,
-        "timezone": tz_name,
-        "overall": overall,
+        "from_date": from_date.isoformat(),
+        "to_date": to_date.isoformat(),
         "rows": rows,
         "totals": totals,
+        "overall": overall,
         "channels": channels,
     }
-
-
-def kpi_filter_options(client_id=None):
-    clients = Client.query.order_by(Client.name.asc(), Client.code.asc()).all()
-    q = Division.query
-    if client_id:
-        q = q.filter(Division.client_id == int(client_id))
-    divisions = q.order_by(Division.name.asc(), Division.code.asc()).all()
-    return {"clients": clients, "divisions": divisions}
