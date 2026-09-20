@@ -5,6 +5,17 @@
   <h1>Process · {{ order.order_number }}</h1>
   <span class="badge badge-{{ order.status }}">{{ order.status }}</span>
 </div>
+<div class="card">
+  <div class="grid">
+    <div class="stat"><div class="num">{{ order.client.code if order.client else '—' }}</div><div class="label">Client</div></div>
+    <div class="stat"><div class="num">{{ order.warehouse.code if order.warehouse else '—' }}</div><div class="label">Warehouse</div></div>
+    <div class="stat"><div class="num">{{ order.order_type.code if order.order_type else '—' }}</div><div class="label">Order Type</div></div>
+    <div class="stat"><div class="num" style="font-size:1rem;">{{ order.order_number }}</div><div class="label">Order Number</div></div>
+    <div class="stat"><div class="num" style="font-size:1rem;">{{ order.customer or '—' }}</div><div class="label">Customer</div></div>
+    <div class="stat"><div class="num" style="font-size:1rem;">{{ order.carrier or '—' }}</div><div class="label">Carrier</div></div>
+    <div class="stat"><div class="num" style="font-size:1rem;">{{ order.shipping_service or '—' }}</div><div class="label">Shipping Service</div></div>
+  </div>
+</div>
 
 <div class="card">
   <h2>Reconciliation</h2>

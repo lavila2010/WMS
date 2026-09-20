@@ -11,6 +11,7 @@ from flask import (
 )
 
 from ..models import InventoryUnit
+from ..services.filters import apply_scope, parse_scope, scope_options
 from ..services.imports import (
     ImportError_,
     build_inventory_workbook,
@@ -23,7 +24,8 @@ bp = Blueprint("inventory", __name__, url_prefix="/inventory")
 @bp.route("/")
 def index():
     q = request.args.get("q", "").strip()
-    query = InventoryUnit.query
+    scope = parse_scope(request.args)
+    query = apply_scope(InventoryUnit.query, InventoryUnit, scope)
     if q:
         like = f"%{q}%"
         query = query.filter(
@@ -32,7 +34,13 @@ def index():
             | (InventoryUnit.description.ilike(like))
         )
     units = query.order_by(InventoryUnit.created_at.desc()).limit(500).all()
-    return render_template("inventory/index.html", units=units, q=q)
+    return render_template(
+        "inventory/index.html",
+        units=units,
+        q=q,
+        options=scope_options(scope["client_id"]),
+        scope=scope,
+    )
 
 
 @bp.route("/import", methods=["GET", "POST"])
@@ -56,8 +64,8 @@ def import_view():
 def template():
     buf = build_inventory_workbook(
         [
-            {"barcode": "BC-0001", "sku": "SKU-A", "description": "Sample A", "location": "A-01"},
-            {"barcode": "BC-0002", "sku": "SKU-B", "description": "Sample B", "location": "B-02"},
+            {"client": "ACME", "warehouse": "WH1", "order_type": "B2C", "barcode": "BC-0001", "sku": "SKU-A", "description": "Sample A", "location": "A-01"},
+            {"client": "ACME", "warehouse": "WH1", "order_type": "B2C", "barcode": "BC-0002", "sku": "SKU-B", "description": "Sample B", "location": "B-02"},
         ]
     )
     return send_file(

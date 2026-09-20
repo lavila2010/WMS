@@ -9,20 +9,38 @@
   </div>
 </div>
 
+{% include "_scope_filter.html" %}
+
 <div class="card">
   <table>
-    <thead><tr><th>Order</th><th>Customer</th><th>Lines</th><th class="right">Units</th><th>Status</th></tr></thead>
+    <thead>
+      <tr>
+        <th>Order #</th><th>Client</th><th>Warehouse</th><th>Type</th>
+        <th>Customer</th><th>Carrier</th><th>Shipping</th>
+        <th class="right">Units</th><th class="right">Alloc</th><th class="right">Proc</th>
+        <th class="right">Boxes</th><th>Status</th><th class="right">Exc</th>
+      </tr>
+    </thead>
     <tbody>
-      {% for o in orders %}
+      {% for r in rows %}
+        {% set o = r.order %}
         <tr>
           <td><a class="mono" href="{{ url_for('orders.detail', order_id=o.id) }}">{{ o.order_number }}</a></td>
+          <td>{{ o.client.code if o.client else '—' }}</td>
+          <td>{{ o.warehouse.code if o.warehouse else '—' }}</td>
+          <td>{{ o.order_type.code if o.order_type else '—' }}</td>
           <td>{{ o.customer or '—' }}</td>
-          <td class="num-cell">{{ o.lines|length }}</td>
-          <td class="right num-cell">{{ o.ordered_quantity }}</td>
+          <td>{{ o.carrier or '—' }}</td>
+          <td>{{ o.shipping_service or '—' }}</td>
+          <td class="right num-cell">{{ r.units }}</td>
+          <td class="right num-cell">{{ r.allocated }}</td>
+          <td class="right num-cell">{{ r.processed }}</td>
+          <td class="right num-cell">{{ r.boxes }}</td>
           <td><span class="badge badge-{{ o.status }}">{{ o.status }}</span></td>
+          <td class="right num-cell">{% if r.exceptions %}<span class="pill-bad">{{ r.exceptions }}</span>{% else %}0{% endif %}</td>
         </tr>
       {% else %}
-        <tr><td colspan="5" class="muted">No orders. Import Orders.xlsx to begin.</td></tr>
+        <tr><td colspan="13" class="muted">No orders in scope. Import Orders.xlsx to begin.</td></tr>
       {% endfor %}
     </tbody>
   </table>

@@ -3,7 +3,7 @@
 {% block content %}
 <h1>Import Inventory.xlsx</h1>
 <div class="card">
-  <p class="muted">Required columns: <b>barcode</b>, <b>sku</b>. Optional: description, location. Each row is one physical unit with a unique barcode.</p>
+  <p class="muted">Required columns: <b>Client</b>, <b>Warehouse</b>, <b>OrderType</b>, <b>Barcode</b>, <b>SKU</b>. Optional: Description, Location. Each row is one physical unit with a globally unique barcode. One upload may contain multiple clients, warehouses, and order types.</p>
   <form method="post" enctype="multipart/form-data" class="inline-form">
     <label>Inventory workbook
       <input type="file" name="file" accept=".xlsx" required />

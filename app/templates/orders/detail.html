@@ -5,7 +5,20 @@
   <h1>Order {{ order.order_number }}</h1>
   <span class="badge badge-{{ order.status }}">{{ order.status }}</span>
 </div>
-<p class="muted">Customer: {{ order.customer or '—' }}</p>
+<p class="muted">
+  Client {{ order.client.code if order.client else '—' }} ·
+  Warehouse {{ order.warehouse.code if order.warehouse else '—' }} ·
+  Order Type {{ order.order_type.code if order.order_type else '—' }}
+</p>
+<p class="muted">
+  Customer: {{ order.customer or '—' }} ·
+  Carrier: {{ order.carrier or '—' }} ·
+  Shipping Service: {{ order.shipping_service or '—' }}
+</p>
+{% if order.invoice %}
+  <p><span class="badge badge-CLOSED">Invoice {{ order.invoice.invoice_number }}</span>
+     — {{ order.invoice.total_units }} units · {{ order.invoice.total_boxes }} boxes · {{ order.invoice.total_weight }} kg</p>
+{% endif %}
 
 <div class="card">
   <h2>Lines</h2>

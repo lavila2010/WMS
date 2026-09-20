@@ -13,8 +13,10 @@ from flask import (
 
 from ..constants import OrderStatus
 from ..models import Order
-from ..services.allocation import allocation_progress
+from ..services.allocation import active_allocations, allocation_progress
+from ..services.filters import apply_scope, parse_scope, scope_options
 from ..services.imports import ImportError_, build_orders_workbook, import_orders
+from ..services.packing import packed_count
 from ..workflow import WorkflowError, transition
 
 bp = Blueprint("orders", __name__, url_prefix="/orders")
@@ -22,8 +24,27 @@ bp = Blueprint("orders", __name__, url_prefix="/orders")
 
 @bp.route("/")
 def index():
-    orders = Order.query.order_by(Order.created_at.desc()).all()
-    return render_template("orders/index.html", orders=orders)
+    scope = parse_scope(request.args)
+    query = apply_scope(Order.query, Order, scope)
+    orders = query.order_by(Order.created_at.desc()).all()
+    rows = []
+    for o in orders:
+        rows.append(
+            {
+                "order": o,
+                "units": o.ordered_quantity,
+                "allocated": len(active_allocations(o)),
+                "processed": packed_count(o),
+                "boxes": len(o.boxes),
+                "exceptions": sum(1 for e in o.exceptions if not e.resolved),
+            }
+        )
+    return render_template(
+        "orders/index.html",
+        rows=rows,
+        options=scope_options(scope["client_id"]),
+        scope=scope,
+    )
 
 
 @bp.route("/<int:order_id>")
@@ -71,8 +92,8 @@ def import_view():
 def template():
     buf = build_orders_workbook(
         [
-            {"order_number": "SO-1001", "customer": "Acme", "sku": "SKU-A", "quantity": 2, "description": "Sample A"},
-            {"order_number": "SO-1001", "customer": "Acme", "sku": "SKU-B", "quantity": 1, "description": "Sample B"},
+            {"client": "ACME", "warehouse": "WH1", "order_type": "B2C", "order_number": "SO-1001", "customer": "Acme Retail", "sku": "SKU-A", "quantity": 2, "description": "Sample A", "carrier": "UPS", "shipping_service": "Ground"},
+            {"client": "ACME", "warehouse": "WH1", "order_type": "B2C", "order_number": "SO-1001", "customer": "Acme Retail", "sku": "SKU-B", "quantity": 1, "description": "Sample B", "carrier": "UPS", "shipping_service": "Ground"},
         ]
     )
     return send_file(

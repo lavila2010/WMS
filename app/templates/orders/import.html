@@ -3,7 +3,7 @@
 {% block content %}
 <h1>Import Orders.xlsx</h1>
 <div class="card">
-  <p class="muted">Required columns: <b>order_number</b>, <b>sku</b>, <b>quantity</b>. Optional: customer, description. Rows with the same order_number are grouped into one order.</p>
+  <p class="muted">Required columns: <b>Client</b>, <b>Warehouse</b>, <b>OrderType</b>, <b>OrderNumber</b>, <b>SKU</b>, <b>QtyOrdered</b>. Optional: Customer, Description, Carrier, ShippingService. Rows sharing Client+Warehouse+OrderType+OrderNumber form one order; their Customer/Carrier/ShippingService must agree or the import is rejected.</p>
   <form method="post" enctype="multipart/form-data" class="inline-form">
     <label>Orders workbook
       <input type="file" name="file" accept=".xlsx" required />

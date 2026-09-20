@@ -3,11 +3,13 @@
 {% block content %}
 <h1>Dashboard</h1>
 
+{% include "_scope_filter.html" %}
+
 <div class="card">
   <h2>Inventory units</h2>
   <div class="grid">
     <div class="stat"><div class="num">{{ unit_counts.total }}</div><div class="label">Total</div></div>
-    <div class="stat"><div class="num">{{ unit_counts.in_stock }}</div><div class="label">In stock</div></div>
+    <div class="stat"><div class="num">{{ unit_counts.available }}</div><div class="label">Available</div></div>
     <div class="stat"><div class="num">{{ unit_counts.allocated }}</div><div class="label">Allocated</div></div>
     <div class="stat"><div class="num">{{ unit_counts.packed }}</div><div class="label">Packed</div></div>
     <div class="stat"><div class="num">{{ unit_counts.shipped }}</div><div class="label">Shipped</div></div>

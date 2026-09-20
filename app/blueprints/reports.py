@@ -6,26 +6,81 @@ from flask import (
     flash,
     redirect,
     render_template,
+    request,
     send_file,
     url_for,
 )
 
-from ..models import Box, Document, Order
+from datetime import datetime
+
+from sqlalchemy import func
+
+from ..models import Box, Document, Invoice, Order
 from ..services.documents import (
     generate_box_detail,
     generate_order_closure,
     generate_packing_report,
     generate_pick_ticket,
 )
+from ..services.filters import apply_scope, parse_scope, scope_options
 
 bp = Blueprint("reports", __name__, url_prefix="/reports")
 
 
 @bp.route("/")
 def index():
-    orders = Order.query.order_by(Order.created_at.desc()).all()
+    args = request.args
+    scope = parse_scope(args)
+    query = apply_scope(Order.query.outerjoin(Invoice, Invoice.order_id == Order.id), Order, scope)
+
+    def like(field, value):
+        nonlocal query
+        value = (value or "").strip()
+        if value:
+            query = query.filter(field.ilike(f"%{value}%"))
+
+    like(Order.order_number, args.get("order_number"))
+    like(Order.customer, args.get("customer"))
+    like(Order.carrier, args.get("carrier"))
+    like(Order.shipping_service, args.get("shipping_service"))
+
+    invoice_number = (args.get("invoice_number") or "").strip()
+    if invoice_number:
+        query = query.filter(Invoice.invoice_number.ilike(f"%{invoice_number}%"))
+
+    status = (args.get("status") or "").strip()
+    if status:
+        query = query.filter(Order.status == status)
+
+    date_str = (args.get("date") or "").strip()
+    if date_str:
+        try:
+            day = datetime.strptime(date_str, "%Y-%m-%d").date()
+            query = query.filter(func.date(Order.created_at) == day)
+        except ValueError:
+            pass
+
+    orders = query.order_by(Order.created_at.desc()).all()
     documents = Document.query.order_by(Document.created_at.desc()).limit(50).all()
-    return render_template("reports/index.html", orders=orders, documents=documents)
+    from ..constants import OrderStatus
+
+    return render_template(
+        "reports/index.html",
+        orders=orders,
+        documents=documents,
+        options=scope_options(scope["client_id"]),
+        scope=scope,
+        statuses=OrderStatus.ORDER,
+        filters={
+            "order_number": args.get("order_number", ""),
+            "invoice_number": invoice_number,
+            "customer": args.get("customer", ""),
+            "carrier": args.get("carrier", ""),
+            "shipping_service": args.get("shipping_service", ""),
+            "status": status,
+            "date": date_str,
+        },
+    )
 
 
 @bp.route("/order/<int:order_id>/pick-ticket", methods=["POST"])

@@ -9,22 +9,28 @@
   </div>
 </div>
 
+{% include "_scope_filter.html" %}
+
 <div class="card">
-  <form method="get" class="inline-form">
-    <label>Search
-      <input name="q" value="{{ q }}" placeholder="barcode, SKU, description" />
-    </label>
+  <form method="get" class="inline-form" action="{{ request.path }}">
+    {% if scope.client_id %}<input type="hidden" name="client_id" value="{{ scope.client_id }}" />{% endif %}
+    {% if scope.warehouse_id %}<input type="hidden" name="warehouse_id" value="{{ scope.warehouse_id }}" />{% endif %}
+    {% if scope.order_type_id %}<input type="hidden" name="order_type_id" value="{{ scope.order_type_id }}" />{% endif %}
+    <label>Search<input name="q" value="{{ q }}" placeholder="barcode, SKU, description" /></label>
     <button type="submit">Search</button>
   </form>
 </div>
 
 <div class="card">
   <table>
-    <thead><tr><th>Barcode</th><th>SKU</th><th>Description</th><th>Location</th><th>Status</th><th>Order</th></tr></thead>
+    <thead><tr><th>Barcode</th><th>Client</th><th>WH</th><th>Type</th><th>SKU</th><th>Description</th><th>Location</th><th>Status</th><th>Order</th></tr></thead>
     <tbody>
       {% for u in units %}
         <tr>
           <td class="mono">{{ u.barcode }}</td>
+          <td>{{ u.client.code if u.client else '—' }}</td>
+          <td>{{ u.warehouse.code if u.warehouse else '—' }}</td>
+          <td>{{ u.order_type.code if u.order_type else '—' }}</td>
           <td>{{ u.sku }}</td>
           <td class="muted">{{ u.description or '—' }}</td>
           <td>{{ u.location or '—' }}</td>
@@ -32,7 +38,7 @@
           <td>{{ u.order.order_number if u.order else '—' }}</td>
         </tr>
       {% else %}
-        <tr><td colspan="6" class="muted">No inventory units. Import Inventory.xlsx to add units.</td></tr>
+        <tr><td colspan="9" class="muted">No inventory units in scope. Import Inventory.xlsx to add units.</td></tr>
       {% endfor %}
     </tbody>
   </table>

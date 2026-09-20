@@ -127,9 +127,16 @@ def ready_to_close(order_id: int):
 def close_order_view(order_id: int):
     order = Order.query.get_or_404(order_id)
     try:
-        close_order(order)
+        _, invoice = close_order(order)
         db.session.commit()
-        flash(f"Order {order.order_number} CLOSED.", "success")
+        flash(
+            f"Order {order.order_number} CLOSED. Invoice {invoice.invoice_number} created.",
+            "success",
+        )
     except (ValueError, WorkflowError) as exc:
+        db.session.rollback()
         flash(str(exc), "error")
+    except Exception as exc:  # invoice creation failure -> full rollback
+        db.session.rollback()
+        flash(f"Order close failed and was rolled back: {exc}", "error")
     return redirect(url_for("processing.detail", order_id=order.id))
