@@ -1,7 +1,7 @@
 # WMS V2 Phase 3 Report
 
 PHASE: 3 — Orders  
-STATUS: PASS pending test execution
+STATUS: PASS
 
 ## OBJECTIVE
 
@@ -38,7 +38,7 @@ None new. Uses `orders`, `order_lines`, `import_batches`.
 
 ## TESTS RUN
 
-Phases 1–3.
+`pytest` Phases 1–3: 31 passed, 0 failed.
 
 ## NEXT PHASE
 

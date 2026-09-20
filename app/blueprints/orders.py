@@ -265,10 +265,89 @@ def template():
 @bp.route("/pick-tickets")
 @permission_required("PICK_TICKET_VIEW")
 def pick_tickets():
-    return _page("orders/pick_tickets.html", "pick_tickets", tickets=[])
+    ctx = _scope()
+    eligible = []
+    tickets = []
+    if ctx["scope"]["client_id"]:
+        eligible = (
+            Order.query.filter_by(client_id=ctx["scope"]["client_id"], status=OrderStatus.ALLOCATED)
+            .order_by(Order.created_at.desc())
+            .all()
+        )
+        tickets = (
+            PickTicket.query.filter_by(client_id=ctx["scope"]["client_id"])
+            .order_by(PickTicket.created_at.desc())
+            .all()
+        )
+    return _page("orders/pick_tickets.html", "pick_tickets", tickets=tickets, eligible=eligible)
 
 
 @bp.route("/allocation-report")
 @permission_required("ALLOCATION_VIEW")
 def allocation_report():
     return _page("orders/allocation_report.html", "allocation", results=[])
+
+
+@bp.route("/<int:order_id>/pick-ticket", methods=["POST"])
+@permission_required("PICK_TICKET_GENERATE")
+def generate_pick_ticket(order_id):
+    from ..services.pick_tickets import PickTicketError, create_pick_ticket
+
+    order = db.session.get(Order, order_id)
+    require_entity_client(current_user, order)
+    try:
+        ticket = create_pick_ticket(order)
+    except PickTicketError as exc:
+        flash(str(exc), "error")
+        return redirect(url_for("orders.pick_tickets", client_id=order.client_id))
+    flash(f"Pick ticket {ticket.pick_ticket_number} created.", "success")
+    return redirect(url_for("orders.pick_ticket_preview", ticket_id=ticket.id))
+
+
+@bp.route("/pick-tickets/<int:ticket_id>")
+@permission_required("PICK_TICKET_VIEW")
+def pick_ticket_preview(ticket_id):
+    from ..services.pick_tickets import ticket_lines
+
+    ticket = db.session.get(PickTicket, ticket_id)
+    if ticket is None:
+        abort(404)
+    require_entity_client(current_user, ticket)
+    order = db.session.get(Order, ticket.order_id)
+    return render_template(
+        "orders/pick_ticket_preview.html",
+        ticket=ticket,
+        order=order,
+        lines=ticket_lines(order),
+    )
+
+
+@bp.route("/pick-tickets/<int:ticket_id>/print", methods=["POST"])
+@permission_required("PICK_TICKET_PRINT")
+def pick_ticket_print(ticket_id):
+    from ..services.pick_tickets import record_print
+
+    ticket = db.session.get(PickTicket, ticket_id)
+    if ticket is None:
+        abort(404)
+    require_entity_client(current_user, ticket)
+    record_print(ticket, source="UI")
+    flash(f"Recorded reprint of {ticket.pick_ticket_number}.", "success")
+    return redirect(url_for("orders.pick_ticket_preview", ticket_id=ticket.id))
+
+
+@bp.route("/pick-tickets/<int:ticket_id>/pdf")
+@permission_required("PICK_TICKET_VIEW")
+def pick_ticket_pdf(ticket_id):
+    from ..services.pick_tickets import render_pdf
+
+    ticket = db.session.get(PickTicket, ticket_id)
+    if ticket is None:
+        abort(404)
+    require_entity_client(current_user, ticket)
+    return send_file(
+        io.BytesIO(render_pdf(ticket)),
+        as_attachment=True,
+        download_name=f"{ticket.pick_ticket_number}.pdf",
+        mimetype="application/pdf",
+    )

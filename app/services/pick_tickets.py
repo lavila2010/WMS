@@ -1,160 +1,154 @@
-"""Pick ticket numbering, eligibility, pick lines, and print history.
-
-A Pick Ticket Number is permanently assigned once an order becomes fully
-allocated. Reprinting never generates a new number.
-"""
+"""Permanent client-aware pick tickets."""
 
 from __future__ import annotations
 
+from collections import defaultdict
 from datetime import datetime
+from io import BytesIO
 
 from flask import request
-from sqlalchemy import func
 
-from ..auth import current_actor
-from ..constants import AllocationStatus, OrderStatus, PickTicketStatus, PrintSource
+from ..auth import current_actor, record_audit
+from ..constants import AllocationStatus, OrderStatus
 from ..extensions import db
-from ..models import Allocation, Order, PickTicket, PickTicketPrintEvent
-from .allocation import allocation_progress, is_fully_allocated
+from ..models import Allocation, InventoryUnit, Order, OrderLine, PickTicket, PickTicketPrintEvent
 
 
-def next_pick_ticket_number(year: int | None = None) -> str:
-    year = year or datetime.utcnow().year
-    prefix = f"PT-{year}-"
-    last = (
-        PickTicket.query.filter(PickTicket.pick_ticket_number.like(f"{prefix}%"))
-        .order_by(PickTicket.pick_ticket_number.desc())
-        .first()
+class PickTicketError(ValueError):
+    pass
+
+
+def pick_ticket_number(order: Order) -> str:
+    return f"{order.client.client_code}-{order.client_order_number}-01"
+
+
+def ticket_lines(order: Order) -> list[dict]:
+    rows = (
+        db.session.query(Allocation, InventoryUnit, OrderLine)
+        .join(InventoryUnit, InventoryUnit.id == Allocation.inventory_unit_id)
+        .join(OrderLine, OrderLine.id == Allocation.order_line_id)
+        .filter(
+            Allocation.order_id == order.id,
+            Allocation.status == AllocationStatus.ACTIVE,
+        )
+        .all()
     )
-    if last is None:
-        seq = 1
-    else:
-        try:
-            seq = int(last.pick_ticket_number.rsplit("-", 1)[1]) + 1
-        except (IndexError, ValueError):
-            seq = (
-                db.session.query(func.count(PickTicket.id))
-                .filter(PickTicket.pick_ticket_number.like(f"{prefix}%"))
-                .scalar()
-                or 0
-            ) + 1
-    return f"{prefix}{seq:06d}"
+    grouped = defaultdict(lambda: {"qty": 0, "sku": None, "description": None})
+    for allocation, unit, line in rows:
+        key = (allocation.location, allocation.upc)
+        grouped[key]["qty"] += 1
+        grouped[key]["sku"] = unit.sku or line.sku
+        grouped[key]["description"] = line.description
+    return [
+        {
+            "location": location,
+            "upc": upc,
+            "sku": meta["sku"],
+            "description": meta["description"],
+            "qty": meta["qty"],
+        }
+        for (location, upc), meta in sorted(grouped.items(), key=lambda item: (item[0][0], item[0][1]))
+    ]
 
 
-def ensure_pick_ticket(order: Order) -> PickTicket:
-    """Return the permanent pick ticket for ``order``, creating it if needed."""
+def create_pick_ticket(order: Order) -> PickTicket:
     existing = PickTicket.query.filter_by(order_id=order.id).first()
-    if existing is not None:
+    if existing:
         return existing
-    uid, uname = current_actor()
+    if order.status != OrderStatus.ALLOCATED:
+        raise PickTicketError("Pick ticket is allowed only for a fully ALLOCATED order.")
+    uid, _ = current_actor()
     ticket = PickTicket(
-        pick_ticket_number=next_pick_ticket_number(),
+        client_id=order.client_id,
+        warehouse_id=order.warehouse_id,
         order_id=order.id,
-        status=PickTicketStatus.ACTIVE,
-        assigned_at=datetime.utcnow(),
+        pick_ticket_number=pick_ticket_number(order),
+        ticket_sequence=1,
+        status="ACTIVE",
         assigned_by_user_id=uid,
-        assigned_by_username=uname,
     )
     db.session.add(ticket)
     db.session.flush()
+    order.status = OrderStatus.PICK_TICKET_READY
+    record_audit(
+        "PICK_TICKET_CREATED",
+        module="Orders",
+        entity_type="pick_ticket",
+        entity_id=ticket.id,
+        client_id=order.client_id,
+        detail=ticket.pick_ticket_number,
+    )
+    db.session.commit()
     return ticket
 
 
-def is_eligible(order: Order) -> bool:
-    return order.status != OrderStatus.CLOSED and is_fully_allocated(order)
-
-
-def eligible_orders(client_id: int, warehouse_id: int | None = None):
-    q = Order.query.filter(Order.status != OrderStatus.CLOSED, Order.client_id == client_id)
-    if warehouse_id:
-        q = q.filter(Order.warehouse_id == warehouse_id)
-    orders = q.order_by(Order.created_at.desc()).all()
-    return [o for o in orders if is_fully_allocated(o)]
-
-
-def sync_eligible_tickets(client_id: int, warehouse_id: int | None = None) -> list[PickTicket]:
-    """Assign pick ticket numbers to every eligible order that is missing one."""
-    tickets = []
-    for order in eligible_orders(client_id, warehouse_id):
-        tickets.append(ensure_pick_ticket(order))
-    db.session.flush()
-    return tickets
-
-
-def pick_lines(order: Order) -> list[dict]:
-    """Exact allocated physical units, sorted Location → SKU → Barcode."""
-    allocs = Allocation.query.filter_by(
-        order_id=order.id, status=AllocationStatus.ACTIVE
-    ).all()
-    rows = []
-    for a in allocs:
-        unit = a.unit
-        rows.append(
-            {
-                "location": unit.location or "",
-                "sku": unit.sku,
-                "upc": unit.upc or "",
-                "description": unit.description or "",
-                "barcode": a.barcode,
-                "qty": 1,
-            }
-        )
-    rows.sort(key=lambda r: (r["location"], r["sku"], r["barcode"]))
-    return rows
-
-
-def unique_locations(order: Order) -> int:
-    return len({row["location"] for row in pick_lines(order) if row["location"]})
-
-
-def record_print(ticket: PickTicket, source: str) -> PickTicketPrintEvent:
+def record_print(ticket: PickTicket, *, source="UI") -> PickTicketPrintEvent:
     uid, uname = current_actor()
     ip = None
     try:
         ip = request.remote_addr
     except Exception:
         ip = None
+    ticket.print_count = (ticket.print_count or 0) + 1
+    ticket.last_printed_at = datetime.utcnow()
+    ticket.last_printed_by = uname
     event = PickTicketPrintEvent(
         pick_ticket_id=ticket.id,
+        client_id=ticket.client_id,
         user_id=uid,
         username=uname,
         source=source,
         ip_address=ip,
     )
     db.session.add(event)
-    db.session.flush()
+    record_audit(
+        "PICK_TICKET_PRINTED",
+        module="Orders",
+        entity_type="pick_ticket",
+        entity_id=ticket.id,
+        client_id=ticket.client_id,
+        detail=f"{ticket.pick_ticket_number} print #{ticket.print_count}",
+    )
+    db.session.commit()
     return event
 
 
-def printed_by_usernames(client_id: int, warehouse_id: int | None = None) -> list[str]:
-    q = (
-        db.session.query(PickTicketPrintEvent.username)
-        .join(PickTicket, PickTicket.id == PickTicketPrintEvent.pick_ticket_id)
-        .join(Order, Order.id == PickTicket.order_id)
-        .filter(Order.client_id == client_id, PickTicketPrintEvent.username.isnot(None))
-    )
-    if warehouse_id:
-        q = q.filter(Order.warehouse_id == warehouse_id)
-    names = sorted({n for (n,) in q.all() if n})
-    return names
+def render_pdf(ticket: PickTicket) -> bytes:
+    from reportlab.lib.pagesizes import letter
+    from reportlab.lib.units import inch
+    from reportlab.pdfgen import canvas
 
-
-def ticket_row(ticket: PickTicket) -> dict:
-    order = ticket.order
-    progress = allocation_progress(order)
-    events = (
-        PickTicketPrintEvent.query.filter_by(pick_ticket_id=ticket.id)
-        .order_by(PickTicketPrintEvent.printed_at.desc())
-        .all()
-    )
-    last = events[0] if events else None
-    return {
-        "ticket": ticket,
-        "order": order,
-        "units": progress["total_ordered"],
-        "locations": unique_locations(order),
-        "print_count": len(events),
-        "last_printed": last.printed_at if last else None,
-        "last_printed_by": last.username if last else None,
-        "printed": len(events) > 0,
-    }
+    order = db.session.get(Order, ticket.order_id)
+    lines = ticket_lines(order)
+    buffer = BytesIO()
+    pdf = canvas.Canvas(buffer, pagesize=letter)
+    width, height = letter
+    y = height - inch
+    pdf.setFont("Helvetica-Bold", 14)
+    pdf.drawString(inch, y, f"Pick Ticket {ticket.pick_ticket_number}")
+    y -= 18
+    pdf.setFont("Helvetica", 10)
+    pdf.drawString(inch, y, f"Client {order.client.client_code}  Division {order.division.code}  WH {order.warehouse.warehouse_code}")
+    y -= 14
+    pdf.drawString(inch, y, f"Order {order.wms_order_id}  Customer {order.customer or '—'}  {order.carrier or ''} {order.shipping_service or ''}")
+    y -= 22
+    pdf.setFont("Helvetica-Bold", 9)
+    pdf.drawString(inch, y, "Location")
+    pdf.drawString(inch + 100, y, "UPC")
+    pdf.drawString(inch + 220, y, "SKU")
+    pdf.drawString(inch + 320, y, "Description")
+    pdf.drawString(inch + 460, y, "Qty")
+    pdf.setFont("Helvetica", 9)
+    y -= 14
+    for line in lines:
+        pdf.drawString(inch, y, str(line["location"]))
+        pdf.drawString(inch + 100, y, str(line["upc"]))
+        pdf.drawString(inch + 220, y, str(line["sku"] or "—"))
+        pdf.drawString(inch + 320, y, str(line["description"] or "—")[:24])
+        pdf.drawRightString(inch + 480, y, str(line["qty"]))
+        y -= 12
+        if y < inch:
+            pdf.showPage()
+            y = height - inch
+    pdf.save()
+    return buffer.getvalue()
