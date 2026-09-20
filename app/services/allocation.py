@@ -1,372 +1,179 @@
-"""Barcode-level allocation service and barcode business rules.
-
-Barcode rules enforced here:
-- every physical unit has a unique barcode (schema-enforced);
-- allocation is barcode-level (one Allocation row per unit);
-- scan or manual entry are the same code path (a barcode string);
-- duplicate scan is rejected (unit already actively allocated to this order);
-- the barcode must belong to the selected order (SKU must match an order
-  line with remaining demand);
-- a barcode cannot belong to two active orders (a unit may have only one
-  ACTIVE allocation).
-"""
+"""UPC allocation: Client + Warehouse + UPC + AVAILABLE units only."""
 
 from __future__ import annotations
 
-from ..constants import (
-    AllocationResult,
-    AllocationStatus,
-    ExceptionType,
-    MovementType,
-    OrderStatus,
-    UnitStatus,
-)
+from sqlalchemy import select
+
+from ..auth import current_actor, record_audit
+from ..constants import AllocationStatus, LedgerType, OrderStatus, UnitStatus
 from ..extensions import db
-from ..models import (
-    Allocation,
-    InventoryUnit,
-    Order,
-    OrderException,
-    OrderLine,
-    Transaction,
-)
-from ..workflow import transition
-from .movements import record_movement
+from ..models import Allocation, InventoryUnit, Order, OrderLine
+from .inventory_ledger import LedgerError, transition_unit
 
 
-class BarcodeError(Exception):
-    """Raised when a barcode violates an allocation/packing rule."""
-
-    def __init__(self, exc_type: str, message: str):
-        super().__init__(message)
-        self.exc_type = exc_type
-        self.message = message
+class AllocationError(ValueError):
+    pass
 
 
-def _record_exception(order_id, barcode, exc_type, message):
-    db.session.add(
-        OrderException(
-            order_id=order_id, barcode=barcode, type=exc_type, message=message
+ELIGIBLE = {OrderStatus.UNALLOCATED, OrderStatus.PARTIALLY_ALLOCATED}
+
+
+def _lock_order(order_id: int) -> Order:
+    order = db.session.execute(
+        select(Order).where(Order.id == order_id).with_for_update()
+    ).scalar_one_or_none()
+    if order is None:
+        raise AllocationError("Order not found.")
+    return order
+
+
+def _candidate_units(order: Order, upc: str, need: int) -> list[InventoryUnit]:
+    stmt = (
+        select(InventoryUnit)
+        .where(
+            InventoryUnit.client_id == order.client_id,
+            InventoryUnit.warehouse_id == order.warehouse_id,
+            InventoryUnit.upc == upc,
+            InventoryUnit.status == UnitStatus.AVAILABLE,
         )
+        .order_by(InventoryUnit.location.asc(), InventoryUnit.id.asc())
+        .with_for_update(skip_locked=True)
+        .limit(need)
     )
-    db.session.flush()
+    return list(db.session.execute(stmt).scalars().all())
 
 
-def normalize_barcode(raw: str) -> str:
-    barcode = (raw or "").strip()
-    if not barcode:
-        raise BarcodeError(ExceptionType.UNKNOWN_BARCODE, "Empty barcode.")
-    return barcode
+def _refresh_order_status(order: Order) -> str:
+    lines = OrderLine.query.filter_by(order_id=order.id).all()
+    if not lines:
+        order.status = OrderStatus.UNALLOCATED
+        return order.status
+    full = all(line.qty_allocated >= line.qty_ordered for line in lines)
+    any_allocated = any(line.qty_allocated > 0 for line in lines)
+    if full:
+        order.status = OrderStatus.ALLOCATED
+    elif any_allocated:
+        order.status = OrderStatus.PARTIALLY_ALLOCATED
+    else:
+        order.status = OrderStatus.UNALLOCATED
+    return order.status
 
 
-def find_unit(barcode: str) -> InventoryUnit | None:
-    return InventoryUnit.query.filter_by(barcode=barcode).first()
-
-
-def _validate_scope(order, unit, barcode: str) -> None:
-    """Enforce Client + Warehouse isolation for a barcode.
-
-    Physical inventory is partitioned ONLY by Client + Warehouse. Order Type is
-    an order attribute and does NOT participate in inventory matching, so an
-    order type mismatch never rejects a unit.
-    """
-    if unit.client_id != order.client_id:
-        _record_exception(
-            order.id, barcode, ExceptionType.WRONG_CLIENT,
-            f"Barcode {barcode} belongs to a different client.",
-        )
-        raise BarcodeError(
-            ExceptionType.WRONG_CLIENT,
-            f"Barcode {barcode} belongs to a different client.",
-        )
-    if unit.warehouse_id != order.warehouse_id:
-        _record_exception(
-            order.id, barcode, ExceptionType.WRONG_WAREHOUSE,
-            f"Barcode {barcode} belongs to a different warehouse.",
-        )
-        raise BarcodeError(
-            ExceptionType.WRONG_WAREHOUSE,
-            f"Barcode {barcode} belongs to a different warehouse.",
-        )
-
-
-def active_allocation(unit: InventoryUnit) -> Allocation | None:
-    return Allocation.query.filter_by(
-        inventory_unit_id=unit.id, status=AllocationStatus.ACTIVE
-    ).first()
-
-
-def allocated_count_for_line(line: OrderLine) -> int:
-    return Allocation.query.filter_by(
-        order_line_id=line.id, status=AllocationStatus.ACTIVE
-    ).count()
-
-
-def _pick_line_with_demand(order: Order, sku: str) -> OrderLine | None:
-    matching = [line for line in order.lines if line.sku == sku]
-    if not matching:
-        return None
-    for line in matching:
-        if allocated_count_for_line(line) < line.quantity:
-            return line
-    return None
-
-
-def allocate_barcode(order: Order, raw_barcode: str) -> Allocation:
-    """Allocate the unit identified by ``raw_barcode`` to ``order``.
-
-    Raises ``BarcodeError`` (and records an OrderException) on any rule
-    violation.
-    """
-    barcode = normalize_barcode(raw_barcode)
-
-    unit = find_unit(barcode)
-    if unit is None:
-        _record_exception(
-            order.id, barcode, ExceptionType.UNKNOWN_BARCODE,
-            f"Barcode {barcode} is not a known inventory unit.",
-        )
-        raise BarcodeError(
-            ExceptionType.UNKNOWN_BARCODE,
-            f"Barcode {barcode} is not a known inventory unit.",
-        )
-
-    _validate_scope(order, unit, barcode)
-
-    existing = active_allocation(unit)
-    if existing is not None:
-        if existing.order_id == order.id:
-            _record_exception(
-                order.id, barcode, ExceptionType.DUPLICATE_SCAN,
-                f"Barcode {barcode} is already allocated to this order.",
-            )
-            raise BarcodeError(
-                ExceptionType.DUPLICATE_SCAN,
-                f"Barcode {barcode} is already allocated to this order.",
-            )
-        _record_exception(
-            order.id, barcode, ExceptionType.UNIT_IN_OTHER_ACTIVE_ORDER,
-            f"Barcode {barcode} is actively allocated to order "
-            f"{existing.order.order_number}.",
-        )
-        raise BarcodeError(
-            ExceptionType.UNIT_IN_OTHER_ACTIVE_ORDER,
-            f"Barcode {barcode} belongs to another active order.",
-        )
-
-    line = _pick_line_with_demand(order, unit.sku)
-    if line is None:
-        has_sku = any(line.sku == unit.sku for line in order.lines)
-        if not has_sku:
-            _record_exception(
-                order.id, barcode, ExceptionType.WRONG_ORDER,
-                f"SKU {unit.sku} is not on order {order.order_number}.",
-            )
-            raise BarcodeError(
-                ExceptionType.WRONG_ORDER,
-                f"Barcode {barcode} (SKU {unit.sku}) does not belong to this order.",
-            )
-        _record_exception(
-            order.id, barcode, ExceptionType.NO_DEMAND,
-            f"Order {order.order_number} has no remaining demand for SKU {unit.sku}.",
-        )
-        raise BarcodeError(
-            ExceptionType.NO_DEMAND,
-            f"No remaining demand for SKU {unit.sku} on this order.",
-        )
-
-    # Advance workflow to ALLOCATING on the first allocation.
-    if order.status == OrderStatus.VALIDATED:
-        transition(order, OrderStatus.ALLOCATING, "First unit allocated.")
-
-    allocation = Allocation(
-        order_id=order.id,
-        order_line_id=line.id,
-        inventory_unit_id=unit.id,
-        barcode=barcode,
-        status=AllocationStatus.ACTIVE,
+def allocate_order(order: Order, *, user=None, _fail_after: int | None = None) -> dict:
+    if order.status not in ELIGIBLE:
+        raise AllocationError(f"Order {order.wms_order_id} is not eligible for allocation.")
+    uid, _ = current_actor()
+    record_audit(
+        "ALLOCATION_STARTED",
+        module="Allocation",
+        entity_type="order",
+        entity_id=order.id,
+        client_id=order.client_id,
+        detail=order.wms_order_id,
     )
-    db.session.add(allocation)
-
-    prev_status = unit.status
-    unit.status = UnitStatus.ALLOCATED
-    unit.order_id = order.id
-    record_movement(
-        unit,
-        from_status=prev_status,
-        to_status=UnitStatus.ALLOCATED,
-        movement_type=MovementType.ALLOCATE,
-        order_id=order.id,
-        reason=f"Allocated to order {order.order_number}",
-    )
-    db.session.add(
-        Transaction(
-            type="ALLOCATE",
-            order_id=order.id,
-            inventory_unit_id=unit.id,
-            barcode=barcode,
-            quantity=1,
-            detail=f"Allocated to order {order.order_number}",
+    locked = _lock_order(order.id)
+    reserved = 0
+    shortages = []
+    try:
+        for line in OrderLine.query.filter_by(order_id=locked.id).order_by(OrderLine.id).all():
+            need = line.qty_ordered - line.qty_allocated
+            if need <= 0:
+                continue
+            units = _candidate_units(locked, line.upc, need)
+            for unit in units:
+                if unit.client_id != locked.client_id or unit.warehouse_id != locked.warehouse_id:
+                    raise AllocationError("Refusing cross-tenant unit.")
+                if unit.upc != line.upc:
+                    raise AllocationError("Refusing SKU/UPC mismatch.")
+                allocation = Allocation(
+                    client_id=locked.client_id,
+                    order_id=locked.id,
+                    order_line_id=line.id,
+                    inventory_unit_id=unit.id,
+                    warehouse_id=locked.warehouse_id,
+                    upc=unit.upc,
+                    location=unit.location,
+                    status=AllocationStatus.ACTIVE,
+                    created_by=uid,
+                )
+                db.session.add(allocation)
+                db.session.flush()
+                transition_unit(
+                    unit,
+                    to_status=UnitStatus.RESERVED,
+                    transaction_type=LedgerType.RESERVE,
+                    user_id=uid,
+                    order_id=locked.id,
+                    order_line_id=line.id,
+                    allocation_id=allocation.id,
+                    allocated_order_id=locked.id,
+                    reference=f"alloc:{locked.wms_order_id}",
+                )
+                unit.allocation_id = allocation.id
+                line.qty_allocated += 1
+                reserved += 1
+                if _fail_after is not None and reserved >= _fail_after:
+                    raise LedgerError("injected failure")
+            if line.qty_allocated < line.qty_ordered:
+                shortages.append(
+                    {
+                        "upc": line.upc,
+                        "needed": line.qty_ordered - line.qty_allocated,
+                        "ordered": line.qty_ordered,
+                        "allocated": line.qty_allocated,
+                    }
+                )
+        status = _refresh_order_status(locked)
+        event = (
+            "ALLOCATION_COMPLETED"
+            if status == OrderStatus.ALLOCATED
+            else "ALLOCATION_PARTIAL"
+            if status == OrderStatus.PARTIALLY_ALLOCATED
+            else "ALLOCATION_COMPLETED"
         )
-    )
-    db.session.flush()
-    return allocation
+        record_audit(
+            event,
+            module="Allocation",
+            entity_type="order",
+            entity_id=locked.id,
+            client_id=locked.client_id,
+            detail=f"{status} reserved={reserved}",
+        )
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        raise
+    return {
+        "order_id": locked.id,
+        "status": status,
+        "reserved": reserved,
+        "shortages": shortages,
+    }
 
 
 def release_allocation(allocation: Allocation) -> None:
-    unit = allocation.unit
-    allocation.status = AllocationStatus.RELEASED
-    prev_status = unit.status
-    unit.status = UnitStatus.AVAILABLE
-    unit.order_id = None
-    record_movement(
+    if allocation.status != AllocationStatus.ACTIVE:
+        raise AllocationError("Allocation is not active.")
+    unit = db.session.get(InventoryUnit, allocation.inventory_unit_id)
+    if unit is None:
+        raise AllocationError("Inventory unit missing.")
+    uid, _ = current_actor()
+    transition_unit(
         unit,
-        from_status=prev_status,
         to_status=UnitStatus.AVAILABLE,
-        movement_type=MovementType.RELEASE,
+        transaction_type=LedgerType.UNRESERVE,
+        user_id=uid,
         order_id=allocation.order_id,
-        reason="Allocation released",
+        order_line_id=allocation.order_line_id,
+        allocation_id=allocation.id,
+        clear_allocation=True,
+        reference=f"release:{allocation.id}",
     )
-    db.session.add(
-        Transaction(
-            type="RELEASE_ALLOCATION",
-            order_id=allocation.order_id,
-            inventory_unit_id=unit.id,
-            barcode=unit.barcode,
-            quantity=1,
-        )
-    )
+    allocation.status = AllocationStatus.RELEASED
+    line = db.session.get(OrderLine, allocation.order_line_id)
+    if line and line.qty_allocated > 0:
+        line.qty_allocated -= 1
+    order = db.session.get(Order, allocation.order_id)
+    if order:
+        _refresh_order_status(order)
     db.session.flush()
-
-
-def active_allocations(order: Order) -> list[Allocation]:
-    return Allocation.query.filter_by(
-        order_id=order.id, status=AllocationStatus.ACTIVE
-    ).all()
-
-
-def allocation_progress(order: Order) -> dict:
-    """Return per-SKU {ordered, allocated} plus totals for ``order``."""
-    per_sku: dict[str, dict[str, int]] = {}
-    for line in order.lines:
-        entry = per_sku.setdefault(line.sku, {"ordered": 0, "allocated": 0})
-        entry["ordered"] += line.quantity
-        entry["allocated"] += allocated_count_for_line(line)
-    total_ordered = sum(v["ordered"] for v in per_sku.values())
-    total_allocated = sum(v["allocated"] for v in per_sku.values())
-    return {
-        "per_sku": per_sku,
-        "total_ordered": total_ordered,
-        "total_allocated": total_allocated,
-        "fully_allocated": total_ordered > 0 and total_allocated >= total_ordered,
-    }
-
-
-def is_fully_allocated(order: Order) -> bool:
-    return allocation_progress(order)["fully_allocated"]
-
-
-def mark_allocated(order: Order) -> Order:
-    """Transition ALLOCATING -> ALLOCATED when demand is fully covered."""
-    if not is_fully_allocated(order):
-        raise BarcodeError(
-            ExceptionType.NO_DEMAND,
-            "Order is not fully allocated; cannot mark as ALLOCATED.",
-        )
-    result = transition(order, OrderStatus.ALLOCATED, "All demand allocated.")
-    from .pick_tickets import ensure_pick_ticket
-
-    ensure_pick_ticket(order)
-    return result
-
-
-def _available_units(order: Order, sku: str, limit: int) -> list[InventoryUnit]:
-    return (
-        InventoryUnit.query.filter_by(
-            client_id=order.client_id,
-            warehouse_id=order.warehouse_id,
-            sku=sku,
-            status=UnitStatus.AVAILABLE,
-        )
-        .order_by(InventoryUnit.location, InventoryUnit.barcode)
-        .limit(limit)
-        .all()
-    )
-
-
-def auto_allocate_order(order: Order) -> dict:
-    """Allocate available Client+Warehouse inventory to ``order``.
-
-    Order Type is not part of inventory matching.
-    """
-    from ..workflow import WorkflowError
-
-    result = {
-        "order_id": order.id,
-        "order_number": order.order_number,
-        "units": order.ordered_quantity,
-        "allocated": 0,
-        "short": 0,
-        "result": AllocationResult.NO_INVENTORY,
-        "reason": "",
-    }
-    try:
-        if order.status == OrderStatus.CLOSED:
-            result["result"] = AllocationResult.EXCEPTION
-            result["reason"] = "Order is closed."
-            return result
-        if order.status == OrderStatus.NEW:
-            transition(order, OrderStatus.VALIDATED, "Validated for allocation.")
-
-        progress = allocation_progress(order)
-        if not progress["fully_allocated"]:
-            for line in order.lines:
-                remaining = line.quantity - allocated_count_for_line(line)
-                if remaining <= 0:
-                    continue
-                for unit in _available_units(order, line.sku, remaining):
-                    allocate_barcode(order, unit.barcode)
-
-        progress = allocation_progress(order)
-        result["allocated"] = progress["total_allocated"]
-        result["short"] = max(0, progress["total_ordered"] - progress["total_allocated"])
-        if progress["fully_allocated"]:
-            if order.status == OrderStatus.VALIDATED:
-                transition(order, OrderStatus.ALLOCATING, "Demand already covered.")
-            if order.status == OrderStatus.ALLOCATING:
-                mark_allocated(order)
-            else:
-                from .pick_tickets import ensure_pick_ticket
-
-                ensure_pick_ticket(order)
-            result["result"] = AllocationResult.FULL
-            result["reason"] = "Demand fully covered."
-        elif progress["total_allocated"] == 0:
-            result["result"] = AllocationResult.NO_INVENTORY
-            result["reason"] = "No available units for ordered SKUs."
-        else:
-            result["result"] = AllocationResult.PARTIAL
-            result["reason"] = "Insufficient available inventory."
-        return result
-    except (BarcodeError, WorkflowError) as exc:
-        result["result"] = AllocationResult.EXCEPTION
-        result["reason"] = str(exc)
-        return result
-
-
-def run_allocation_batch(orders: list[Order]) -> dict:
-    rows = [auto_allocate_order(o) for o in orders]
-    evaluated = len(rows)
-    full = sum(1 for r in rows if r["result"] == AllocationResult.FULL)
-    partial = sum(1 for r in rows if r["result"] == AllocationResult.PARTIAL)
-    none = sum(1 for r in rows if r["result"] == AllocationResult.NO_INVENTORY)
-    exceptions = sum(1 for r in rows if r["result"] == AllocationResult.EXCEPTION)
-    return {
-        "evaluated": evaluated,
-        "full": full,
-        "partial": partial,
-        "no_inventory": none,
-        "exceptions": exceptions,
-        "rate": round((full / evaluated) * 100, 1) if evaluated else 0.0,
-        "rows": rows,
-    }

@@ -1,73 +1,70 @@
 {% extends "base.html" %}
-{% block title %}Allocate {{ order.order_number }}{% endblock %}
+{% block title %}Allocate {{ order.wms_order_id }}{% endblock %}
 {% block content %}
 <div class="page-header">
   <div class="section-title">
-    <h1>Allocate · {{ order.order_number }}</h1>
+    <h1>Allocate · {{ order.wms_order_id }}</h1>
     <span class="badge badge-{{ order.status }}">{{ order.status }}</span>
   </div>
   <p class="sub">
-    Client {{ order.client.code if order.client else '—' }} ·
-    Warehouse {{ order.warehouse.code if order.warehouse else '—' }} ·
-    Order Type {{ order.order_type.code if order.order_type else '—' }}
+    Client {{ order.client.client_code if order.client else '—' }} ·
+    Warehouse {{ order.warehouse.warehouse_code if order.warehouse else '—' }} ·
+    Division {{ order.division.code if order.division else '—' }}
   </p>
 </div>
 
 <div class="card">
-  <h2>Scan / enter barcode</h2>
-  {% if order.status in ['VALIDATED', 'ALLOCATING'] and can('ALLOCATION_EXECUTE') %}
-    <form method="post" action="{{ url_for('allocation.scan', order_id=order.id) }}" class="inline-form">
-      <label>Barcode
-        <input name="barcode" autofocus autocomplete="off" placeholder="Scan or type barcode" required />
-      </label>
-      <button type="submit">Allocate unit</button>
+  <h2>Run allocation</h2>
+  {% if order.status in ['UNALLOCATED', 'PARTIALLY_ALLOCATED'] and can('ALLOCATION_EXECUTE') %}
+    <form method="post" action="{{ url_for('allocation.run', order_id=order.id) }}">
+      <button type="submit">Reserve available units</button>
     </form>
   {% else %}
-    <p class="muted">Order is {{ order.status }}; scanning is closed.</p>
+    <p class="muted">Order is {{ order.status }}; allocation is closed.</p>
   {% endif %}
 </div>
 
 <div class="card">
-  <h2>Progress</h2>
+  <h2>Lines</h2>
   <table>
-    <thead><tr><th>SKU</th><th class="right">Ordered</th><th class="right">Allocated</th></tr></thead>
+    <thead><tr><th>UPC</th><th>SKU</th><th class="right">Ordered</th><th class="right">Allocated</th><th class="right">Short</th></tr></thead>
     <tbody>
-      {% for sku, v in progress.per_sku.items() %}
-        <tr><td class="mono">{{ sku }}</td><td class="right num-cell">{{ v.ordered }}</td><td class="right num-cell">{{ v.allocated }}</td></tr>
+      {% for line in lines %}
+        <tr>
+          <td class="mono">{{ line.upc }}</td>
+          <td>{{ line.sku or '—' }}</td>
+          <td class="right num-cell">{{ line.qty_ordered }}</td>
+          <td class="right num-cell">{{ line.qty_allocated }}</td>
+          <td class="right num-cell">{{ line.qty_ordered - line.qty_allocated }}</td>
+        </tr>
       {% endfor %}
     </tbody>
   </table>
-  <p class="muted">Total {{ progress.total_allocated }} / {{ progress.total_ordered }}
-    {% if fully_allocated %}<span class="pill-ok">· fully allocated</span>{% endif %}
-  </p>
-  <div class="btn-row">
-    {% if order.status == 'ALLOCATING' and fully_allocated %}
-      <form method="post" action="{{ url_for('allocation.mark_allocated_view', order_id=order.id) }}"><button type="submit">Mark ALLOCATED</button></form>
-    {% endif %}
-    {% if order.status == 'ALLOCATED' %}
-      <form method="post" action="{{ url_for('allocation.ready_to_pick', order_id=order.id) }}"><button type="submit">Release to picking</button></form>
-    {% endif %}
-  </div>
+  {% if shortages %}
+    <p class="muted">Shortages by UPC:
+      {% for s in shortages %}<span class="mono">{{ s.upc }}×{{ s.needed }}</span>{% if not loop.last %}, {% endif %}{% endfor %}
+    </p>
+  {% endif %}
 </div>
 
 <div class="card">
-  <h2>Allocated units ({{ allocations|length }})</h2>
+  <h2>Reserved units ({{ allocations|length }})</h2>
   <table>
-    <thead><tr><th>Barcode</th><th>SKU</th><th>Location</th><th></th></tr></thead>
+    <thead><tr><th>Unit</th><th>UPC</th><th>Location</th><th></th></tr></thead>
     <tbody>
       {% for a in allocations %}
         <tr>
-          <td class="mono">{{ a.barcode }}</td>
-          <td>{{ a.unit.sku }}</td>
-          <td>{{ a.unit.location or '—' }}</td>
+          <td class="mono">{{ a.inventory_unit_id }}</td>
+          <td class="mono">{{ a.upc }}</td>
+          <td>{{ a.location }}</td>
           <td class="right">
-            {% if order.status in ['VALIDATED', 'ALLOCATING'] and can('ALLOCATION_RELEASE') %}
+            {% if can('ALLOCATION_RELEASE') %}
             <form method="post" action="{{ url_for('allocation.release', allocation_id=a.id) }}"><button class="btn-danger btn" type="submit">Release</button></form>
             {% endif %}
           </td>
         </tr>
       {% else %}
-        <tr><td colspan="4" class="muted">No units allocated yet.</td></tr>
+        <tr><td colspan="4" class="muted">No units reserved yet.</td></tr>
       {% endfor %}
     </tbody>
   </table>
