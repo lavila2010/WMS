@@ -50,59 +50,6 @@ def _val(row, key) -> str:
     return str(row.get(key, "")).strip()
 
 
-def import_inventory(source, filename: str) -> ImportBatch:
-    """Import Inventory.xlsx.
-
-    Columns: Client, Warehouse, OrderType, Barcode, SKU, [Description, Location].
-    """
-    df = _read_excel(source)
-    _require_columns(
-        df, ["client", "warehouse", "ordertype", "barcode", "sku"], "Inventory"
-    )
-
-    batch = ImportBatch(type=ImportType.INVENTORY, filename=filename, row_count=0)
-    db.session.add(batch)
-    db.session.flush()
-
-    created = 0
-    skipped = 0
-    for _, row in df.iterrows():
-        barcode = _val(row, "barcode")
-        sku = _val(row, "sku")
-        client_code = _val(row, "client")
-        warehouse_code = _val(row, "warehouse")
-        order_type_code = _val(row, "ordertype")
-        if not (barcode and sku and client_code and warehouse_code and order_type_code):
-            skipped += 1
-            continue
-        if InventoryUnit.query.filter_by(barcode=barcode).first() is not None:
-            skipped += 1  # barcode is globally unique
-            continue
-
-        client, warehouse, order_type = resolve_scope(
-            client_code, warehouse_code, order_type_code
-        )
-        db.session.add(
-            InventoryUnit(
-                barcode=barcode,
-                sku=sku,
-                description=_val(row, "description") or None,
-                location=_val(row, "location") or None,
-                status=UnitStatus.AVAILABLE,
-                client_id=client.id,
-                warehouse_id=warehouse.id,
-                order_type_id=order_type.id,
-                import_batch_id=batch.id,
-            )
-        )
-        created += 1
-
-    batch.row_count = created
-    batch.message = f"Imported {created} units, skipped {skipped}."
-    db.session.commit()
-    return batch
-
-
 def _merge_header(existing: dict, candidate: dict, key: str) -> None:
     """Merge a header field, rejecting conflicting non-empty values."""
     field, label, order_key = key, candidate["_label"], candidate["_order"]
@@ -240,7 +187,7 @@ def import_orders(source, filename: str) -> ImportBatch:
 
 # --- Workbook builders (used for downloadable templates and tests) ---
 
-INVENTORY_HEADERS = ["Client", "Warehouse", "OrderType", "Barcode", "SKU", "Description", "Location"]
+INVENTORY_HEADERS = ["Client", "Warehouse", "UPC", "SKU", "Description", "Barcode", "Location"]
 ORDER_HEADERS = [
     "Client", "Warehouse", "OrderType", "OrderNumber", "Customer",
     "SKU", "Description", "QtyOrdered", "Carrier", "ShippingService",
@@ -254,8 +201,9 @@ def build_inventory_workbook(rows: list[dict]) -> io.BytesIO:
     ws.append(INVENTORY_HEADERS)
     for r in rows:
         ws.append([
-            r.get("client", ""), r.get("warehouse", ""), r.get("order_type", r.get("ordertype", "")),
-            r.get("barcode", ""), r.get("sku", ""), r.get("description", ""), r.get("location", ""),
+            r.get("client", ""), r.get("warehouse", ""), r.get("upc", ""),
+            r.get("sku", ""), r.get("description", ""),
+            r.get("barcode", ""), r.get("location", ""),
         ])
     buf = io.BytesIO()
     wb.save(buf)

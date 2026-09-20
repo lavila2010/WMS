@@ -16,13 +16,13 @@ from __future__ import annotations
 from ..constants import (
     AllocationStatus,
     ExceptionType,
+    MovementType,
     OrderStatus,
     UnitStatus,
 )
 from ..extensions import db
 from ..models import (
     Allocation,
-    InventoryMovement,
     InventoryUnit,
     Order,
     OrderException,
@@ -30,6 +30,7 @@ from ..models import (
     Transaction,
 )
 from ..workflow import transition
+from .movements import record_movement
 
 
 class BarcodeError(Exception):
@@ -62,7 +63,12 @@ def find_unit(barcode: str) -> InventoryUnit | None:
 
 
 def _validate_scope(order, unit, barcode: str) -> None:
-    """Enforce Client + Warehouse + Order Type isolation for a barcode."""
+    """Enforce Client + Warehouse isolation for a barcode.
+
+    Physical inventory is partitioned ONLY by Client + Warehouse. Order Type is
+    an order attribute and does NOT participate in inventory matching, so an
+    order type mismatch never rejects a unit.
+    """
     if unit.client_id != order.client_id:
         _record_exception(
             order.id, barcode, ExceptionType.WRONG_CLIENT,
@@ -80,15 +86,6 @@ def _validate_scope(order, unit, barcode: str) -> None:
         raise BarcodeError(
             ExceptionType.WRONG_WAREHOUSE,
             f"Barcode {barcode} belongs to a different warehouse.",
-        )
-    if unit.order_type_id != order.order_type_id:
-        _record_exception(
-            order.id, barcode, ExceptionType.WRONG_ORDER_TYPE,
-            f"Barcode {barcode} belongs to a different order type.",
-        )
-        raise BarcodeError(
-            ExceptionType.WRONG_ORDER_TYPE,
-            f"Barcode {barcode} belongs to a different order type.",
         )
 
 
@@ -193,14 +190,13 @@ def allocate_barcode(order: Order, raw_barcode: str) -> Allocation:
     prev_status = unit.status
     unit.status = UnitStatus.ALLOCATED
     unit.order_id = order.id
-    db.session.add(
-        InventoryMovement(
-            inventory_unit_id=unit.id,
-            barcode=barcode,
-            from_status=prev_status,
-            to_status=UnitStatus.ALLOCATED,
-            reason=f"Allocated to order {order.order_number}",
-        )
+    record_movement(
+        unit,
+        from_status=prev_status,
+        to_status=UnitStatus.ALLOCATED,
+        movement_type=MovementType.ALLOCATE,
+        order_id=order.id,
+        reason=f"Allocated to order {order.order_number}",
     )
     db.session.add(
         Transaction(
@@ -222,14 +218,13 @@ def release_allocation(allocation: Allocation) -> None:
     prev_status = unit.status
     unit.status = UnitStatus.AVAILABLE
     unit.order_id = None
-    db.session.add(
-        InventoryMovement(
-            inventory_unit_id=unit.id,
-            barcode=unit.barcode,
-            from_status=prev_status,
-            to_status=UnitStatus.AVAILABLE,
-            reason="Allocation released",
-        )
+    record_movement(
+        unit,
+        from_status=prev_status,
+        to_status=UnitStatus.AVAILABLE,
+        movement_type=MovementType.RELEASE,
+        order_id=allocation.order_id,
+        reason="Allocation released",
     )
     db.session.add(
         Transaction(

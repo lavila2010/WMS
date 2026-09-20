@@ -18,6 +18,7 @@ from ..constants import (
     AllocationStatus,
     BoxStatus,
     ExceptionType,
+    MovementType,
     OrderStatus,
     UnitStatus,
 )
@@ -25,7 +26,6 @@ from ..extensions import db
 from ..models import (
     Box,
     BoxContent,
-    InventoryMovement,
     Order,
     Transaction,
 )
@@ -39,6 +39,7 @@ from .allocation import (
     _record_exception,
     _validate_scope,
 )
+from .movements import record_movement
 
 
 def create_box(
@@ -139,14 +140,13 @@ def scan_into_box(box: Box, raw_barcode: str) -> BoxContent:
 
     prev_status = unit.status
     unit.status = UnitStatus.PACKED
-    db.session.add(
-        InventoryMovement(
-            inventory_unit_id=unit.id,
-            barcode=barcode,
-            from_status=prev_status,
-            to_status=UnitStatus.PACKED,
-            reason=f"Packed into box {box.box_number}",
-        )
+    record_movement(
+        unit,
+        from_status=prev_status,
+        to_status=UnitStatus.PACKED,
+        movement_type=MovementType.PACK,
+        order_id=order.id,
+        reason=f"Packed into box {box.box_number}",
     )
     db.session.add(
         Transaction(
@@ -264,14 +264,13 @@ def close_order(order: Order, created_by: str = "system"):
     for alloc in active_allocations(order):
         prev = alloc.unit.status
         alloc.unit.status = UnitStatus.SHIPPED
-        db.session.add(
-            InventoryMovement(
-                inventory_unit_id=alloc.unit.id,
-                barcode=alloc.unit.barcode,
-                from_status=prev,
-                to_status=UnitStatus.SHIPPED,
-                reason=f"Shipped on close of {order.order_number}",
-            )
+        record_movement(
+            alloc.unit,
+            from_status=prev,
+            to_status=UnitStatus.SHIPPED,
+            movement_type=MovementType.SHIP,
+            order_id=order.id,
+            reason=f"Shipped on close of {order.order_number}",
         )
     db.session.add(
         Transaction(
