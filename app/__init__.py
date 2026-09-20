@@ -26,6 +26,11 @@ def create_app(config: Config | None = None) -> Flask:
     from .auth import init_auth
     init_auth(app)
 
+    with app.app_context():
+        from .schema import ensure_processing_columns
+
+        ensure_processing_columns()
+
     from .blueprints.health import bp as health_bp
     from .blueprints.auth import bp as auth_bp
     from .blueprints.dashboard import bp as dashboard_bp

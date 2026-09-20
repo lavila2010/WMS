@@ -202,8 +202,9 @@ input:disabled, select:disabled { background: var(--header-bg); color: var(--mut
 .badge-NEW { background: var(--neutral); color: #3F4B59; }
 .badge-VALIDATED, .badge-ALLOCATING, .badge-PARTIAL, .badge-NEVER_PRINTED { background: var(--amber-light); color: var(--amber); }
 .badge-ALLOCATED, .badge-READY_TO_PICK, .badge-PRINTED, .badge-FULL { background: var(--green-light); color: var(--green); }
-.badge-PROCESSING, .badge-PROCESSED, .badge-READY_TO_CLOSE { background: var(--blue-light); color: var(--blue); }
+.badge-PROCESSING, .badge-PROCESSED, .badge-READY_TO_CLOSE, .badge-OPEN { background: var(--blue-light); color: var(--blue); }
 .badge-CLOSED { background: var(--neutral); color: var(--muted); }
+.badge-AWAITING_WEIGHT, .badge-REWEIGH_REQUIRED { background: var(--amber-light); color: var(--amber); }
 .badge-NO_INVENTORY, .badge-EXCEPTION { background: var(--red-light); color: var(--red); }
 
 .flashes { margin-bottom: 1rem; display: flex; flex-direction: column; gap: 0.45rem; }
@@ -379,3 +380,52 @@ input:disabled, select:disabled { background: var(--header-bg); color: var(--mut
 }
 
 a { color: var(--blue); }
+
+.kv-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.15rem 1.25rem;
+}
+.kv-grid .kv {
+  border-bottom: 1px solid #EEF2F7;
+  padding: 0.4rem 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+.kv-grid .kv span { color: var(--muted); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.04em; }
+.kv-grid .kv strong { font-size: 0.88rem; font-weight: 600; }
+
+.processing-header {
+  position: sticky;
+  top: 56px;
+  z-index: 8;
+  box-shadow: none;
+}
+.processing-layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  align-items: start;
+}
+.start-order-card { max-width: 560px; }
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(24, 34, 48, 0.28);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 30;
+}
+.modal-card {
+  width: 420px;
+  margin: 0;
+}
+.modal-card p { color: var(--muted); margin: 0 0 1rem; }
+
+@media (max-width: 900px) {
+  .processing-layout { grid-template-columns: 1fr; }
+  .kv-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

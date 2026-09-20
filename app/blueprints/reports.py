@@ -81,7 +81,35 @@ def index():
             "shipping_service": args.get("shipping_service", ""),
             "status": status,
             "date": date_str,
+            "date_from": args.get("date_from", ""),
+            "date_to": args.get("date_to", ""),
+            "closed_by": args.get("closed_by", ""),
         },
+    )
+
+
+@bp.route("/completed/export")
+@permission_required("REPORTS_EXPORT")
+def export_completed():
+    from ..services.completed_orders import build_completed_orders_workbook, completed_orders_query
+
+    filters = {
+        "client_id": request.args.get("client_id"),
+        "warehouse_id": request.args.get("warehouse_id"),
+        "order_type_id": request.args.get("order_type_id"),
+        "carrier": request.args.get("carrier"),
+        "closed_by": request.args.get("closed_by"),
+        "date_from": request.args.get("date_from"),
+        "date_to": request.args.get("date_to"),
+    }
+    rows = completed_orders_query(filters).all()
+    buf = build_completed_orders_workbook(rows)
+    record_audit("COMPLETED_ORDERS_EXPORT", module="Reports", detail=f"{len(rows)} rows", commit=True)
+    return send_file(
+        buf,
+        as_attachment=True,
+        download_name="Completed_Orders.xlsx",
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
 
 

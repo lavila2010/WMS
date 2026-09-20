@@ -70,7 +70,7 @@ def scan_into_box(box: Box, raw_barcode: str) -> BoxContent:
     Enforces: box open, barcode known, unit allocated to this order, no
     duplicate, and a unit cannot be in two boxes.
     """
-    if box.status != BoxStatus.OPEN:
+    if box.status not in {BoxStatus.OPEN, BoxStatus.REWEIGH_REQUIRED}:
         raise BarcodeError(
             ExceptionType.UNIT_ALREADY_BOXED,
             f"Box {box.box_number} is closed.",
@@ -194,7 +194,7 @@ def packed_count(order: Order) -> int:
 
 
 def open_boxes(order: Order) -> list[Box]:
-    return [b for b in order.boxes if b.status == BoxStatus.OPEN]
+    return [b for b in order.boxes if b.status != BoxStatus.CLOSED]
 
 
 def reconcile(order: Order) -> dict:
@@ -260,6 +260,7 @@ def close_order(order: Order, created_by: str = "system"):
         raise ValueError("Quantity reconciliation failed; cannot close order.")
 
     transition(order, OrderStatus.CLOSED, "Order closed.")
+    order.closed_at = datetime.utcnow()
 
     # Exactly one invoice per closed order (also guarded by UNIQUE(order_id)).
     invoice = create_invoice_for_order(order, created_by=created_by)

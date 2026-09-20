@@ -259,6 +259,31 @@ def index():
     )
 
 
+@bp.route("/completed/export")
+@permission_required("REPORTS_EXPORT")
+def export_completed():
+    from ..services.completed_orders import build_completed_orders_workbook, completed_orders_query
+
+    filters = {
+        "client_id": request.args.get("client_id"),
+        "warehouse_id": request.args.get("warehouse_id"),
+        "order_type_id": request.args.get("order_type_id"),
+        "carrier": request.args.get("carrier"),
+        "closed_by": request.args.get("closed_by"),
+        "date_from": request.args.get("date_from") or request.args.get("date"),
+        "date_to": request.args.get("date_to") or request.args.get("date"),
+    }
+    orders = completed_orders_query(filters).all()
+    buf = build_completed_orders_workbook(orders)
+    record_audit("COMPLETED_ORDERS_EXPORT", module="Orders", detail=f"{len(orders)} rows", commit=True)
+    return send_file(
+        buf,
+        as_attachment=True,
+        download_name="Completed_Orders.xlsx",
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+
+
 @bp.route("/<int:order_id>")
 @permission_required("ORDERS_VIEW")
 def detail(order_id: int):

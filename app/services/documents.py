@@ -240,47 +240,88 @@ def generate_box_detail(box: Box) -> Document:
 
 
 def generate_order_closure(order: Order) -> Document:
+    from .processing import carton_content_rows, format_dims, format_weight
+
     styles = _styles()
     rec = reconcile(order)
-    invoice = order.invoice
+    ticket = getattr(order, "pick_ticket", None)
+    closed_at = order.closed_at or datetime.utcnow()
     total_weight = round(sum(b.weight_kg or 0.0 for b in order.boxes), 3)
-    elements = _header(
-        styles, "Order Closure Report",
-        f"Order {order.order_number} — {order.customer or 'N/A'} "
-        f"(status {order.status})",
-    )
-    elements.append(Paragraph(_scope_line(order), styles["Normal"]))
-    elements.append(Spacer(1, 4 * mm))
-    summary = [
-        ["Field", "Value"],
-        ["Invoice Number", invoice.invoice_number if invoice else "—"],
+    weight_unit = next((b.weight_unit for b in order.boxes if b.weight_unit), "lb")
+
+    head = [
+        [
+            Paragraph("<b>WMS SYSTEM</b><br/>Order Closure Report", styles["Heading2"]),
+            Paragraph(
+                f"<b>Order</b> {order.order_number}<br/>"
+                f"<b>Status</b> {order.status}",
+                styles["Normal"],
+            ),
+        ]
+    ]
+    head_tbl = Table(head, colWidths=[110 * mm, 55 * mm])
+    head_tbl.setStyle(TableStyle([
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("ALIGN", (1, 0), (1, 0), "RIGHT"),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+    ]))
+    elements = [head_tbl, Spacer(1, 4 * mm)]
+
+    info = [
+        ["Order Information", ""],
         ["Order Number", order.order_number],
+        ["Pick Ticket Number", ticket.pick_ticket_number if ticket else "—"],
         ["Client", order.client.code if order.client else "—"],
         ["Warehouse", order.warehouse.code if order.warehouse else "—"],
         ["Order Type", order.order_type.code if order.order_type else "—"],
         ["Customer", order.customer or "—"],
         ["Carrier", order.carrier or "—"],
         ["Shipping Service", order.shipping_service or "—"],
-        ["Total Units", str(rec["packed"])],
-        ["Total Boxes", str(len(order.boxes))],
-        ["Total Weight (kg)", str(total_weight)],
-        ["Reconciliation", "PASS" if rec["ok"] else "FAIL"],
+        ["Closed At", closed_at.strftime("%Y-%m-%d %H:%M UTC")],
+        ["Closed By", order.closed_by_username or "—"],
+        ["Status", order.status],
     ]
-    elements.append(_table(summary, col_widths=[60 * mm, 40 * mm]))
+    elements.append(_table(info, col_widths=[50 * mm, 115 * mm]))
     elements.append(Spacer(1, 6 * mm))
 
-    rows = [["Box", "Dimensions (cm)", "Weight (kg)", "Units", "Status"]]
+    summary = [
+        ["Summary", ""],
+        ["Ordered Units", str(rec["ordered"])],
+        ["Allocated Units", str(rec["allocated"])],
+        ["Packed Units", str(rec["packed"])],
+        ["Carton Count", str(len(order.boxes))],
+        ["Total Weight", f"{total_weight:g} {weight_unit}"],
+        ["Reconciliation", "PASS" if rec["ok"] else "FAIL"],
+    ]
+    elements.append(_table(summary, col_widths=[50 * mm, 115 * mm]))
+    elements.append(Spacer(1, 6 * mm))
+
     for box in sorted(order.boxes, key=lambda b: b.box_number):
-        dims = "×".join(
-            str(d) for d in [box.length_cm, box.width_cm, box.height_cm] if d
-        ) or "n/a"
-        rows.append([
-            box.box_number, dims, str(box.weight_kg or "n/a"),
-            str(len(box.contents)), box.status,
-        ])
-    if len(rows) == 1:
-        rows.append(["—", "n/a", "n/a", "0", "n/a"])
-    elements.append(_table(rows))
+        elements.append(
+            Paragraph(
+                f"<b>Carton {box.box_number}</b> — {box.status} · "
+                f"{format_dims(box)} · {format_weight(box)} · "
+                f"{len(box.contents)} units",
+                styles["Normal"],
+            )
+        )
+        rows = [["Location", "SKU", "UPC", "Description", "Qty"]]
+        for line in carton_content_rows(box):
+            rows.append([
+                line["location"],
+                line["sku"],
+                line["upc"],
+                line["description"],
+                str(line["qty"]),
+            ])
+        if len(rows) == 1:
+            rows.append(["—", "", "", "No units", "0"])
+        elements.append(
+            _table(rows, col_widths=[28 * mm, 28 * mm, 32 * mm, 62 * mm, 15 * mm])
+        )
+        elements.append(Spacer(1, 5 * mm))
+    if not order.boxes:
+        elements.append(Paragraph("No cartons.", styles["Normal"]))
     return _persist(
         elements, doc_type=DocumentType.ORDER_CLOSURE, order_id=order.id,
         label=order.order_number,

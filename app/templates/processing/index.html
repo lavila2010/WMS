@@ -3,24 +3,29 @@
 {% block content %}
 <div class="page-header">
   <h1>Order Processing</h1>
-  <p class="sub">Select allocated order → Pick Ticket → create box → scan units → close box → reconcile → close order.</p>
+  <p class="sub">Confirm Pick Ticket, pack units into cartons, close the order and generate final documentation</p>
 </div>
-<div class="card">
-  <table>
-    <thead><tr><th>Order</th><th>Customer</th><th class="right">Units</th><th>Status</th><th></th></tr></thead>
-    <tbody>
-      {% for o in orders %}
-        <tr>
-          <td class="mono">{{ o.order_number }}</td>
-          <td>{{ o.customer or '—' }}</td>
-          <td class="right num-cell">{{ o.ordered_quantity }}</td>
-          <td><span class="badge badge-{{ o.status }}">{{ o.status }}</span></td>
-          <td class="right"><a class="btn" href="{{ url_for('processing.detail', order_id=o.id) }}">Process</a></td>
-        </tr>
-      {% else %}
-        <tr><td colspan="5" class="muted">No orders ready for processing. Release an allocated order to picking first.</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
+
+<div class="card start-order-card">
+  <h2>Start Order</h2>
+  <p class="sub" style="margin-bottom:1rem;">Enter or scan the Pick Ticket number associated with the client order.</p>
+  <form method="post" action="{{ url_for('processing.find') }}" class="inline-form">
+    <label>Pick Ticket Number
+      <input id="pick-ticket" name="pick_ticket_number" value="{{ pick_ticket_number or '' }}" autocomplete="off" autofocus />
+    </label>
+    <button type="submit">Find Order</button>
+  </form>
 </div>
+{% endblock %}
+
+{% block head %}
+{% if pdf_id %}
+<script>
+  window.addEventListener("DOMContentLoaded", function () {
+    window.open({{ url_for('processing.open_pdf', document_id=pdf_id)|tojson }}, "_blank");
+    var field = document.getElementById("pick-ticket");
+    if (field) field.focus();
+  });
+</script>
+{% endif %}
 {% endblock %}

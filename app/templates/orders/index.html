@@ -95,6 +95,9 @@
             <button type="submit">Run Allocation</button>
           </form>
         {% endif %}
+        {% if can('REPORTS_EXPORT') %}
+          <a class="btn-secondary btn" href="{{ url_for('orders.export_completed', client_id=scope.client_id, warehouse_id=scope.warehouse_id or None, date=date_str or None) }}">Completed Orders Excel</a>
+        {% endif %}
       </div>
     </div>
     <table>
