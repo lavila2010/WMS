@@ -4,19 +4,20 @@
 <div class="panel">
   <h2>Units at {{ location }} — UPC {{ upc }}</h2>
   <table>
-    <thead><tr><th>Unit</th><th>SKU</th><th>Style</th><th>Status</th><th>Created</th><th>Updated</th></tr></thead>
+    <thead><tr><th>Unit</th><th>SKU</th><th>Description</th><th>Style</th><th>Status</th><th>Created</th><th>Updated</th></tr></thead>
     <tbody>
       {% for u in units %}
         <tr>
           <td class="mono">{{ u.id }}</td>
           <td>{{ u.sku or '—' }}</td>
+          <td>{{ u.description or '—' }}</td>
           <td>{{ u.style or '—' }}</td>
           <td><span class="pill pill-{{ u.status }}">{{ u.status }}</span></td>
           <td class="sub">{{ u.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
           <td class="sub">{{ u.updated_at.strftime('%Y-%m-%d %H:%M') }}</td>
         </tr>
       {% else %}
-        <tr><td colspan="6" class="sub">No units found.</td></tr>
+        <tr><td colspan="7" class="sub">No units found.</td></tr>
       {% endfor %}
     </tbody>
   </table>

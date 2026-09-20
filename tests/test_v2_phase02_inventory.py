@@ -40,6 +40,7 @@ def _row(upc="123456789012", qty=5, location="A-01", **extra):
     data = {
         "UPC": upc,
         "SKU": extra.get("sku", "SKU-1"),
+        "Description": extra.get("description", "Black Tee"),
         "Style": extra.get("style", "ST"),
         "Color": extra.get("color", "BLK"),
         "Size": extra.get("size", "M"),

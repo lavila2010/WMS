@@ -243,6 +243,7 @@ Same-client rule: application + `CHECK` enforced by trigger `division_warehouses
 | warehouse_id | INT FK warehouses | NO |
 | upc | VARCHAR(64) | NO | |
 | sku | VARCHAR(64) | YES | |
+| description | VARCHAR(255) | YES (required on new V2 inventory import) | |
 | style | VARCHAR(64) | YES | |
 | color | VARCHAR(64) | YES | |
 | size | VARCHAR(32) | YES | |

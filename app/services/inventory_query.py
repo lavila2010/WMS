@@ -69,6 +69,7 @@ def aggregate_rows(client_id=None, warehouse_id=None, client_ids=None):
             InventoryUnit.upc,
             InventoryUnit.location,
             func.max(InventoryUnit.sku).label("sku"),
+            func.max(InventoryUnit.description).label("description"),
             func.max(InventoryUnit.style).label("style"),
             func.max(InventoryUnit.color).label("color"),
             func.max(InventoryUnit.size).label("size"),
@@ -105,6 +106,7 @@ def aggregate_rows(client_id=None, warehouse_id=None, client_ids=None):
                 "upc": row.upc,
                 "location": row.location,
                 "sku": row.sku,
+                "description": row.description,
                 "style": row.style,
                 "color": row.color,
                 "size": row.size,
@@ -127,6 +129,7 @@ def search_units(q, *, status=None, client_id=None, warehouse_id=None, client_id
             or_(
                 InventoryUnit.upc.ilike(like),
                 InventoryUnit.sku.ilike(like),
+                InventoryUnit.description.ilike(like),
                 InventoryUnit.style.ilike(like),
                 InventoryUnit.color.ilike(like),
                 InventoryUnit.size.ilike(like),
@@ -170,6 +173,31 @@ def ledger_rows(
         .limit(limit)
         .all()
     )
+
+
+def unique_client_upc_description(client_id: int, upc: str) -> str | None:
+    """Return the Description for Client+UPC when it resolves to one value.
+
+    Never reads another client's units. Returns None if the UPC is unknown
+    for the client or if multiple distinct descriptions exist.
+    """
+    upc = (upc or "").strip()
+    if not client_id or not upc:
+        return None
+    values = (
+        db.session.query(InventoryUnit.description)
+        .filter(
+            InventoryUnit.client_id == client_id,
+            InventoryUnit.upc == upc,
+            InventoryUnit.description.isnot(None),
+            InventoryUnit.description != "",
+        )
+        .distinct()
+        .all()
+    )
+    if len(values) != 1:
+        return None
+    return values[0][0]
 
 
 def warehouse_comparison(client_id, client_ids=None):

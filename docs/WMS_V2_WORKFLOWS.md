@@ -48,9 +48,9 @@ All mutations fail closed. Tenant and permission checks run on the server before
 ## 5. Inventory import
 
 1. User selects Client + Warehouse (both active; warehouse belongs to client; user may access client).  
-2. Upload Excel: UPC, SKU, Style, Color, Size, Quantity, Location.  
+2. Upload Excel: UPC, SKU, Description, Style, Color, Size, Quantity, Location.  
 3. Optional Client/Warehouse columns: must match selected context or the file is rejected.  
-4. Preview parses; validate entire file. Quantity must be integer > 0. UPC and Location required.  
+4. Preview parses; validate entire file. Quantity must be integer > 0. UPC, Description, and Location required. Description is copied onto every physical unit created from Quantity.  
 5. Confirm runs one transaction: for each row, insert `Quantity` `AVAILABLE` units; each unit gets `IMPORT` ledger row; `ImportBatch` COMPLETED.  
 6. Any error rolls back the entire commit (zero units).  
 7. Audit `INVENTORY_IMPORT`.
@@ -63,7 +63,7 @@ All mutations fail closed. Tenant and permission checks run on the server before
 2. Excel: Warehouse, OrderNumber, Customer, CustomerAddress, CustomerPhone, UPC, Qty, Carrier, ShippingService.  
 3. Warehouse symbol/code must belong to Client, be active, and be mapped to the Division.  
 4. Rows with the same OrderNumber form one header. Header fields must be identical across those rows.  
-5. Each row is one line (`upc`, `qty_ordered`). Qty integer > 0. UPC required.  
+5. Each row is one line (`upc`, `qty_ordered`). Qty integer > 0. UPC required. Optional Description is kept when present. If Description is blank and the UPC resolves uniquely to inventory for the same Client, the line inherits that Description. Another client's description is never used.  
 6. Duplicate `(client_id, client_order_number)` rejects that order (file fails if any blocking error — fail closed, no partial file).  
 7. Commit atomically: headers status `UNALLOCATED`, `wms_order_id = client_code || '-' || client_order_number`, lines with qty counters 0.  
 8. Audit `ORDER_IMPORT`.

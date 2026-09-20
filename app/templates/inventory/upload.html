@@ -4,7 +4,7 @@
 
 <div class="panel">
   <h2>Select Context, Then File</h2>
-  <p class="sub">Required columns: UPC, SKU, Style, Color, Size, Quantity, Location. Client and Warehouse come from the selected context. If the file includes Client or Warehouse columns they are validated only and cannot override context. Quantity N creates N physical units.</p>
+  <p class="sub">Required columns: UPC, SKU, Description, Style, Color, Size, Quantity, Location. Client and Warehouse come from the selected context. If the file includes Client or Warehouse columns they are validated only and cannot override context. Quantity N creates N physical units.</p>
   <form method="post" action="{{ url_for('inventory.import_preview') }}" enctype="multipart/form-data" class="scopebar" style="border:none;padding:0;background:none;">
     {% include "_csrf.html" %}
     <div>
@@ -58,13 +58,14 @@
   {% if preview.rows %}
     <h2 style="margin-top:1rem;">Valid Rows</h2>
     <table>
-      <thead><tr><th>Row</th><th>UPC</th><th>SKU</th><th>Style</th><th>Color</th><th>Size</th><th>Qty</th><th>Location</th></tr></thead>
+      <thead><tr><th>Row</th><th>UPC</th><th>SKU</th><th>Description</th><th>Style</th><th>Color</th><th>Size</th><th>Qty</th><th>Location</th></tr></thead>
       <tbody>
         {% for r in preview.rows %}
           <tr>
             <td>{{ r.excel_row }}</td>
             <td class="mono">{{ r.upc }}</td>
             <td>{{ r.sku or '—' }}</td>
+            <td>{{ r.description or '—' }}</td>
             <td>{{ r.style or '—' }}</td>
             <td>{{ r.color or '—' }}</td>
             <td>{{ r.size or '—' }}</td>

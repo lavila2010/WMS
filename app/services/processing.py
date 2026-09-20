@@ -158,7 +158,7 @@ def remaining_rows(order: Order) -> list[dict]:
         key = (unit.location, unit.upc)
         grouped[key]["qty"] += 1
         grouped[key]["sku"] = unit.sku
-        grouped[key]["description"] = line.description if line else None
+        grouped[key]["description"] = unit.description or (line.description if line else None)
     return [
         {
             "location": loc,
@@ -178,7 +178,9 @@ def carton_contents(carton: Carton) -> list[dict]:
         line = OrderLine.query.filter_by(order_id=carton.order_id, upc=content.upc).first()
         grouped[content.upc]["qty"] += 1
         grouped[content.upc]["sku"] = unit.sku if unit else None
-        grouped[content.upc]["description"] = line.description if line else None
+        grouped[content.upc]["description"] = (unit.description if unit else None) or (
+            line.description if line else None
+        )
         grouped[content.upc]["ids"].append(content.id)
     return [
         {

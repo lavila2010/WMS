@@ -16,6 +16,7 @@ from ..auth import current_actor, record_audit
 from ..constants import ImportType, OrderStatus
 from ..extensions import db
 from ..models import Client, Division, DivisionWarehouse, ImportBatch, Order, OrderLine, Warehouse
+from ..services.inventory_query import unique_client_upc_description
 from ..services.tenant import user_can_access_client
 
 REQUIRED = (
@@ -256,15 +257,17 @@ def analyze(source, filename: str, client: Client, division: Division) -> dict:
                 }
             )
             continue
-        lines = [
-            {
-                "upc": upc,
-                "sku": meta["sku"] or None,
-                "description": meta["description"] or None,
-                "qty_ordered": meta["qty"],
-            }
-            for upc, meta in group["lines"].items()
-        ]
+        lines = []
+        for upc, meta in group["lines"].items():
+            description = meta["description"] or unique_client_upc_description(client.id, upc)
+            lines.append(
+                {
+                    "upc": upc,
+                    "sku": meta["sku"] or None,
+                    "description": description or None,
+                    "qty_ordered": meta["qty"],
+                }
+            )
         units = sum(line["qty_ordered"] for line in lines)
         total_units += units
         wms_order_id = f"{client.client_code}-{order_number}"
@@ -347,13 +350,16 @@ def commit_import(preview: dict, *, user, _fail_after: int | None = None) -> Imp
             db.session.add(order)
             db.session.flush()
             for line in group["lines"]:
+                description = line.get("description") or unique_client_upc_description(
+                    client.id, line["upc"]
+                )
                 db.session.add(
                     OrderLine(
                         order_id=order.id,
                         client_id=client.id,
                         upc=line["upc"],
                         sku=line.get("sku"),
-                        description=line.get("description"),
+                        description=description,
                         qty_ordered=line["qty_ordered"],
                         qty_allocated=0,
                         qty_packed=0,

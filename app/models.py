@@ -242,6 +242,7 @@ class InventoryUnit(db.Model):
     warehouse_id = db.Column(db.Integer, db.ForeignKey("warehouses.id"), nullable=False, index=True)
     upc = db.Column(db.String(64), nullable=False, index=True)
     sku = db.Column(db.String(64))
+    description = db.Column(db.String(255))
     style = db.Column(db.String(64))
     color = db.Column(db.String(64))
     size = db.Column(db.String(32))

@@ -30,8 +30,9 @@
   <table>
     <thead>
       <tr>
-        <th>UPC</th><th>SKU</th><th>Style</th><th>Color</th><th>Size</th><th>Location</th>
+        <th>UPC</th><th>SKU</th><th>Description</th><th>Style</th><th>Color</th><th>Size</th>
         <th class="right">Available</th><th class="right">Reserved</th><th class="right">Packed</th><th class="right">On Hand</th>
+        <th>Location</th>
       </tr>
     </thead>
     <tbody>
@@ -41,17 +42,18 @@
             <a href="{{ url_for('inventory.upc_view', client_id=scope.client_id or r.client_id, warehouse_id=scope.warehouse_id or None, upc=r.upc) }}">{{ r.upc }}</a>
           </td>
           <td>{{ r.sku or '—' }}</td>
+          <td>{{ r.description or '—' }}</td>
           <td>{{ r.style or '—' }}</td>
           <td>{{ r.color or '—' }}</td>
           <td>{{ r.size or '—' }}</td>
-          <td>{{ r.location }}</td>
           <td class="right">{{ r.available }}</td>
           <td class="right">{{ r.reserved }}</td>
           <td class="right">{{ r.packed }}</td>
           <td class="right"><b>{{ r.on_hand }}</b></td>
+          <td>{{ r.location }}</td>
         </tr>
       {% else %}
-        <tr><td colspan="10" class="sub">No inventory in scope. Select Client and Warehouse, then upload inventory.</td></tr>
+        <tr><td colspan="11" class="sub">No inventory in scope. Select Client and Warehouse, then upload inventory.</td></tr>
       {% endfor %}
     </tbody>
   </table>

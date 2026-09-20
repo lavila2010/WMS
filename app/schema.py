@@ -40,7 +40,12 @@ def ensure_v2_schema() -> None:
         tables = conn.execute(
             text("SELECT to_regclass('public.division_warehouses')")
         ).scalar()
+        units = conn.execute(text("SELECT to_regclass('public.inventory_units')")).scalar()
         conn.execute(text(statements[0]))
+        if units:
+            conn.execute(
+                text("ALTER TABLE inventory_units ADD COLUMN IF NOT EXISTS description VARCHAR(255)")
+            )
         if tables:
             for stmt in statements[1:]:
                 conn.execute(text(stmt))

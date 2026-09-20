@@ -28,12 +28,13 @@
 <div class="card">
   <h2>Lines</h2>
   <table>
-    <thead><tr><th>UPC</th><th>SKU</th><th class="right">Ordered</th><th class="right">Allocated</th><th class="right">Short</th></tr></thead>
+    <thead><tr><th>UPC</th><th>SKU</th><th>Description</th><th class="right">Ordered</th><th class="right">Allocated</th><th class="right">Short</th></tr></thead>
     <tbody>
       {% for line in lines %}
         <tr>
           <td class="mono">{{ line.upc }}</td>
           <td>{{ line.sku or '—' }}</td>
+          <td>{{ line.description or '—' }}</td>
           <td class="right num-cell">{{ line.qty_ordered }}</td>
           <td class="right num-cell">{{ line.qty_allocated }}</td>
           <td class="right num-cell">{{ line.qty_ordered - line.qty_allocated }}</td>

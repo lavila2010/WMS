@@ -84,7 +84,7 @@ Authoritative physical inventory is `inventory_units`.
 | ON_HAND | AVAILABLE + RESERVED + PACKED |
 | SHIPPED | `status = SHIPPED` — not on-hand |
 
-UPC is the merchandise key. SKU/style/color/size are descriptive.
+UPC is the merchandise key. SKU, Description, style, color, and size are descriptive. Description is required on new inventory imports and is Client-scoped.
 
 Statuses used in V2: `AVAILABLE`, `RESERVED`, `PACKED`, `SHIPPED`.  
 `HOLD` / `DAMAGED` / `RETURN_PENDING` are **not** introduced unless a later gate proves they are required. Ledger type `RETURN` restores a shipped/packed unit to `AVAILABLE` when that workflow is implemented.

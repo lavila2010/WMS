@@ -261,6 +261,7 @@ def upc_view():
             summary = {
                 "upc": upc,
                 "sku": rows[0]["sku"],
+                "description": rows[0]["description"],
                 "style": rows[0]["style"],
                 "available": sum(r["available"] for r in rows),
                 "reserved": sum(r["reserved"] for r in rows),
@@ -377,6 +378,7 @@ def export_xlsx():
                 "Warehouse": warehouses.get(r["warehouse_id"]),
                 "UPC": r["upc"],
                 "SKU": r["sku"],
+                "Description": r["description"],
                 "Style": r["style"],
                 "Color": r["color"],
                 "Size": r["size"],

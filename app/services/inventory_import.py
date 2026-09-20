@@ -22,12 +22,14 @@ from ..models import Client, ImportBatch, InventoryUnit, Warehouse
 from .inventory_ledger import LedgerError, create_available_unit
 from .tenant import user_can_access_client
 
-REQUIRED = ("upc", "sku", "style", "color", "size", "quantity", "location")
+REQUIRED = ("upc", "sku", "description", "style", "color", "size", "quantity", "location")
 OPTIONAL_CONTEXT = ("client", "warehouse")
+DESCRIPTION_MAX = 255
 
 ALIASES = {
     "upc": {"upc"},
     "sku": {"sku"},
+    "description": {"description", "desc", "productdescription"},
     "style": {"style"},
     "color": {"color", "colour"},
     "size": {"size"},
@@ -142,6 +144,7 @@ def analyze(source, filename: str, client: Client, warehouse: Warehouse) -> dict
         quantity_raw = _cell(series[mapped["quantity"]])
         location = _cell(series[mapped["location"]])
         sku = _cell(series[mapped["sku"]])
+        description = _cell(series[mapped["description"]])
         style = _cell(series[mapped["style"]])
         color = _cell(series[mapped["color"]])
         size = _cell(series[mapped["size"]])
@@ -159,6 +162,10 @@ def analyze(source, filename: str, client: Client, warehouse: Warehouse) -> dict
         else:
             if quantity <= 0:
                 row_errors.append("Quantity must be an integer greater than 0.")
+        if not description:
+            row_errors.append("Description is required.")
+        elif len(description) > DESCRIPTION_MAX:
+            row_errors.append(f"Description must be {DESCRIPTION_MAX} characters or fewer.")
         if not location:
             row_errors.append("Location is required.")
         if file_client and not _context_matches(
@@ -186,6 +193,7 @@ def analyze(source, filename: str, client: Client, warehouse: Warehouse) -> dict
                 "excel_row": excel_row,
                 "upc": upc,
                 "sku": sku,
+                "description": description,
                 "style": style,
                 "color": color,
                 "size": size,
@@ -253,6 +261,7 @@ def commit_import(
                     upc=row["upc"],
                     location=row["location"],
                     sku=row["sku"],
+                    description=row["description"],
                     style=row["style"],
                     color=row["color"],
                     size=row["size"],
@@ -282,7 +291,7 @@ def commit_import(
 
 def template_bytes() -> bytes:
     frame = pd.DataFrame(
-        columns=["UPC", "SKU", "Style", "Color", "Size", "Quantity", "Location"]
+        columns=["UPC", "SKU", "Description", "Style", "Color", "Size", "Quantity", "Location"]
     )
     buffer = io.BytesIO()
     frame.to_excel(buffer, index=False)

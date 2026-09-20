@@ -38,7 +38,7 @@ def ticket_lines(order: Order) -> list[dict]:
         key = (allocation.location, allocation.upc)
         grouped[key]["qty"] += 1
         grouped[key]["sku"] = unit.sku or line.sku
-        grouped[key]["description"] = line.description
+        grouped[key]["description"] = unit.description or line.description
     return [
         {
             "location": location,

@@ -95,7 +95,11 @@ def render_closure_pdf(order: Order) -> bytes:
     y -= 14
     pdf.setFont("Helvetica", 9)
     for unit in InventoryUnit.query.filter_by(allocated_order_id=order.id).order_by(InventoryUnit.id):
-        pdf.drawString(56, y, f"{unit.upc}  {unit.sku or '—'}  {unit.location}  {unit.status}")
+        pdf.drawString(
+            56,
+            y,
+            f"{unit.upc}  {unit.sku or '—'}  {(unit.description or '—')[:40]}  {unit.location}  {unit.status}",
+        )
         y -= 11
         if y < 72:
             pdf.showPage()
