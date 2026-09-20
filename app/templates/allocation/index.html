@@ -1,8 +1,10 @@
 {% extends "base.html" %}
 {% block title %}Allocation{% endblock %}
 {% block content %}
-<h1>Allocation</h1>
-<p class="steps">Barcode-level allocation. A unit's barcode must match an order line with remaining demand, cannot already be allocated, and cannot belong to another active order.</p>
+<div class="page-header">
+  <h1>Allocation</h1>
+  <p class="sub">Barcode-level allocation. Inventory matching uses Client + Warehouse only — Order Type is an order attribute.</p>
+</div>
 <div class="card">
   <table>
     <thead><tr><th>Order</th><th>Customer</th><th class="right">Units</th><th>Status</th><th></th></tr></thead>

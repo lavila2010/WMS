@@ -1,8 +1,9 @@
-<h1>Administration</h1>
-<div class="topbar" style="position:static;background:none;border:none;padding:0;margin-bottom:1rem;gap:1rem;">
-  <nav>
-    {% if can('USERS_VIEW') %}<a href="{{ url_for('admin.users') }}" {% if active_tab=='users' %}style="border-bottom-color:var(--accent);color:var(--text);"{% endif %}>Users</a>{% endif %}
-    {% if can('PERMISSIONS_ASSIGN') %}<a href="{{ url_for('admin.permissions_tab') }}" {% if active_tab=='permissions' %}style="border-bottom-color:var(--accent);color:var(--text);"{% endif %}>Permissions</a>{% endif %}
-    {% if can('AUDIT_VIEW') %}<a href="{{ url_for('admin.audit') }}" {% if active_tab=='audit' %}style="border-bottom-color:var(--accent);color:var(--text);"{% endif %}>Audit</a>{% endif %}
-  </nav>
+<div class="page-header">
+  <h1>Administration</h1>
+  <p class="sub">Users, permissions, and audit history</p>
+</div>
+<div class="tabs">
+  {% if can('USERS_VIEW') %}<a class="{{ 'active' if active_tab=='users' }}" href="{{ url_for('admin.users') }}">Users</a>{% endif %}
+  {% if can('PERMISSIONS_ASSIGN') %}<a class="{{ 'active' if active_tab=='permissions' }}" href="{{ url_for('admin.permissions_tab') }}">Permissions</a>{% endif %}
+  {% if can('AUDIT_VIEW') %}<a class="{{ 'active' if active_tab=='audit' }}" href="{{ url_for('admin.audit') }}">Audit</a>{% endif %}
 </div>

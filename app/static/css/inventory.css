@@ -1,13 +1,9 @@
-/* Light operational theme for the Inventory Control module. Scoped to .inv. */
+/* Inventory Control extras. Global light tokens live in styles.css. */
 .inv {
-  background: #f5f7fa;
-  color: #1f2937;
-  margin: -1.75rem -1.5rem -4rem;
-  padding: 1.5rem 1.5rem 4rem;
-  min-height: calc(100vh - 56px);
+  color: #182230;
 }
-.inv h1 { color: #0f172a; font-size: 1.4rem; margin: 0 0 0.25rem; }
-.inv .sub { color: #6b7280; font-size: 0.85rem; margin: 0 0 1rem; }
+.inv h1 { color: #182230; font-size: 1.4rem; margin: 0 0 0.25rem; }
+.inv .sub { color: #6B7280; font-size: 0.85rem; margin: 0 0 1rem; }
 
 .inv .scopebar {
   display: flex;
@@ -79,14 +75,14 @@
 .inv tbody tr:hover { background: #f8fafc; }
 .inv .mono { font-family: ui-monospace, Menlo, monospace; color: #2563eb; }
 .inv .right { text-align: right; font-variant-numeric: tabular-nums; }
-.inv a { color: #2563eb; }
+.inv a { color: #1F5F8B; }
 
 .inv .btn {
   display: inline-block;
-  background: #2563eb; color: #fff; border: none; border-radius: 6px;
+  background: #1F5F8B; color: #fff; border: none; border-radius: 6px;
   padding: 0.5rem 0.9rem; font-weight: 600; font-size: 0.86rem; cursor: pointer; text-decoration: none;
 }
-.inv .btn:hover { background: #1d4ed8; }
+.inv .btn:hover { background: #184e73; }
 .inv .btn[disabled], .inv .btn.disabled { background: #9ca3af; cursor: not-allowed; pointer-events: none; }
 .inv .btn-secondary { background: #fff; color: #374151; border: 1px solid #d1d5db; }
 .inv .btn-danger { background: #fff; color: #dc2626; border: 1px solid #dc2626; }

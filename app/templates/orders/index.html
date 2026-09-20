@@ -1,50 +1,141 @@
-{% extends "base.html" %}
+{% extends "orders/_layout.html" %}
 {% block title %}Orders{% endblock %}
-{% block content %}
-<div class="section-title">
-  <h1>Orders</h1>
-  <div class="btn-row">
-    {% if can('ORDERS_UPLOAD') %}
-    <a class="btn-secondary btn" href="{{ url_for('orders.template') }}">Download template</a>
-    <a class="btn" href="{{ url_for('orders.import_view') }}">Import Orders.xlsx</a>
-    {% endif %}
-  </div>
-</div>
-
-{% include "_scope_filter.html" %}
+{% block orders_content %}
 
 <div class="card">
-  <table>
-    <thead>
-      <tr>
-        <th>Order #</th><th>Client</th><th>Warehouse</th><th>Type</th>
-        <th>Customer</th><th>Carrier</th><th>Shipping</th>
-        <th class="right">Units</th><th class="right">Alloc</th><th class="right">Proc</th>
-        <th class="right">Boxes</th><th>Status</th><th class="right">Exc</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for r in rows %}
-        {% set o = r.order %}
-        <tr>
-          <td><a class="mono" href="{{ url_for('orders.detail', order_id=o.id) }}">{{ o.order_number }}</a></td>
-          <td>{{ o.client.code if o.client else '—' }}</td>
-          <td>{{ o.warehouse.code if o.warehouse else '—' }}</td>
-          <td>{{ o.order_type.code if o.order_type else '—' }}</td>
-          <td>{{ o.customer or '—' }}</td>
-          <td>{{ o.carrier or '—' }}</td>
-          <td>{{ o.shipping_service or '—' }}</td>
-          <td class="right num-cell">{{ r.units }}</td>
-          <td class="right num-cell">{{ r.allocated }}</td>
-          <td class="right num-cell">{{ r.processed }}</td>
-          <td class="right num-cell">{{ r.boxes }}</td>
-          <td><span class="badge badge-{{ o.status }}">{{ o.status }}</span></td>
-          <td class="right num-cell">{% if r.exceptions %}<span class="pill-bad">{{ r.exceptions }}</span>{% else %}0{% endif %}</td>
-        </tr>
-      {% else %}
-        <tr><td colspan="13" class="muted">No orders in scope. Import Orders.xlsx to begin.</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
+  <div class="filter-head">
+    <h2>Order Selection</h2>
+    <span class="hint">Orders remain hidden until a client is selected</span>
+  </div>
+  <form method="get" action="{{ url_for('orders.index') }}" class="inline-form">
+    <label>Client <span class="req">*</span>
+      <select name="client_id" required>
+        <option value="">Select client</option>
+        {% for c in options.clients %}
+          <option value="{{ c.id }}" {{ 'selected' if scope.client_id == c.id }}>{{ c.code }} — {{ c.name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Warehouse
+      <select name="warehouse_id">
+        <option value="">All warehouses</option>
+        {% for w in options.warehouses %}
+          <option value="{{ w.id }}" {{ 'selected' if scope.warehouse_id == w.id }}>{{ w.code }} — {{ w.name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Date
+      <input type="date" name="date" value="{{ date_str }}" />
+    </label>
+    <label>Search
+      <input name="q" value="{{ q }}" placeholder="Order #, customer, carrier, SKU" />
+    </label>
+    <input type="hidden" name="status" value="{{ status }}" />
+    <button type="submit">Apply</button>
+  </form>
 </div>
+
+{% if not client_selected %}
+  <div class="empty-state">Select a client to view orders</div>
+{% else %}
+  <div class="quick-pills">
+    {% for key, label in status_pills %}
+      <a class="{{ 'active' if status == key }}"
+         href="{{ url_for('orders.index', client_id=scope.client_id, warehouse_id=scope.warehouse_id or None, date=date_str or None, q=q or None, status=key) }}">{{ label }}</a>
+    {% endfor %}
+  </div>
+
+  <div class="kpis">
+    <div class="kpi"><div class="num">{{ kpis.orders_today }}</div><div class="label">Orders Today</div></div>
+    <div class="kpi"><div class="num">{{ kpis.open }}</div><div class="label">Open</div></div>
+    <div class="kpi"><div class="num">{{ kpis.allocated }}</div><div class="label">Allocated</div></div>
+    <div class="kpi"><div class="num">{{ kpis.short }}</div><div class="label">Short / Partial</div></div>
+    <div class="kpi"><div class="num">{{ kpis.pick_tickets }}</div><div class="label">Pick Tickets</div></div>
+    <div class="kpi"><div class="num">{{ kpis.closed_today }}</div><div class="label">Closed Today</div></div>
+  </div>
+
+  <div class="grid" style="grid-template-columns: 1fr 1.4fr; align-items:start;">
+    <div class="card">
+      <h2>Daily Order Summary</h2>
+      <table>
+        <thead><tr><th>Day</th><th class="right">Orders</th></tr></thead>
+        <tbody>
+          {% for d in daily %}
+            <tr><td>{{ d.label }}</td><td class="right num-cell">{{ d.count }}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card">
+      <h2>Status Breakdown</h2>
+      <table>
+        <thead><tr><th>Status</th><th class="right">Orders</th><th class="right">Units</th></tr></thead>
+        <tbody>
+          {% for b in breakdown %}
+            <tr>
+              <td><span class="badge badge-{{ b.status }}">{{ b.status }}</span></td>
+              <td class="right num-cell">{{ b.orders }}</td>
+              <td class="right num-cell">{{ b.units }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="section-title">
+      <h2>Orders</h2>
+      <div class="btn-row" style="margin:0;">
+        {% if can('ORDERS_UPLOAD') %}
+          <a class="btn-secondary btn" href="{{ url_for('orders.import_view') }}">Upload Orders</a>
+        {% endif %}
+        {% if can('ALLOCATION_EXECUTE') %}
+          <form method="post" action="{{ url_for('orders.allocation_report', client_id=scope.client_id, warehouse_id=scope.warehouse_id or None) }}">
+            <button type="submit">Run Allocation</button>
+          </form>
+        {% endif %}
+      </div>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>Order #</th>
+          <th>Warehouse</th>
+          <th>Order Type</th>
+          <th>Customer</th>
+          <th>Carrier</th>
+          <th class="right">Units</th>
+          <th class="right">Allocated</th>
+          <th class="right">Short</th>
+          <th>Status</th>
+          <th>Pick Ticket</th>
+          <th>Created</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+          {% set o = r.order %}
+          <tr>
+            <td class="mono">{{ o.order_number }}</td>
+            <td>{{ o.warehouse.code if o.warehouse else '—' }}</td>
+            <td>{{ o.order_type.code if o.order_type else '—' }}</td>
+            <td>{{ o.customer or '—' }}</td>
+            <td>{{ o.carrier or '—' }}</td>
+            <td class="right num-cell">{{ r.units }}</td>
+            <td class="right num-cell">{{ r.allocated }}</td>
+            <td class="right num-cell">{{ r.short }}</td>
+            <td><span class="badge badge-{{ o.status }}">{{ o.status }}</span></td>
+            <td class="mono">{{ r.pick_ticket }}</td>
+            <td class="muted">{{ o.created_at.strftime('%H:%M') }}</td>
+            <td><a class="btn-secondary btn" href="{{ url_for('orders.detail', order_id=o.id) }}">View</a></td>
+          </tr>
+        {% else %}
+          <tr><td colspan="12" class="muted">No orders match the selected filters.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% endif %}
 {% endblock %}

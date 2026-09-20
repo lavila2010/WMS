@@ -67,7 +67,7 @@ def new_box(order_id: int):
 
     box_number = request.form.get("box_number", "").strip()
     if not box_number:
-        box_number = f"BOX-{len(order.boxes) + 1:03d}"
+        box_number = f"{order.order_number}-BOX{len(order.boxes) + 1:02d}"
     try:
         box = create_box(order, box_number, _f("length_cm"), _f("width_cm"), _f("height_cm"))
         record_audit("BOX_CREATE", module="Processing", entity_type="Box", entity_id=box.id, detail=box_number)

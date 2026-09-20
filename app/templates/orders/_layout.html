@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+
+{% set tabs = [
+  ('management', 'Order Management', 'orders.index'),
+  ('upload', 'Upload Orders', 'orders.import_view'),
+  ('pick_tickets', 'Pick Tickets', 'orders.pick_tickets'),
+  ('allocation', 'Allocation Report', 'orders.allocation_report'),
+] %}
+
+{% block content %}
+<div class="page-header">
+  <h1>Orders</h1>
+  <p class="sub">Order management, allocation, Pick Ticket generation and operational control</p>
+</div>
+
+<div class="tabs">
+  {% for key, label, endpoint in tabs %}
+    {% if key == 'upload' and not can('ORDERS_UPLOAD') %}
+    {% elif key == 'pick_tickets' and not can('PICK_TICKET_VIEW') %}
+    {% elif key == 'allocation' and not can('ALLOCATION_VIEW') %}
+    {% else %}
+      <a class="{{ 'active' if active_tab == key }}"
+         href="{{ url_for(endpoint, client_id=scope.client_id or None, warehouse_id=scope.warehouse_id or None) }}">{{ label }}</a>
+    {% endif %}
+  {% endfor %}
+</div>
+
+{% block orders_content %}{% endblock %}
+{% endblock %}

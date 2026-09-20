@@ -1,8 +1,10 @@
 {% extends "base.html" %}
 {% block title %}Order Processing{% endblock %}
 {% block content %}
-<h1>Order Processing</h1>
-<p class="steps">Select order → create/select box → scan units into box → close box → enter weight → repeat → close order after reconciliation.</p>
+<div class="page-header">
+  <h1>Order Processing</h1>
+  <p class="sub">Select allocated order → Pick Ticket → create box → scan units → close box → reconcile → close order.</p>
+</div>
 <div class="card">
   <table>
     <thead><tr><th>Order</th><th>Customer</th><th class="right">Units</th><th>Status</th><th></th></tr></thead>

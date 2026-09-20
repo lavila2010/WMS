@@ -93,9 +93,18 @@ def _audit_pdf(doc, order_id=None):
 @permission_required("REPORTS_EXPORT")
 def pick_ticket(order_id: int):
     order = Order.query.get_or_404(order_id)
-    doc = generate_pick_ticket(order)
+    from ..extensions import db
+    from ..services.allocation import is_fully_allocated
+    from ..services.pick_tickets import ensure_pick_ticket
+
+    ticket = ensure_pick_ticket(order) if is_fully_allocated(order) else getattr(order, "pick_ticket", None)
+    doc = generate_pick_ticket(order, pick_ticket=ticket)
+    if ticket is not None:
+        ticket.document_id = doc.id
+        db.session.commit()
     _audit_pdf(doc)
-    flash(f"Pick Ticket generated for {order.order_number}.", "success")
+    number = ticket.pick_ticket_number if ticket is not None else order.order_number
+    flash(f"Pick Ticket {number} generated for {order.order_number}.", "success")
     return redirect(url_for("reports.index"))
 
 

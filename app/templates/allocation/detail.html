@@ -1,9 +1,16 @@
 {% extends "base.html" %}
 {% block title %}Allocate {{ order.order_number }}{% endblock %}
 {% block content %}
-<div class="section-title">
-  <h1>Allocate · {{ order.order_number }}</h1>
-  <span class="badge badge-{{ order.status }}">{{ order.status }}</span>
+<div class="page-header">
+  <div class="section-title">
+    <h1>Allocate · {{ order.order_number }}</h1>
+    <span class="badge badge-{{ order.status }}">{{ order.status }}</span>
+  </div>
+  <p class="sub">
+    Client {{ order.client.code if order.client else '—' }} ·
+    Warehouse {{ order.warehouse.code if order.warehouse else '—' }} ·
+    Order Type {{ order.order_type.code if order.order_type else '—' }}
+  </p>
 </div>
 
 <div class="card">

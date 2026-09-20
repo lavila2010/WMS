@@ -1,0 +1,95 @@
+{% extends "orders/_layout.html" %}
+{% block title %}Pick Ticket {{ ticket.pick_ticket_number }}{% endblock %}
+{% block orders_content %}
+
+<div class="split">
+  <div class="paper">
+    <div class="paper-head">
+      <div>
+        <div class="paper-brand">WMS SYSTEM</div>
+        <div class="paper-title">Warehouse Pick Ticket</div>
+      </div>
+      <div class="paper-meta">
+        <div><b>Pick Ticket</b> {{ ticket.pick_ticket_number }}</div>
+        <div><b>Order</b> {{ order.order_number }}</div>
+      </div>
+    </div>
+    <h2>Order Information</h2>
+    <div class="grid" style="grid-template-columns:1fr 1fr;">
+      <div class="kv"><span>Client</span><span>{{ order.client.code if order.client else '—' }}</span></div>
+      <div class="kv"><span>Warehouse</span><span>{{ order.warehouse.code if order.warehouse else '—' }}</span></div>
+      <div class="kv"><span>Order Type</span><span>{{ order.order_type.code if order.order_type else '—' }}</span></div>
+      <div class="kv"><span>Customer</span><span>{{ order.customer or '—' }}</span></div>
+      <div class="kv"><span>Carrier</span><span>{{ order.carrier or '—' }}</span></div>
+      <div class="kv"><span>Shipping Service</span><span>{{ order.shipping_service or '—' }}</span></div>
+      <div class="kv"><span>Order Date</span><span>{{ order.created_at.strftime('%Y-%m-%d %H:%M') }}</span></div>
+      <div class="kv"><span>Allocated</span><span>{{ ticket.assigned_at.strftime('%Y-%m-%d %H:%M') }}</span></div>
+    </div>
+    <table style="margin-top:1rem;">
+      <thead>
+        <tr>
+          <th>Seq</th><th>Location</th><th>SKU</th><th>UPC</th>
+          <th>Description</th><th>Barcode</th><th class="right">Qty</th><th>Picked</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for line in lines %}
+          <tr>
+            <td>{{ loop.index }}</td>
+            <td class="mono">{{ line.location }}</td>
+            <td>{{ line.sku }}</td>
+            <td class="mono">{{ line.upc }}</td>
+            <td>{{ line.description }}</td>
+            <td class="mono">{{ line.barcode }}</td>
+            <td class="right">{{ line.qty }}</td>
+            <td>☐</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <p style="margin-top:1rem;">
+      Total Units to Pick: <b>{{ lines|length }}</b>
+      &nbsp;&nbsp; Unique Locations: <b>{{ locations }}</b>
+      &nbsp;&nbsp; Status: <b>{{ ticket.status }}</b>
+    </p>
+  </div>
+
+  <div>
+    <div class="card">
+      <h2>Ticket Information</h2>
+      <div class="kv"><span>Pick Ticket</span><span class="mono">{{ ticket.pick_ticket_number }}</span></div>
+      <div class="kv"><span>Order</span><span class="mono">{{ order.order_number }}</span></div>
+      <div class="kv"><span>Assigned</span><span>{{ ticket.assigned_at.strftime('%Y-%m-%d %H:%M') }}</span></div>
+      <div class="kv"><span>Print Count</span><span>{{ row.print_count }}</span></div>
+      <div class="kv"><span>Last Printed</span><span>{{ row.last_printed.strftime('%Y-%m-%d %H:%M') if row.last_printed else '—' }}</span></div>
+      <div class="kv"><span>Last Printed By</span><span>{{ row.last_printed_by or '—' }}</span></div>
+      <div class="btn-row">
+        <a class="btn-secondary btn" href="{{ url_for('orders.pick_tickets', client_id=order.client_id) }}">Back</a>
+        <a class="btn" href="{{ url_for('orders.pick_ticket_pdf', ticket_id=ticket.id) }}">View PDF</a>
+        {% if can('PICK_TICKET_PRINT') %}
+        <form method="post" action="{{ url_for('orders.pick_ticket_print', ticket_id=ticket.id) }}">
+          <button type="submit">Print Ticket</button>
+        </form>
+        {% endif %}
+      </div>
+    </div>
+    <div class="card">
+      <h2>Print History</h2>
+      <table>
+        <thead><tr><th>When</th><th>User</th><th>Source</th></tr></thead>
+        <tbody>
+          {% for ev in ticket.print_events %}
+            <tr>
+              <td class="muted">{{ ev.printed_at.strftime('%Y-%m-%d %H:%M') }}</td>
+              <td>{{ ev.username or '—' }}</td>
+              <td>{{ ev.source }}</td>
+            </tr>
+          {% else %}
+            <tr><td colspan="3" class="muted">Never printed.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

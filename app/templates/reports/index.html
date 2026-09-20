@@ -1,7 +1,10 @@
 {% extends "base.html" %}
 {% block title %}Order Reports{% endblock %}
 {% block content %}
-<h1>Order Reports</h1>
+<div class="page-header">
+  <h1>Order Reports</h1>
+  <p class="sub">Search closed and open orders. Documents are generated from the database source of truth.</p>
+</div>
 
 <div class="card">
   <form method="get" action="{{ request.path }}">

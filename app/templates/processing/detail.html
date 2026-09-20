@@ -1,9 +1,15 @@
 {% extends "base.html" %}
 {% block title %}Process {{ order.order_number }}{% endblock %}
 {% block content %}
-<div class="section-title">
-  <h1>Process · {{ order.order_number }}</h1>
-  <span class="badge badge-{{ order.status }}">{{ order.status }}</span>
+<div class="page-header">
+  <div class="section-title">
+    <h1>Process · {{ order.order_number }}</h1>
+    <span class="badge badge-{{ order.status }}">{{ order.status }}</span>
+  </div>
+  <p class="sub">
+    {% if order.pick_ticket %}Pick Ticket {{ order.pick_ticket.pick_ticket_number }} · {% endif %}
+    Scan allocated units only. Inventory is not validated against Order Type.
+  </p>
 </div>
 <div class="card">
   <div class="grid">
