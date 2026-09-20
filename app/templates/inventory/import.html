@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Import Inventory{% endblock %}
+{% block content %}
+<h1>Import Inventory.xlsx</h1>
+<div class="card">
+  <p class="muted">Required columns: <b>barcode</b>, <b>sku</b>. Optional: description, location. Each row is one physical unit with a unique barcode.</p>
+  <form method="post" enctype="multipart/form-data" class="inline-form">
+    <label>Inventory workbook
+      <input type="file" name="file" accept=".xlsx" required />
+    </label>
+    <button type="submit">Import</button>
+    <a class="btn-secondary btn" href="{{ url_for('inventory.template') }}">Download template</a>
+  </form>
+</div>
+{% endblock %}

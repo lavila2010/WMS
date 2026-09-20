@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}Process {{ order.order_number }}{% endblock %}
+{% block content %}
+<div class="section-title">
+  <h1>Process · {{ order.order_number }}</h1>
+  <span class="badge badge-{{ order.status }}">{{ order.status }}</span>
+</div>
+
+<div class="card">
+  <h2>Reconciliation</h2>
+  <div class="grid">
+    <div class="stat"><div class="num">{{ rec.ordered }}</div><div class="label">Ordered</div></div>
+    <div class="stat"><div class="num">{{ rec.allocated }}</div><div class="label">Allocated</div></div>
+    <div class="stat"><div class="num">{{ rec.packed }}</div><div class="label">Packed</div></div>
+    <div class="stat"><div class="num">{{ rec.open_boxes }}</div><div class="label">Open boxes</div></div>
+    <div class="stat"><div class="num">{% if rec.ok %}<span class="pill-ok">OK</span>{% else %}<span class="pill-bad">NO</span>{% endif %}</div><div class="label">Reconciled</div></div>
+  </div>
+  <div class="btn-row">
+    {% if order.status == 'PROCESSING' %}
+      <form method="post" action="{{ url_for('processing.processed', order_id=order.id) }}"><button type="submit">Mark PROCESSED</button></form>
+    {% endif %}
+    {% if order.status == 'PROCESSED' %}
+      <form method="post" action="{{ url_for('processing.ready_to_close', order_id=order.id) }}"><button type="submit">Reconcile → READY_TO_CLOSE</button></form>
+    {% endif %}
+    {% if order.status == 'READY_TO_CLOSE' %}
+      <form method="post" action="{{ url_for('processing.close_order_view', order_id=order.id) }}"><button type="submit">Close order</button></form>
+    {% endif %}
+  </div>
+</div>
+
+{% if order.status in ['READY_TO_PICK', 'PROCESSING'] %}
+<div class="card">
+  <h2>Create box</h2>
+  <form method="post" action="{{ url_for('processing.new_box', order_id=order.id) }}" class="inline-form">
+    <label>Box number<input name="box_number" placeholder="auto" /></label>
+    <label>Length (cm)<input name="length_cm" type="number" step="0.1" /></label>
+    <label>Width (cm)<input name="width_cm" type="number" step="0.1" /></label>
+    <label>Height (cm)<input name="height_cm" type="number" step="0.1" /></label>
+    <button type="submit">Create box</button>
+  </form>
+</div>
+{% endif %}
+
+<div class="card">
+  <h2>Boxes ({{ order.boxes|length }})</h2>
+  {% for box in order.boxes %}
+    <div class="card" style="margin-bottom:1rem;">
+      <div class="section-title">
+        <h2>Box {{ box.box_number }} <span class="badge">{{ box.status }}</span></h2>
+        <span class="muted">{{ box.contents|length }} units · {{ box.weight_kg or 'no' }} kg</span>
+      </div>
+      {% if box.status == 'OPEN' %}
+        <form method="post" action="{{ url_for('processing.scan', box_id=box.id) }}" class="inline-form">
+          <label>Scan unit<input name="barcode" autocomplete="off" placeholder="barcode" required /></label>
+          <button type="submit">Add to box</button>
+        </form>
+        <form method="post" action="{{ url_for('processing.close', box_id=box.id) }}" class="inline-form" style="margin-top:0.6rem;">
+          <label>Weight (kg)<input name="weight_kg" type="number" step="0.01" required /></label>
+          <button type="submit">Close box</button>
+        </form>
+      {% endif %}
+      <table style="margin-top:0.6rem;">
+        <thead><tr><th>Barcode</th><th>SKU</th></tr></thead>
+        <tbody>
+          {% for c in box.contents %}
+            <tr><td class="mono">{{ c.barcode }}</td><td>{{ c.unit.sku }}</td></tr>
+          {% else %}
+            <tr><td colspan="2" class="muted">Empty</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <p class="muted">No boxes yet.</p>
+  {% endfor %}
+</div>
+{% endblock %}

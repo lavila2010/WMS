@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Order {{ order.order_number }}{% endblock %}
+{% block content %}
+<div class="section-title">
+  <h1>Order {{ order.order_number }}</h1>
+  <span class="badge badge-{{ order.status }}">{{ order.status }}</span>
+</div>
+<p class="muted">Customer: {{ order.customer or '—' }}</p>
+
+<div class="card">
+  <h2>Lines</h2>
+  <table>
+    <thead><tr><th>SKU</th><th>Description</th><th class="right">Ordered</th><th class="right">Allocated</th></tr></thead>
+    <tbody>
+      {% for sku, v in progress.per_sku.items() %}
+        <tr>
+          <td class="mono">{{ sku }}</td>
+          <td class="muted"></td>
+          <td class="right num-cell">{{ v.ordered }}</td>
+          <td class="right num-cell">{{ v.allocated }}</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <p class="muted">Total ordered {{ progress.total_ordered }} · allocated {{ progress.total_allocated }}</p>
+</div>
+
+<div class="card">
+  <div class="btn-row">
+    {% if order.status == 'NEW' %}
+      <form method="post" action="{{ url_for('orders.validate', order_id=order.id) }}">
+        <button type="submit">Validate order</button>
+      </form>
+    {% endif %}
+    {% if order.status in ['VALIDATED', 'ALLOCATING', 'ALLOCATED'] %}
+      <a class="btn" href="{{ url_for('allocation.detail', order_id=order.id) }}">Go to Allocation →</a>
+    {% endif %}
+    {% if order.status in ['READY_TO_PICK', 'PROCESSING', 'PROCESSED', 'READY_TO_CLOSE'] %}
+      <a class="btn" href="{{ url_for('processing.detail', order_id=order.id) }}">Go to Order Processing →</a>
+    {% endif %}
+    <a class="btn-secondary btn" href="{{ url_for('reports.index') }}">Reports</a>
+  </div>
+</div>
+{% endblock %}

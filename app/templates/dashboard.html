@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block content %}
+<h1>Dashboard</h1>
+
+<div class="card">
+  <h2>Inventory units</h2>
+  <div class="grid">
+    <div class="stat"><div class="num">{{ unit_counts.total }}</div><div class="label">Total</div></div>
+    <div class="stat"><div class="num">{{ unit_counts.in_stock }}</div><div class="label">In stock</div></div>
+    <div class="stat"><div class="num">{{ unit_counts.allocated }}</div><div class="label">Allocated</div></div>
+    <div class="stat"><div class="num">{{ unit_counts.packed }}</div><div class="label">Packed</div></div>
+    <div class="stat"><div class="num">{{ unit_counts.shipped }}</div><div class="label">Shipped</div></div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Orders by workflow status</h2>
+  <div class="grid">
+    {% for status, count in status_counts.items() %}
+      <div class="stat">
+        <div class="num">{{ count }}</div>
+        <div class="label"><span class="badge badge-{{ status }}">{{ status }}</span></div>
+      </div>
+    {% endfor %}
+  </div>
+</div>
+
+<div class="card">
+  <h2>Overview</h2>
+  <div class="grid">
+    <div class="stat"><div class="num">{{ stats.orders_total }}</div><div class="label">Orders</div></div>
+    <div class="stat"><div class="num">{{ stats.boxes_total }}</div><div class="label">Boxes</div></div>
+    <div class="stat"><div class="num">{{ stats.open_exceptions }}</div><div class="label">Open exceptions</div></div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="section-title"><h2>Recent orders</h2><a class="muted" href="{{ url_for('orders.index') }}">All orders →</a></div>
+  <table>
+    <thead><tr><th>Order</th><th>Customer</th><th>Status</th><th class="right">Units</th></tr></thead>
+    <tbody>
+      {% for o in recent_orders %}
+        <tr>
+          <td><a class="mono" href="{{ url_for('orders.detail', order_id=o.id) }}">{{ o.order_number }}</a></td>
+          <td>{{ o.customer or '—' }}</td>
+          <td><span class="badge badge-{{ o.status }}">{{ o.status }}</span></td>
+          <td class="right num-cell">{{ o.ordered_quantity }}</td>
+        </tr>
+      {% else %}
+        <tr><td colspan="4" class="muted">No orders yet. Import Orders.xlsx to begin.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="card">
+  <h2>Recent exceptions</h2>
+  <table>
+    <thead><tr><th>When</th><th>Order</th><th>Barcode</th><th>Type</th><th>Message</th></tr></thead>
+    <tbody>
+      {% for e in recent_exceptions %}
+        <tr>
+          <td class="muted">{{ e.created_at.strftime('%m-%d %H:%M') }}</td>
+          <td>{{ e.order.order_number if e.order else '—' }}</td>
+          <td class="mono">{{ e.barcode or '—' }}</td>
+          <td>{{ e.type }}</td>
+          <td class="muted">{{ e.message }}</td>
+        </tr>
+      {% else %}
+        <tr><td colspan="5" class="muted">No exceptions recorded.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

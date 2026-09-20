@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}Order Reports{% endblock %}
+{% block content %}
+<h1>Order Reports</h1>
+<p class="steps">Generate Pick Ticket, Packing Report, Order Closure Report, and per-box Box Detail PDFs.</p>
+
+<div class="card">
+  <h2>Generate documents</h2>
+  <table>
+    <thead><tr><th>Order</th><th>Status</th><th>Documents</th></tr></thead>
+    <tbody>
+      {% for o in orders %}
+        <tr>
+          <td class="mono">{{ o.order_number }}</td>
+          <td><span class="badge badge-{{ o.status }}">{{ o.status }}</span></td>
+          <td>
+            <div class="btn-row">
+              <form method="post" action="{{ url_for('reports.pick_ticket', order_id=o.id) }}"><button type="submit">Pick Ticket</button></form>
+              <form method="post" action="{{ url_for('reports.packing_report', order_id=o.id) }}"><button type="submit">Packing Report</button></form>
+              <form method="post" action="{{ url_for('reports.closure', order_id=o.id) }}"><button type="submit">Closure Report</button></form>
+              {% for box in o.boxes %}
+                <form method="post" action="{{ url_for('reports.box_detail', box_id=box.id) }}"><button class="btn-secondary btn" type="submit">Box {{ box.box_number }}</button></form>
+              {% endfor %}
+            </div>
+          </td>
+        </tr>
+      {% else %}
+        <tr><td colspan="3" class="muted">No orders yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="card">
+  <h2>Recent documents</h2>
+  <table>
+    <thead><tr><th>When</th><th>Type</th><th>File</th><th></th></tr></thead>
+    <tbody>
+      {% for d in documents %}
+        <tr>
+          <td class="muted">{{ d.created_at.strftime('%m-%d %H:%M') }}</td>
+          <td>{{ d.type }}</td>
+          <td class="mono">{{ d.filename }}</td>
+          <td class="right"><a class="btn-secondary btn" href="{{ url_for('reports.download', document_id=d.id) }}">Download</a></td>
+        </tr>
+      {% else %}
+        <tr><td colspan="4" class="muted">No documents generated yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}
