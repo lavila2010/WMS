@@ -8,12 +8,18 @@ def test_dashboard_and_module_indexes_render(client):
     for path in [
         "/",
         "/inventory/",
+        "/inventory/overview",
+        "/inventory/upload",
+        "/inventory/search",
+        "/inventory/transactions",
+        "/inventory/import-history",
+        "/inventory/exceptions",
         "/orders/",
         "/allocation/",
         "/processing/",
         "/reports/",
     ]:
-        resp = client.get(path)
+        resp = client.get(path, follow_redirects=True)
         assert resp.status_code == 200, path
 
 
@@ -24,15 +30,20 @@ def test_templates_download(client):
         assert resp.data[:2] == b"PK"  # xlsx is a zip archive
 
 
-def test_import_inventory_via_http(client, db):
+def test_inventory_two_step_import_via_http(client, db):
     wb = build_inventory_workbook(
-        [{"client": "ACME", "warehouse": "WH1", "order_type": "B2C", "barcode": "R-1", "sku": "SKU-A"}]
+        [{"client": "ACME", "warehouse": "WH1", "upc": "U1", "sku": "SKU-A", "barcode": "R-1", "location": "A-01"}]
     )
+    # Step 1: preview (no DB write)
     data = {"file": (io.BytesIO(wb.read()), "Inventory.xlsx")}
     resp = client.post(
-        "/inventory/import", data=data, content_type="multipart/form-data",
+        "/inventory/import/preview", data=data, content_type="multipart/form-data",
         follow_redirects=True,
     )
+    assert resp.status_code == 200
+    assert InventoryUnit.query.filter_by(barcode="R-1").count() == 0
+    # Step 2: confirm (writes)
+    resp = client.post("/inventory/import/confirm", follow_redirects=True)
     assert resp.status_code == 200
     assert InventoryUnit.query.filter_by(barcode="R-1").count() == 1
 

@@ -82,16 +82,22 @@ def make_unit(
     location="A-01",
     client="ACME",
     warehouse="WH1",
-    order_type="B2C",
+    upc=None,
+    **_ignored,
 ):
-    c, w, ot = resolve_scope(client, warehouse, order_type)
+    """Create a physical unit. Inventory is scoped by Client + Warehouse only
+    (Order Type is intentionally not an inventory dimension)."""
+    from app.services.scope import get_or_create_client, get_or_create_warehouse
+
+    c = get_or_create_client(client)
+    w = get_or_create_warehouse(c, warehouse)
     unit = InventoryUnit(
         barcode=barcode,
+        upc=upc or f"UPC-{sku}",
         sku=sku,
         location=location,
         client_id=c.id,
         warehouse_id=w.id,
-        order_type_id=ot.id,
     )
     _db.session.add(unit)
     _db.session.commit()
