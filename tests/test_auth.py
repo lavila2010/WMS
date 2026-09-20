@@ -45,6 +45,39 @@ def test_password_stored_hashed(app, admin_user):
     assert check_password_hash(u.password_hash, "password123")
 
 
+def test_create_admin_cli_defaults_and_hidden_password(app, db):
+    secret = "CliSecret-NotStored!"
+    runner = app.test_cli_runner()
+    result = runner.invoke(args=["create-admin"], input=f"{secret}\n{secret}\n")
+    assert result.exit_code == 0, result.output
+    assert "leandro" in result.output
+    assert secret not in result.output
+    assert "Password" not in result.output or secret not in result.output
+    user = User.query.filter_by(username="leandro").first()
+    assert user is not None
+    assert user.role == "ADMIN"
+    assert user.active is True
+    assert user.must_change_password is False
+    assert user.password_hash
+    assert secret not in (user.password_hash or "")
+    assert check_password_hash(user.password_hash, secret)
+
+
+def test_create_admin_cli_does_not_overwrite_existing(app, db):
+    runner = app.test_cli_runner()
+    first = runner.invoke(args=["create-admin"], input="FirstPass-1!\nFirstPass-1!\n")
+    assert first.exit_code == 0
+    user = User.query.filter_by(username="leandro").first()
+    original_hash = user.password_hash
+    second = runner.invoke(args=["create-admin"], input="OtherPass-2!\nOtherPass-2!\n")
+    assert second.exit_code == 0
+    assert "already exists" in second.output
+    assert "OtherPass-2!" not in second.output
+    db.session.refresh(user)
+    assert user.password_hash == original_hash
+    assert check_password_hash(user.password_hash, "FirstPass-1!")
+
+
 def test_logout_works(admin_client):
     assert admin_client.post("/logout").status_code == 302
     assert "/login" in admin_client.get("/", follow_redirects=False).headers["Location"]

@@ -96,7 +96,10 @@ so client-specific schemes can be added later.
   inventory movements, import batches, invoices, boxes, documents, order
   close/validate, exceptions) and recorded in `audit_events`.
 
-Bootstrap the first admin (no hard-coded credentials):
+Bootstrap the first admin. Defaults are username `leandro`, role `ADMIN`,
+active, and `must_change_password=false`. The password is **not** hardcoded:
+`create-admin` prompts for it with hidden input (not echoed, not logged) and
+stores only the password hash.
 
 ```bash
 flask --app wsgi create-admin

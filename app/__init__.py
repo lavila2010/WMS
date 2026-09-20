@@ -84,12 +84,22 @@ def _register_cli(app):
         print("Permissions seeded.")
 
     @app.cli.command("create-admin")
-    @click.option("--username", prompt=True)
-    @click.option("--full-name", prompt="Full name", default="")
-    @click.option("--email", prompt=True, default="")
-    @click.option("--password", prompt=True, hide_input=True, confirmation_prompt=True)
-    def create_admin(username, full_name, email, password):  # pragma: no cover - CLI
-        """Create the first ADMIN user (no hard-coded credentials)."""
+    @click.option("--username", default="leandro", show_default=True)
+    @click.option("--full-name", default="")
+    @click.option("--email", default="")
+    @click.option(
+        "--password",
+        prompt=True,
+        hide_input=True,
+        confirmation_prompt=True,
+    )
+    def create_admin(username, full_name, email, password):
+        """Bootstrap the default ADMIN user.
+
+        Defaults: username=leandro, role=ADMIN, active=true,
+        must_change_password=false. The password is prompted with hidden
+        input (never echoed or logged) and stored only as a hash.
+        """
         from werkzeug.security import generate_password_hash
 
         from .auth import seed_permissions
@@ -97,7 +107,7 @@ def _register_cli(app):
 
         seed_permissions()
         if User.query.filter_by(username=username).first():
-            print(f"User '{username}' already exists.")
+            click.echo(f"User '{username}' already exists.")
             return
         admin = User(
             username=username,
@@ -110,4 +120,4 @@ def _register_cli(app):
         )
         db.session.add(admin)
         db.session.commit()
-        print(f"Admin user '{username}' created.")
+        click.echo(f"Admin user '{username}' created.")
