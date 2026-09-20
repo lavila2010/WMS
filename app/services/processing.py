@@ -375,9 +375,21 @@ def current_carton(order: Order, focus_box_id: int | None = None) -> Box | None:
         if box is not None:
             return box
     incomplete = [b for b in sorted(order.boxes, key=lambda b: b.id) if b.status != BoxStatus.CLOSED]
-    if incomplete:
-        return incomplete[-1]
-    return None
+    if not incomplete:
+        return None
+    reweigh = [b for b in incomplete if b.status == BoxStatus.REWEIGH_REQUIRED]
+    if reweigh:
+        return reweigh[-1]
+    awaiting = [b for b in incomplete if b.status == BoxStatus.AWAITING_WEIGHT]
+    if awaiting:
+        return awaiting[-1]
+    recalled = [
+        b for b in incomplete
+        if b.status == BoxStatus.OPEN and (b.weight_kg is not None or b.contents)
+    ]
+    if recalled:
+        return recalled[-1]
+    return incomplete[-1]
 
 
 def carton_content_rows(box: Box) -> list[dict]:

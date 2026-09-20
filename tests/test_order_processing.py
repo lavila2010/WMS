@@ -277,6 +277,24 @@ def test_final_carton_behavior(db):
     assert ready_for_close_modal(order)
 
 
+def test_recall_focuses_recalled_carton_over_next_empty(db):
+    from app.services.processing import current_carton
+
+    order, ticket, user = _start(db, qty=3, extra_upc=UPC_B, extra_qty=2)
+    box = _dims(order, user)
+    scan_upc_into_box(box, UPC, user=user)
+    request_close_carton(box, user=user)
+    save_carton_weight(box, 5, "lb", user=user)
+    db.session.commit()
+    assert len(order.boxes) == 2
+    recall_carton(box, user=user)
+    db.session.commit()
+    assert current_carton(order).id == box.id
+    remove_unit_from_carton(box.contents[0], user=user)
+    db.session.commit()
+    assert current_carton(order).status == BoxStatus.REWEIGH_REQUIRED
+
+
 def test_recall_closed_carton(db):
     order, ticket, user = _start(db, qty=2)
     box = _dims(order, user)
