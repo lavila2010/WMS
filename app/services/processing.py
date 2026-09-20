@@ -64,7 +64,6 @@ def acquire_lock(order: Order, user: User) -> str:
         },
     )
     if result.rowcount != 1:
-        db.session.rollback()
         raise ProcessingError(LOCK_MESSAGE)
     record_audit(
         "PROCESSING_STARTED",

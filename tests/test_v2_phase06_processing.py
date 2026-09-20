@@ -70,12 +70,15 @@ def test_p6_04_two_users_one_lock_winner(app, db, admin_user):
     w, order = _ready_order(db, admin_user)
     create_pick_ticket(order)
     other = create_user("packer", role="USER", perms=["PROCESSING_VIEW", "PROCESSING_EXECUTE"])
+    oid = order.id
+    db.session.commit()
+    db.session.expire_all()
     winners = []
 
     def worker(username):
         with app.app_context():
             user = User.query.filter_by(username=username).one()
-            target = db.session.get(Order, order.id)
+            target = db.session.get(Order, oid)
             try:
                 acquire_lock(target, user)
                 winners.append(username)
@@ -88,7 +91,8 @@ def test_p6_04_two_users_one_lock_winner(app, db, admin_user):
     for t in threads:
         t.join()
     assert len(winners) == 1
-    locked = db.session.get(Order, order.id)
+    db.session.expire_all()
+    locked = db.session.get(Order, oid)
     assert locked.processing_username == winners[0]
 
 
