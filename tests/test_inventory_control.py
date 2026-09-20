@@ -127,9 +127,9 @@ def test_upc_summary_and_location_breakdown(db):
 
 
 # 11. Barcode lookup
-def test_barcode_lookup(client, db):
+def test_barcode_lookup(admin_client, db):
     confirm_import(_wb([_row("ACME", "WH1", "U1", "SKU-A", "BC-LOOK", "A-01")]), "inv.xlsx")
-    resp = client.get("/inventory/barcode/BC-LOOK")
+    resp = admin_client.get("/inventory/barcode/BC-LOOK")
     assert resp.status_code == 200
     assert b"BC-LOOK" in resp.data
 
@@ -185,16 +185,16 @@ def test_import_history(db):
 
 
 # 22. Inventory search by UPC
-def test_search_by_upc(client, db):
+def test_search_by_upc(admin_client, db):
     confirm_import(_wb([_row("ACME", "WH1", "UPC-XYZ", "SKU-A", "B-1", "A-01")]), "inv.xlsx")
-    resp = client.get("/inventory/search?q=UPC-XYZ")
+    resp = admin_client.get("/inventory/search?q=UPC-XYZ")
     assert resp.status_code == 200
     assert b"B-1" in resp.data
 
 
 # 23. Inventory search by location
-def test_search_by_location(client, db):
+def test_search_by_location(admin_client, db):
     confirm_import(_wb([_row("ACME", "WH1", "U1", "SKU-A", "B-1", "RACK-9")]), "inv.xlsx")
-    resp = client.get("/inventory/search?q=RACK-9")
+    resp = admin_client.get("/inventory/search?q=RACK-9")
     assert resp.status_code == 200
     assert b"B-1" in resp.data

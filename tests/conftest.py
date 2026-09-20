@@ -22,6 +22,9 @@ def app(tmp_path):
     with application.app_context():
         _db.drop_all()
         _db.create_all()
+        from app.auth import seed_permissions
+
+        seed_permissions()
         yield application
         _db.session.remove()
         _db.drop_all()
@@ -35,6 +38,64 @@ def db(app):
 @pytest.fixture()
 def client(app):
     return app.test_client()
+
+
+# --- Auth fixtures ---
+
+def create_user(username, role="USER", password="password123", perms=None,
+                active=True, must_change=False):
+    from werkzeug.security import generate_password_hash
+
+    from app.auth import grant_permissions, grant_user_defaults
+    from app.models import User
+
+    user = User(
+        username=username,
+        password_hash=generate_password_hash(password),
+        full_name=username.title(),
+        role=role,
+        active=active,
+        must_change_password=must_change,
+    )
+    _db.session.add(user)
+    _db.session.commit()
+    if role == "USER":
+        if perms is None:
+            grant_user_defaults(user)
+        else:
+            grant_permissions(user, perms)
+    return user
+
+
+def login(client, username, password="password123"):
+    return client.post(
+        "/login", data={"username": username, "password": password},
+        follow_redirects=False,
+    )
+
+
+@pytest.fixture()
+def admin_user(app):
+    return create_user("admin", role="ADMIN")
+
+
+@pytest.fixture()
+def regular_user(app):
+    return create_user("worker", role="USER")
+
+
+@pytest.fixture()
+def admin_client(app, admin_user):
+    c = app.test_client()
+    login(c, "admin")
+    return c
+
+
+@pytest.fixture()
+def user_client(app, regular_user):
+    c = app.test_client()
+    login(c, "worker")
+    return c
 
 
 # --- Factory helpers ---
