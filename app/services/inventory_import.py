@@ -120,7 +120,11 @@ def analyze(source, filename: str) -> InventoryPreview:
         def block(exc_type, message):
             nonlocal row_blocking
             row_blocking = True
-            preview.blocking.append({"row": rownum, "type": exc_type, "message": message})
+            preview.blocking.append({
+                "row": rownum, "type": exc_type, "message": message,
+                "barcode": barcode or None, "upc": upc or None,
+                "client": client or None, "warehouse": warehouse or None,
+            })
 
         if not client:
             block(InventoryExceptionType.UNKNOWN_CLIENT, f"Row {rownum}: blank Client.")
@@ -232,6 +236,10 @@ def confirm_import(source, filename: str, actor: str = "system") -> dict:
             db.session.add(
                 InventoryException(
                     type=etype,
+                    barcode=err.get("barcode"),
+                    upc=err.get("upc"),
+                    client_code=err.get("client"),
+                    warehouse_code=err.get("warehouse"),
                     details=err["message"],
                     status="OPEN",
                 )
