@@ -1,82 +1,8 @@
 {% extends "orders/_layout.html" %}
 {% block title %}Allocation Report{% endblock %}
 {% block orders_content %}
-
 <div class="card">
-  <div class="filter-head">
-    <h2>Allocation Report</h2>
-    <span class="hint">Inventory matching uses Client + Warehouse only. Order Type is an order attribute.</span>
-  </div>
-  <form method="get" action="{{ url_for('orders.allocation_report') }}" class="inline-form">
-    <label>Client <span class="req">*</span>
-      <select name="client_id">
-        <option value="">Select client</option>
-        {% for c in options.clients %}
-          <option value="{{ c.id }}" {{ 'selected' if scope.client_id == c.id }}>{{ c.code }} — {{ c.name }}</option>
-        {% endfor %}
-      </select>
-    </label>
-    <label>Warehouse
-      <select name="warehouse_id">
-        <option value="">All warehouses</option>
-        {% for w in options.warehouses %}
-          <option value="{{ w.id }}" {{ 'selected' if scope.warehouse_id == w.id }}>{{ w.code }} — {{ w.name }}</option>
-        {% endfor %}
-      </select>
-    </label>
-    <button type="submit">Apply</button>
-    {% if client_selected and can('ALLOCATION_EXECUTE') %}
-      <button form="run-alloc" type="submit">Run Allocation</button>
-    {% endif %}
-  </form>
-  {% if client_selected and can('ALLOCATION_EXECUTE') %}
-  <form id="run-alloc" method="post" action="{{ url_for('orders.allocation_report', client_id=scope.client_id, warehouse_id=scope.warehouse_id or None) }}"></form>
-  {% endif %}
+  <h2>Allocation Report</h2>
+  <p class="muted">UPC allocation against Client + Warehouse + AVAILABLE units is implemented in Phase 4. Matching never uses SKU.</p>
 </div>
-
-{% if not client_selected %}
-  <div class="empty-state">Select a client to view the allocation report</div>
-{% else %}
-  <div class="kpis">
-    <div class="kpi"><div class="num">{{ summary.evaluated if summary else 0 }}</div><div class="label">Orders Evaluated</div></div>
-    <div class="kpi"><div class="num">{{ summary.full if summary else 0 }}</div><div class="label">Fully Allocated</div></div>
-    <div class="kpi"><div class="num">{{ summary.partial if summary else 0 }}</div><div class="label">Partial</div></div>
-    <div class="kpi"><div class="num">{{ summary.no_inventory if summary else 0 }}</div><div class="label">No Inventory</div></div>
-    <div class="kpi"><div class="num">{{ summary.exceptions if summary else 0 }}</div><div class="label">Exceptions</div></div>
-    <div class="kpi"><div class="num">{{ summary.rate if summary else 0 }}%</div><div class="label">Allocation Rate</div></div>
-  </div>
-
-  <div class="card">
-    <h2>Per-order results</h2>
-    <table>
-      <thead>
-        <tr>
-          <th>Order #</th>
-          <th class="right">Units</th>
-          <th class="right">Allocated</th>
-          <th class="right">Short</th>
-          <th>Result</th>
-          <th>Reason</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for r in rows %}
-          <tr>
-            <td class="mono">{% if r.order_id %}<a href="{{ url_for('orders.detail', order_id=r.order_id) }}">{{ r.order_number }}</a>{% else %}{{ r.order_number }}{% endif %}</td>
-            <td class="right num-cell">{{ r.units }}</td>
-            <td class="right num-cell">{{ r.allocated }}</td>
-            <td class="right num-cell">{{ r.short }}</td>
-            <td>
-              {% set key = r.result.replace(' ', '_') %}
-              <span class="badge badge-{{ key }}">{{ r.result }}</span>
-            </td>
-            <td class="muted">{{ r.reason }}</td>
-          </tr>
-        {% else %}
-          <tr><td colspan="6" class="muted">No open orders in this scope.</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-{% endif %}
 {% endblock %}

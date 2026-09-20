@@ -199,7 +199,8 @@ input:disabled, select:disabled { background: var(--header-bg); color: var(--mut
   color: var(--muted);
   border: none;
 }
-.badge-NEW { background: var(--neutral); color: #3F4B59; }
+.badge-NEW, .badge-UNALLOCATED { background: var(--neutral); color: #3F4B59; }
+.badge-PARTIALLY_ALLOCATED, .badge-PICK_TICKET_READY, .badge-CANCELLED { background: var(--amber-light); color: var(--amber); }
 .badge-VALIDATED, .badge-ALLOCATING, .badge-PARTIAL, .badge-NEVER_PRINTED { background: var(--amber-light); color: var(--amber); }
 .badge-ALLOCATED, .badge-READY_TO_PICK, .badge-PRINTED, .badge-FULL { background: var(--green-light); color: var(--green); }
 .badge-PROCESSING, .badge-PROCESSED, .badge-READY_TO_CLOSE, .badge-OPEN { background: var(--blue-light); color: var(--blue); }

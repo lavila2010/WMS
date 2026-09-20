@@ -20,7 +20,7 @@
     {% elif key == 'allocation' and not can('ALLOCATION_VIEW') %}
     {% else %}
       <a class="{{ 'active' if active_tab == key }}"
-         href="{{ url_for(endpoint, client_id=scope.client_id or None, warehouse_id=scope.warehouse_id or None) }}">{{ label }}</a>
+         href="{{ url_for(endpoint, client_id=scope.client_id or None, warehouse_id=scope.warehouse_id or None, division_id=scope.division_id or None) }}">{{ label }}</a>
     {% endif %}
   {% endfor %}
 </div>

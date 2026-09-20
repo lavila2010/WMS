@@ -12,7 +12,7 @@
       <select name="client_id" required>
         <option value="">Select client</option>
         {% for c in options.clients %}
-          <option value="{{ c.id }}" {{ 'selected' if scope.client_id == c.id }}>{{ c.code }} — {{ c.name }}</option>
+          <option value="{{ c.id }}" {{ 'selected' if scope.client_id == c.id }}>{{ c.client_code }} — {{ c.name }}</option>
         {% endfor %}
       </select>
     </label>
@@ -20,7 +20,7 @@
       <select name="warehouse_id">
         <option value="">All warehouses</option>
         {% for w in options.warehouses %}
-          <option value="{{ w.id }}" {{ 'selected' if scope.warehouse_id == w.id }}>{{ w.code }} — {{ w.name }}</option>
+          <option value="{{ w.id }}" {{ 'selected' if scope.warehouse_id == w.id }}>{{ w.warehouse_code }} — {{ w.name }}</option>
         {% endfor %}
       </select>
     </label>
@@ -28,7 +28,7 @@
       <input type="date" name="date" value="{{ date_str }}" />
     </label>
     <label>Search
-      <input name="q" value="{{ q }}" placeholder="Order #, customer, carrier, SKU" />
+      <input name="q" value="{{ q }}" placeholder="WMS ID, order #, customer, carrier" />
     </label>
     <input type="hidden" name="status" value="{{ status }}" />
     <button type="submit">Apply</button>
@@ -62,6 +62,8 @@
         <tbody>
           {% for d in daily %}
             <tr><td>{{ d.label }}</td><td class="right num-cell">{{ d.count }}</td></tr>
+          {% else %}
+            <tr><td colspan="2" class="muted">No daily rollup for this filter.</td></tr>
           {% endfor %}
         </tbody>
       </table>
@@ -88,24 +90,17 @@
       <h2>Orders</h2>
       <div class="btn-row" style="margin:0;">
         {% if can('ORDERS_UPLOAD') %}
-          <a class="btn-secondary btn" href="{{ url_for('orders.import_view') }}">Upload Orders</a>
-        {% endif %}
-        {% if can('ALLOCATION_EXECUTE') %}
-          <form method="post" action="{{ url_for('orders.allocation_report', client_id=scope.client_id, warehouse_id=scope.warehouse_id or None) }}">
-            <button type="submit">Run Allocation</button>
-          </form>
-        {% endif %}
-        {% if can('REPORTS_EXPORT') %}
-          <a class="btn-secondary btn" href="{{ url_for('orders.export_completed', client_id=scope.client_id, warehouse_id=scope.warehouse_id or None, date=date_str or None) }}">Completed Orders Excel</a>
+          <a class="btn-secondary btn" href="{{ url_for('orders.import_view', client_id=scope.client_id) }}">Upload Orders</a>
         {% endif %}
       </div>
     </div>
     <table>
       <thead>
         <tr>
-          <th>Order #</th>
+          <th>WMS Order ID</th>
+          <th>Client Order</th>
           <th>Warehouse</th>
-          <th>Order Type</th>
+          <th>Division</th>
           <th>Customer</th>
           <th>Carrier</th>
           <th class="right">Units</th>
@@ -121,9 +116,10 @@
         {% for r in rows %}
           {% set o = r.order %}
           <tr>
-            <td class="mono">{{ o.order_number }}</td>
-            <td>{{ o.warehouse.code if o.warehouse else '—' }}</td>
-            <td>{{ o.order_type.code if o.order_type else '—' }}</td>
+            <td class="mono">{{ o.wms_order_id }}</td>
+            <td class="mono">{{ o.client_order_number }}</td>
+            <td>{{ o.warehouse.warehouse_code if o.warehouse else '—' }}</td>
+            <td>{{ o.division.code if o.division else '—' }}</td>
             <td>{{ o.customer or '—' }}</td>
             <td>{{ o.carrier or '—' }}</td>
             <td class="right num-cell">{{ r.units }}</td>
@@ -135,7 +131,7 @@
             <td><a class="btn-secondary btn" href="{{ url_for('orders.detail', order_id=o.id) }}">View</a></td>
           </tr>
         {% else %}
-          <tr><td colspan="12" class="muted">No orders match the selected filters.</td></tr>
+          <tr><td colspan="13" class="muted">No orders match the selected filters.</td></tr>
         {% endfor %}
       </tbody>
     </table>

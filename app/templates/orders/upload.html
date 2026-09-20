@@ -4,8 +4,24 @@
 
 <div class="card">
   <h2>Upload Orders</h2>
-  <p class="muted">Required columns: Client, Warehouse, OrderType, OrderNumber, Customer, SKU, Description, QtyOrdered, Carrier, ShippingService. Preview writes nothing. Confirm imports atomically.</p>
+  <p class="muted">Select Client and Division first. Spreadsheet columns: Warehouse, OrderNumber, Customer, CustomerAddress, CustomerPhone, UPC, Qty, Carrier, ShippingService. Same OrderNumber rows become one header. Header fields must match. Preview writes nothing. Confirm imports atomically.</p>
   <form method="post" action="{{ url_for('orders.import_preview') }}" enctype="multipart/form-data" class="inline-form">
+    <label>Client
+      <select name="client_id" required>
+        <option value="">Select client</option>
+        {% for c in options.clients %}
+          <option value="{{ c.id }}" {{ 'selected' if scope.client_id == c.id }}>{{ c.client_code }} — {{ c.name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Division
+      <select name="division_id" required>
+        <option value="">Select division</option>
+        {% for d in options.divisions %}
+          <option value="{{ d.id }}" {{ 'selected' if scope.division_id == d.id }}>{{ d.code }} — {{ d.name }}</option>
+        {% endfor %}
+      </select>
+    </label>
     <label>Orders workbook
       <input type="file" name="file" accept=".xlsx" required />
     </label>
@@ -17,51 +33,37 @@
 {% if preview %}
 <div class="card">
   <h2>Preview — {{ preview.filename }}</h2>
+  <p class="muted">Context {{ preview.client_code }} / {{ preview.division_code }}</p>
   <div class="kpis">
     <div class="kpi"><div class="num">{{ preview.total_rows }}</div><div class="label">Rows</div></div>
-    <div class="kpi"><div class="num">{{ preview.orders }}</div><div class="label">Orders</div></div>
+    <div class="kpi"><div class="num">{{ preview.order_count }}</div><div class="label">Orders</div></div>
     <div class="kpi"><div class="num">{{ preview.total_units }}</div><div class="label">Total Units</div></div>
-    <div class="kpi"><div class="num">{{ preview.clients|length }}</div><div class="label">Clients</div></div>
-    <div class="kpi"><div class="num">{{ preview.warehouses|length }}</div><div class="label">Warehouses</div></div>
-    <div class="kpi"><div class="num">{{ preview.order_types|length }}</div><div class="label">Order Types</div></div>
-    <div class="kpi"><div class="num">{{ preview.valid_orders }}</div><div class="label">Valid Orders</div></div>
-    <div class="kpi"><div class="num">{{ preview.warnings|length }}</div><div class="label">Warnings</div></div>
     <div class="kpi"><div class="num">{{ preview.blocking|length }}</div><div class="label">Blocking Errors</div></div>
-    <div class="kpi"><div class="num">{{ preview.duplicate_orders }}</div><div class="label">Duplicate Orders</div></div>
   </div>
 
-  <div class="grid" style="grid-template-columns:1fr 1fr;">
-    <div>
-      <h2>Client Breakdown</h2>
-      <div class="tree">
-        {% for code, units in preview.client_breakdown.items() %}
-          <div class="client">{{ code }} <span class="muted">{{ units }} units</span></div>
-        {% endfor %}
-      </div>
-    </div>
-    <div>
-      <h2>Warehouse Breakdown</h2>
-      <div class="tree">
-        {% for code, units in preview.warehouse_breakdown.items() %}
-          <div class="wh">{{ code }} — {{ units }}</div>
-        {% endfor %}
-      </div>
-    </div>
-  </div>
+  {% if preview.orders %}
+  <table>
+    <thead><tr><th>WMS Order ID</th><th>Client Order</th><th>Warehouse</th><th>Customer</th><th class="right">Lines</th><th class="right">Units</th></tr></thead>
+    <tbody>
+      {% for o in preview.orders %}
+        <tr>
+          <td class="mono">{{ o.wms_order_id }}</td>
+          <td class="mono">{{ o.client_order_number }}</td>
+          <td>{{ o.warehouse_code }}</td>
+          <td>{{ o.customer }}</td>
+          <td class="right">{{ o.lines|length }}</td>
+          <td class="right">{{ o.units }}</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
 
   {% if preview.blocking %}
   <div class="card errbox" style="margin-top:1rem;">
     <h2 class="err">Blocking Errors</h2>
     <ul>
       {% for e in preview.blocking %}<li>{{ e.message }}</li>{% endfor %}
-    </ul>
-  </div>
-  {% endif %}
-  {% if preview.warnings %}
-  <div class="card warnbox" style="margin-top:1rem;">
-    <h2 class="warn">Warnings</h2>
-    <ul>
-      {% for w in preview.warnings %}<li>{{ w.message }}</li>{% endfor %}
     </ul>
   </div>
   {% endif %}
@@ -74,14 +76,6 @@
       <button class="btn-secondary btn" type="submit">Cancel</button>
     </form>
   </div>
-</div>
-{% endif %}
-
-{% if last_result %}
-<div class="card okbox">
-  <h2>Import result</h2>
-  <p>{{ last_result.message }}</p>
-  <p class="muted">Submitted {{ last_result.rows_submitted }} · Imported {{ last_result.rows_imported }} · Rejected {{ last_result.rows_rejected }} · Warnings {{ last_result.warnings_count }} · {{ last_result.created_by_username or last_result.created_by or '—' }} · {{ last_result.created_at.strftime('%Y-%m-%d %H:%M') }}</p>
 </div>
 {% endif %}
 {% endblock %}
