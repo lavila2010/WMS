@@ -257,6 +257,9 @@ def confirm_import(preview: OrderPreview) -> ImportBatch:
         client, warehouse, order_type = resolve_scope(
             group["client"], group["warehouse"], group["order_type"]
         )
+        from .scope import ensure_default_division
+
+        division = ensure_default_division(client)
         order = Order(
             order_number=group["order_number"],
             customer=group.get("customer") or None,
@@ -266,6 +269,7 @@ def confirm_import(preview: OrderPreview) -> ImportBatch:
             client_id=client.id,
             warehouse_id=warehouse.id,
             order_type_id=order_type.id,
+            division_id=division.id,
             import_batch_id=batch.id,
         )
         db.session.add(order)

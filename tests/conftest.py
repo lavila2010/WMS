@@ -18,7 +18,9 @@ def app(tmp_path):
     os.environ["DATABASE_URL"] = TEST_DB_URL
     config = Config()
     config.DOCUMENTS_DIR = str(tmp_path / "documents")
+    config.OPERATIONAL_TIMEZONE = "UTC"
     application = create_app(config)
+    application.config["OPERATIONAL_TIMEZONE"] = "UTC"
     with application.app_context():
         _db.drop_all()
         _db.create_all()
@@ -118,8 +120,18 @@ def make_order(
     order_type="B2C",
     carrier="UPS",
     shipping_service="Ground",
+    division=None,
+    division_name=None,
+    client_name=None,
 ):
+    from app.services.scope import get_or_create_client, get_or_create_division
+
+    if client_name:
+        get_or_create_client(client, client_name)
     c, w, ot = resolve_scope(client, warehouse, order_type)
+    if client_name and c.name != client_name:
+        c.name = client_name
+    div = get_or_create_division(c, division or "MAIN", division_name)
     order = Order(
         order_number=order_number,
         customer=customer,
@@ -128,6 +140,7 @@ def make_order(
         client_id=c.id,
         warehouse_id=w.id,
         order_type_id=ot.id,
+        division_id=div.id,
     )
     _db.session.add(order)
     _db.session.flush()

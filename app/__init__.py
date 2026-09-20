@@ -27,9 +27,10 @@ def create_app(config: Config | None = None) -> Flask:
     init_auth(app)
 
     with app.app_context():
-        from .schema import ensure_processing_columns
+        from .schema import ensure_kpi_schema, ensure_processing_columns
 
         ensure_processing_columns()
+        ensure_kpi_schema()
 
     from .blueprints.health import bp as health_bp
     from .blueprints.auth import bp as auth_bp
@@ -39,6 +40,7 @@ def create_app(config: Config | None = None) -> Flask:
     from .blueprints.allocation import bp as allocation_bp
     from .blueprints.processing import bp as processing_bp
     from .blueprints.reports import bp as reports_bp
+    from .blueprints.kpi import bp as kpi_bp
     from .blueprints.admin import bp as admin_bp
 
     app.register_blueprint(health_bp)
@@ -49,6 +51,7 @@ def create_app(config: Config | None = None) -> Flask:
     app.register_blueprint(allocation_bp)
     app.register_blueprint(processing_bp)
     app.register_blueprint(reports_bp)
+    app.register_blueprint(kpi_bp)
     app.register_blueprint(admin_bp)
 
     @app.errorhandler(403)

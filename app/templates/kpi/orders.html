@@ -1,0 +1,173 @@
+{% extends "base.html" %}
+{% block title %}KPI Orders{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div class="section-title">
+    <div>
+      <h1>KPI Orders</h1>
+      <p class="sub">Live client/division order summary updated when orders are created or processed</p>
+    </div>
+    <span class="badge live-badge">LIVE</span>
+  </div>
+</div>
+
+<div class="card">
+  <form method="get" action="{{ url_for('kpi.orders') }}" class="inline-form" id="kpi-filters">
+    <label>Client
+      <select name="client_id">
+        <option value="">All Clients</option>
+        {% for c in options.clients %}
+          <option value="{{ c.id }}" {{ 'selected' if filters.client_id == c.id|string }}>{{ c.name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Division
+      <select name="division_id">
+        <option value="">All Divisions</option>
+        {% for d in options.divisions %}
+          <option value="{{ d.id }}" {{ 'selected' if filters.division_id == d.id|string }}>{{ d.name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>From Date
+      <input type="date" name="from_date" value="{{ filters.from_date }}" />
+    </label>
+    <label>To Date
+      <input type="date" name="to_date" value="{{ filters.to_date }}" />
+    </label>
+    <label>Search
+      <input name="q" value="{{ filters.q }}" placeholder="Client or Division" />
+    </label>
+    <button type="submit">Apply</button>
+  </form>
+</div>
+
+<div class="kpis" id="kpi-overall">
+  <div class="kpi"><div class="num" data-k="total_orders">{{ overall.total_orders }}</div><div class="label">Total Orders</div></div>
+  <div class="kpi"><div class="num" data-k="open_orders">{{ overall.open_orders }}</div><div class="label">Open Orders</div></div>
+  <div class="kpi"><div class="num" data-k="processed_orders">{{ overall.processed_orders }}</div><div class="label">Processed Orders</div></div>
+  <div class="kpi"><div class="num" data-k="total_units">{{ overall.total_units }}</div><div class="label">Total Units</div></div>
+  <div class="kpi"><div class="num" data-k="open_units">{{ overall.open_units }}</div><div class="label">Open Units</div></div>
+  <div class="kpi"><div class="num" data-k="processed_units">{{ overall.processed_units }}</div><div class="label">Processed Units</div></div>
+</div>
+
+<div class="card">
+  <div class="section-title">
+    <div>
+      <h2>Orders by Client &amp; Division</h2>
+      <p class="sub">Sorted by Client, then Division</p>
+    </div>
+    <span class="badge">SUMMARY ONLY</span>
+  </div>
+  <table class="kpi-table">
+    <thead>
+      <tr>
+        <th rowspan="2" class="left">Client</th>
+        <th rowspan="2" class="left">Division</th>
+        <th colspan="4">Overall</th>
+        <th colspan="2">Ecommerce</th>
+        <th colspan="2">Retail</th>
+        <th colspan="2">Wholesale</th>
+      </tr>
+      <tr>
+        <th class="right">Total Orders</th>
+        <th class="right">Open Orders</th>
+        <th class="right">Total Units</th>
+        <th class="right">Open Units</th>
+        <th class="right">Orders</th>
+        <th class="right">Units</th>
+        <th class="right">Orders</th>
+        <th class="right">Units</th>
+        <th class="right">Orders</th>
+        <th class="right">Units</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in rows %}
+        <tr>
+          <td>{{ row.client }}</td>
+          <td>{{ row.division }}</td>
+          <td class="right num-cell">{{ row.total_orders }}</td>
+          <td class="right num-cell">{{ row.open_orders }}</td>
+          <td class="right num-cell">{{ row.total_units }}</td>
+          <td class="right num-cell">{{ row.open_units }}</td>
+          <td class="right num-cell">{{ row.ecommerce_orders }}</td>
+          <td class="right num-cell">{{ row.ecommerce_units }}</td>
+          <td class="right num-cell">{{ row.retail_orders }}</td>
+          <td class="right num-cell">{{ row.retail_units }}</td>
+          <td class="right num-cell">{{ row.wholesale_orders }}</td>
+          <td class="right num-cell">{{ row.wholesale_units }}</td>
+        </tr>
+      {% else %}
+        <tr><td colspan="12" class="muted">No orders found for the selected period.</td></tr>
+      {% endfor %}
+    </tbody>
+    {% if rows %}
+    <tfoot>
+      <tr class="kpi-total">
+        <td>TOTAL</td>
+        <td></td>
+        <td class="right num-cell">{{ totals.total_orders }}</td>
+        <td class="right num-cell">{{ totals.open_orders }}</td>
+        <td class="right num-cell">{{ totals.total_units }}</td>
+        <td class="right num-cell">{{ totals.open_units }}</td>
+        <td class="right num-cell">{{ totals.ecommerce_orders }}</td>
+        <td class="right num-cell">{{ totals.ecommerce_units }}</td>
+        <td class="right num-cell">{{ totals.retail_orders }}</td>
+        <td class="right num-cell">{{ totals.retail_units }}</td>
+        <td class="right num-cell">{{ totals.wholesale_orders }}</td>
+        <td class="right num-cell">{{ totals.wholesale_units }}</td>
+      </tr>
+    </tfoot>
+    {% endif %}
+  </table>
+</div>
+
+<div class="kpis channel-kpis">
+  <div class="kpi">
+    <div class="label">Ecommerce</div>
+    <div class="channel-metrics">
+      <div><span class="num">{{ channels.ecommerce.orders }}</span><span class="muted">Orders</span></div>
+      <div><span class="num">{{ channels.ecommerce.units }}</span><span class="muted">Units</span></div>
+      <div><span class="num">{{ channels.ecommerce.open_orders }}</span><span class="muted">Open Orders</span></div>
+    </div>
+  </div>
+  <div class="kpi">
+    <div class="label">Retail</div>
+    <div class="channel-metrics">
+      <div><span class="num">{{ channels.retail.orders }}</span><span class="muted">Orders</span></div>
+      <div><span class="num">{{ channels.retail.units }}</span><span class="muted">Units</span></div>
+      <div><span class="num">{{ channels.retail.open_orders }}</span><span class="muted">Open Orders</span></div>
+    </div>
+  </div>
+  <div class="kpi">
+    <div class="label">Wholesale</div>
+    <div class="channel-metrics">
+      <div><span class="num">{{ channels.wholesale.orders }}</span><span class="muted">Orders</span></div>
+      <div><span class="num">{{ channels.wholesale.units }}</span><span class="muted">Units</span></div>
+      <div><span class="num">{{ channels.wholesale.open_orders }}</span><span class="muted">Open Orders</span></div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block head %}
+<script>
+  window.addEventListener("DOMContentLoaded", function () {
+    var endpoint = {{ url_for('kpi.orders_json', **request.args) | tojson }};
+    setInterval(function () {
+      fetch(endpoint, { credentials: "same-origin" })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (data) {
+          if (!data) return;
+          document.querySelectorAll("#kpi-overall [data-k]").forEach(function (el) {
+            if (data.overall && data.overall[el.getAttribute("data-k")] !== undefined) {
+              el.textContent = data.overall[el.getAttribute("data-k")];
+            }
+          });
+        })
+        .catch(function () {});
+    }, 20000);
+  });
+</script>
+{% endblock %}

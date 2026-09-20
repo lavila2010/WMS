@@ -7,8 +7,9 @@ warehouses and order types scoped to their owning client.
 
 from __future__ import annotations
 
+from ..constants import normalize_channel
 from ..extensions import db
-from ..models import Client, OrderType, Warehouse
+from ..models import Client, Division, OrderType, Warehouse
 
 
 def get_or_create_client(code: str, name: str | None = None) -> Client:
@@ -44,11 +45,32 @@ def get_or_create_order_type(client: Client, code: str, name: str | None = None)
     ot = OrderType.query.filter_by(client_id=client.id, code=code).first()
     if ot is None:
         ot = OrderType(
-            client_id=client.id, code=code, name=(name or code).strip() or code
+            client_id=client.id,
+            code=code,
+            name=(name or code).strip() or code,
+            channel=normalize_channel(code),
         )
         db.session.add(ot)
         db.session.flush()
+    elif not ot.channel:
+        ot.channel = normalize_channel(ot.code)
     return ot
+
+
+def get_or_create_division(client: Client, code: str, name: str | None = None) -> Division:
+    code = (code or "").strip() or "MAIN"
+    div = Division.query.filter_by(client_id=client.id, code=code).first()
+    if div is None:
+        div = Division(
+            client_id=client.id, code=code, name=(name or code).strip() or code
+        )
+        db.session.add(div)
+        db.session.flush()
+    return div
+
+
+def ensure_default_division(client: Client) -> Division:
+    return get_or_create_division(client, "MAIN", "Main")
 
 
 def resolve_scope(client_code: str, warehouse_code: str, order_type_code: str):

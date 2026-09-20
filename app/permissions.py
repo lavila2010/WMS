@@ -72,5 +72,6 @@ NAV_MODULES = [
     ("ALLOCATION_VIEW", "Allocation", "allocation.index"),
     ("PROCESSING_VIEW", "Order Processing", "processing.index"),
     ("REPORTS_VIEW", "Order Reports", "reports.index"),
+    ("REPORTS_VIEW", "KPI Orders", "kpi.orders"),
     ("USERS_VIEW", "Administration", "admin.users"),
 ]

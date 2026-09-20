@@ -68,3 +68,7 @@ class Config:
             "1", "true", "yes",
         )
         self.PERMANENT_SESSION_LIFETIME = timedelta(hours=12)
+
+        # Calendar day used by KPI Orders. Naive ``created_at`` values are
+        # stored as UTC and converted to this zone before date comparison.
+        self.OPERATIONAL_TIMEZONE = os.environ.get("WMS_TIMEZONE", "America/New_York")

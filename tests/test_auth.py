@@ -68,7 +68,7 @@ def test_session_persists_across_pages(admin_client):
 
 def test_admin_sees_all_modules(admin_client):
     html = admin_client.get("/").get_data(as_text=True)
-    for label in ["Inventory", "Orders", "Allocation", "Order Processing", "Order Reports", "Administration"]:
+    for label in ["Inventory", "Orders", "Allocation", "Order Processing", "Order Reports", "KPI Orders", "Administration"]:
         assert label in html
 
 

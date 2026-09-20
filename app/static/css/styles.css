@@ -429,3 +429,27 @@ a { color: var(--blue); }
   .processing-layout { grid-template-columns: 1fr; }
   .kv-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+
+.live-badge {
+  background: var(--green-light);
+  color: var(--green);
+}
+.kpi-table th.left { text-align: left; }
+.kpi-table thead tr:first-child th {
+  text-align: center;
+  background: var(--header-bg);
+}
+.kpi-table tfoot .kpi-total td {
+  font-weight: 700;
+  background: #F4F6F8;
+  border-top: 1px solid var(--border);
+}
+.channel-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.channel-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.5rem;
+  margin-top: 0.45rem;
+}
+.channel-metrics .num { font-size: 1.25rem; display: block; }
+.channel-metrics .muted { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.04em; }

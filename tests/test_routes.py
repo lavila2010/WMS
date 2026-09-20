@@ -33,6 +33,7 @@ def test_authenticated_module_indexes_render(admin_client):
         "/allocation/",
         "/processing/",
         "/reports/",
+        "/kpi/orders",
         "/admin/users",
     ]:
         resp = admin_client.get(path, follow_redirects=True)

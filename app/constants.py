@@ -146,6 +146,39 @@ class ExceptionType:
     IMPORT_CONFLICT = "IMPORT_CONFLICT"
 
 
+class Channel:
+    """Canonical order-channel buckets used by KPI Orders.
+
+    Channel is an ORDER attribute derived from ``OrderType`` (never from
+    inventory). Known order-type codes are normalized to one of these three
+    values; unmapped types still count in overall totals but not in a channel.
+    """
+
+    ECOMMERCE = "ECOMMERCE"
+    RETAIL = "RETAIL"
+    WHOLESALE = "WHOLESALE"
+    ALL = [ECOMMERCE, RETAIL, WHOLESALE]
+
+    ALIASES = {
+        "ECOMMERCE": ECOMMERCE,
+        "ECOM": ECOMMERCE,
+        "E-COMMERCE": ECOMMERCE,
+        "B2C": ECOMMERCE,
+        "DTC": ECOMMERCE,
+        "RETAIL": RETAIL,
+        "STORE": RETAIL,
+        "WHOLESALE": WHOLESALE,
+        "B2B": WHOLESALE,
+        "WS": WHOLESALE,
+    }
+
+
+def normalize_channel(code: str | None) -> str | None:
+    if not code:
+        return None
+    return Channel.ALIASES.get(str(code).strip().upper())
+
+
 class ProcessingEvent:
     PROCESSING_STARTED = "PROCESSING_STARTED"
     CARTON_CREATED = "CARTON_CREATED"

@@ -142,6 +142,7 @@ class Client(db.Model):
 
     warehouses = db.relationship("Warehouse", backref="client")
     order_types = db.relationship("OrderType", backref="client")
+    divisions = db.relationship("Division", backref="client")
 
 
 class Warehouse(db.Model):
@@ -158,6 +159,27 @@ class Warehouse(db.Model):
     created_at = db.Column(db.DateTime, default=_utcnow, nullable=False)
 
 
+class Division(db.Model):
+    """Client-scoped commercial division (not a warehouse, not a channel).
+
+    Added for KPI Orders: there was no existing Division model. Warehouse is
+    a physical location and OrderType is the order channel, so Division is a
+    new normalized order attribute.
+    """
+
+    __tablename__ = "divisions"
+    __table_args__ = (
+        db.UniqueConstraint("client_id", "code", name="uq_division_client_code"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    client_id = db.Column(db.Integer, db.ForeignKey("clients.id"), nullable=False, index=True)
+    code = db.Column(db.String(32), nullable=False, index=True)
+    name = db.Column(db.String(255), nullable=False)
+    active = db.Column(db.Boolean, default=True, nullable=False)
+    created_at = db.Column(db.DateTime, default=_utcnow, nullable=False)
+
+
 class OrderType(db.Model):
     __tablename__ = "order_types"
     __table_args__ = (
@@ -168,6 +190,7 @@ class OrderType(db.Model):
     client_id = db.Column(db.Integer, db.ForeignKey("clients.id"), nullable=False)
     code = db.Column(db.String(32), nullable=False, index=True)
     name = db.Column(db.String(255), nullable=False)
+    channel = db.Column(db.String(16), index=True)
     active = db.Column(db.Boolean, default=True, nullable=False)
     created_at = db.Column(db.DateTime, default=_utcnow, nullable=False)
 
@@ -256,6 +279,7 @@ class Order(db.Model):
     client_id = db.Column(db.Integer, db.ForeignKey("clients.id"), nullable=False, index=True)
     warehouse_id = db.Column(db.Integer, db.ForeignKey("warehouses.id"), nullable=False, index=True)
     order_type_id = db.Column(db.Integer, db.ForeignKey("order_types.id"), nullable=False, index=True)
+    division_id = db.Column(db.Integer, db.ForeignKey("divisions.id"), nullable=True, index=True)
     notes = db.Column(db.Text)
     import_batch_id = db.Column(
         db.Integer, db.ForeignKey("import_batches.id"), nullable=True
@@ -268,7 +292,7 @@ class Order(db.Model):
     processing_user_id = db.Column(db.Integer, db.ForeignKey("users.id"))
     processing_username = db.Column(db.String(64))
     processing_started_at = db.Column(db.DateTime)
-    created_at = db.Column(db.DateTime, default=_utcnow, nullable=False)
+    created_at = db.Column(db.DateTime, default=_utcnow, nullable=False, index=True)
     updated_at = db.Column(db.DateTime, default=_utcnow, onupdate=_utcnow, nullable=False)
 
     lines = db.relationship(
@@ -277,6 +301,7 @@ class Order(db.Model):
     client = db.relationship("Client")
     warehouse = db.relationship("Warehouse")
     order_type = db.relationship("OrderType")
+    division = db.relationship("Division")
     invoice = db.relationship("Invoice", backref="order", uselist=False)
 
     @property
@@ -288,7 +313,7 @@ class OrderLine(db.Model):
     __tablename__ = "order_lines"
 
     id = db.Column(db.Integer, primary_key=True)
-    order_id = db.Column(db.Integer, db.ForeignKey("orders.id"), nullable=False)
+    order_id = db.Column(db.Integer, db.ForeignKey("orders.id"), nullable=False, index=True)
     sku = db.Column(db.String(64), nullable=False)
     description = db.Column(db.String(255))
     quantity = db.Column(db.Integer, default=0, nullable=False)
