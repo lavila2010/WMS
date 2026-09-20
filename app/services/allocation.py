@@ -14,6 +14,7 @@ Barcode rules enforced here:
 from __future__ import annotations
 
 from ..constants import (
+    AllocationResult,
     AllocationStatus,
     ExceptionType,
     MovementType,
@@ -272,4 +273,100 @@ def mark_allocated(order: Order) -> Order:
             ExceptionType.NO_DEMAND,
             "Order is not fully allocated; cannot mark as ALLOCATED.",
         )
-    return transition(order, OrderStatus.ALLOCATED, "All demand allocated.")
+    result = transition(order, OrderStatus.ALLOCATED, "All demand allocated.")
+    from .pick_tickets import ensure_pick_ticket
+
+    ensure_pick_ticket(order)
+    return result
+
+
+def _available_units(order: Order, sku: str, limit: int) -> list[InventoryUnit]:
+    return (
+        InventoryUnit.query.filter_by(
+            client_id=order.client_id,
+            warehouse_id=order.warehouse_id,
+            sku=sku,
+            status=UnitStatus.AVAILABLE,
+        )
+        .order_by(InventoryUnit.location, InventoryUnit.barcode)
+        .limit(limit)
+        .all()
+    )
+
+
+def auto_allocate_order(order: Order) -> dict:
+    """Allocate available Client+Warehouse inventory to ``order``.
+
+    Order Type is not part of inventory matching.
+    """
+    from ..workflow import WorkflowError
+
+    result = {
+        "order_id": order.id,
+        "order_number": order.order_number,
+        "units": order.ordered_quantity,
+        "allocated": 0,
+        "short": 0,
+        "result": AllocationResult.NO_INVENTORY,
+        "reason": "",
+    }
+    try:
+        if order.status == OrderStatus.CLOSED:
+            result["result"] = AllocationResult.EXCEPTION
+            result["reason"] = "Order is closed."
+            return result
+        if order.status == OrderStatus.NEW:
+            transition(order, OrderStatus.VALIDATED, "Validated for allocation.")
+
+        progress = allocation_progress(order)
+        if not progress["fully_allocated"]:
+            for line in order.lines:
+                remaining = line.quantity - allocated_count_for_line(line)
+                if remaining <= 0:
+                    continue
+                for unit in _available_units(order, line.sku, remaining):
+                    allocate_barcode(order, unit.barcode)
+
+        progress = allocation_progress(order)
+        result["allocated"] = progress["total_allocated"]
+        result["short"] = max(0, progress["total_ordered"] - progress["total_allocated"])
+        if progress["fully_allocated"]:
+            if order.status == OrderStatus.VALIDATED:
+                transition(order, OrderStatus.ALLOCATING, "Demand already covered.")
+            if order.status == OrderStatus.ALLOCATING:
+                mark_allocated(order)
+            else:
+                from .pick_tickets import ensure_pick_ticket
+
+                ensure_pick_ticket(order)
+            result["result"] = AllocationResult.FULL
+            result["reason"] = "Demand fully covered."
+        elif progress["total_allocated"] == 0:
+            result["result"] = AllocationResult.NO_INVENTORY
+            result["reason"] = "No available units for ordered SKUs."
+        else:
+            result["result"] = AllocationResult.PARTIAL
+            result["reason"] = "Insufficient available inventory."
+        return result
+    except (BarcodeError, WorkflowError) as exc:
+        result["result"] = AllocationResult.EXCEPTION
+        result["reason"] = str(exc)
+        return result
+
+
+def run_allocation_batch(orders: list[Order]) -> dict:
+    rows = [auto_allocate_order(o) for o in orders]
+    evaluated = len(rows)
+    full = sum(1 for r in rows if r["result"] == AllocationResult.FULL)
+    partial = sum(1 for r in rows if r["result"] == AllocationResult.PARTIAL)
+    none = sum(1 for r in rows if r["result"] == AllocationResult.NO_INVENTORY)
+    exceptions = sum(1 for r in rows if r["result"] == AllocationResult.EXCEPTION)
+    return {
+        "evaluated": evaluated,
+        "full": full,
+        "partial": partial,
+        "no_inventory": none,
+        "exceptions": exceptions,
+        "rate": round((full / evaluated) * 100, 1) if evaluated else 0.0,
+        "rows": rows,
+    }

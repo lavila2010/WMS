@@ -13,6 +13,7 @@ from .constants import (
     BoxStatus,
     InvoiceStatus,
     OrderStatus,
+    PickTicketStatus,
     UnitStatus,
 )
 from .extensions import db
@@ -493,3 +494,56 @@ class Invoice(db.Model):
     client = db.relationship("Client")
     warehouse = db.relationship("Warehouse")
     order_type = db.relationship("OrderType")
+
+
+class PickTicket(db.Model):
+    """Permanent pick-ticket identity for a fully allocated order.
+
+    One ticket per order. Reprinting never assigns a new number.
+    """
+
+    __tablename__ = "pick_tickets"
+
+    id = db.Column(db.Integer, primary_key=True)
+    pick_ticket_number = db.Column(db.String(64), unique=True, nullable=False, index=True)
+    order_id = db.Column(
+        db.Integer, db.ForeignKey("orders.id"), unique=True, nullable=False
+    )
+    status = db.Column(db.String(20), default=PickTicketStatus.ACTIVE, nullable=False)
+    assigned_at = db.Column(db.DateTime, default=_utcnow, nullable=False)
+    assigned_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+    assigned_by_username = db.Column(db.String(64))
+    document_id = db.Column(db.Integer, db.ForeignKey("documents.id"))
+    created_at = db.Column(db.DateTime, default=_utcnow, nullable=False)
+    updated_at = db.Column(db.DateTime, default=_utcnow, onupdate=_utcnow, nullable=False)
+
+    order = db.relationship("Order", backref=db.backref("pick_ticket", uselist=False))
+    document = db.relationship("Document")
+    print_events = db.relationship(
+        "PickTicketPrintEvent",
+        backref="pick_ticket",
+        cascade="all, delete-orphan",
+        order_by="PickTicketPrintEvent.printed_at.desc()",
+    )
+
+    @property
+    def print_count(self) -> int:
+        return len(self.print_events)
+
+    @property
+    def last_print(self):
+        return self.print_events[0] if self.print_events else None
+
+
+class PickTicketPrintEvent(db.Model):
+    __tablename__ = "pick_ticket_print_events"
+
+    id = db.Column(db.Integer, primary_key=True)
+    pick_ticket_id = db.Column(
+        db.Integer, db.ForeignKey("pick_tickets.id"), nullable=False, index=True
+    )
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+    username = db.Column(db.String(64))
+    printed_at = db.Column(db.DateTime, default=_utcnow, nullable=False, index=True)
+    source = db.Column(db.String(20), nullable=False)
+    ip_address = db.Column(db.String(64))

@@ -40,13 +40,14 @@ def _table(data, col_widths=None):
     tbl.setStyle(
         TableStyle(
             [
-                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1f2937")),
-                ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#F4F6F8")),
+                ("TEXTCOLOR", (0, 0), (-1, 0), colors.HexColor("#6B7280")),
                 ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
                 ("FONTSIZE", (0, 0), (-1, -1), 8),
-                ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#cbd5e1")),
-                ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f1f5f9")]),
+                ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#E3E7EB")),
+                ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#F9FBFC")]),
                 ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("TEXTCOLOR", (0, 1), (-1, -1), colors.HexColor("#182230")),
             ]
         )
     )
@@ -94,38 +95,82 @@ def _scope_line(order: Order) -> str:
     return f"Client {client} · Warehouse {wh} · Order Type {ot}"
 
 
-def generate_pick_ticket(order: Order) -> Document:
+def generate_pick_ticket(order: Order, pick_ticket=None) -> Document:
+    """Warehouse Pick Ticket showing exact allocated barcode + location."""
+    from .pick_tickets import pick_lines, unique_locations
+
     styles = _styles()
-    elements = _header(
-        styles, "Pick Ticket",
-        f"Order {order.order_number} — {order.customer or 'N/A'} "
-        f"(status {order.status})",
+    pt_number = getattr(pick_ticket, "pick_ticket_number", None) or (
+        order.pick_ticket.pick_ticket_number if getattr(order, "pick_ticket", None) else "—"
     )
-    elements.append(Paragraph(_scope_line(order), styles["Normal"]))
-    elements.append(
-        Paragraph(
-            f"Carrier: {order.carrier or 'N/A'} · "
-            f"Shipping Service: {order.shipping_service or 'N/A'}",
-            styles["Normal"],
-        )
-    )
-    elements.append(Spacer(1, 5 * mm))
-    allocs = (
-        Allocation.query.filter_by(order_id=order.id, status=AllocationStatus.ACTIVE)
-        .all()
-    )
-    rows = [["#", "Barcode", "SKU", "Description", "Location"]]
-    for i, a in enumerate(sorted(allocs, key=lambda x: (x.unit.location or "", x.barcode)), 1):
+    allocated_at = None
+    if pick_ticket is not None:
+        allocated_at = pick_ticket.assigned_at
+    elif getattr(order, "pick_ticket", None):
+        allocated_at = order.pick_ticket.assigned_at
+
+    head = [
+        [
+            Paragraph("<b>WMS SYSTEM</b><br/>Warehouse Pick Ticket", styles["Heading2"]),
+            Paragraph(
+                f"<b>Pick Ticket</b> {pt_number}<br/>"
+                f"<b>Order</b> {order.order_number}",
+                styles["Normal"],
+            ),
+        ]
+    ]
+    head_tbl = Table(head, colWidths=[110 * mm, 55 * mm])
+    head_tbl.setStyle(TableStyle([
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("ALIGN", (1, 0), (1, 0), "RIGHT"),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+    ]))
+    elements = [head_tbl, Spacer(1, 4 * mm)]
+
+    info = [
+        ["Order Information", ""],
+        ["Client", order.client.code if order.client else "—"],
+        ["Warehouse", order.warehouse.code if order.warehouse else "—"],
+        ["Order Type", order.order_type.code if order.order_type else "—"],
+        ["Customer", order.customer or "—"],
+        ["Carrier", order.carrier or "—"],
+        ["Shipping Service", order.shipping_service or "—"],
+        ["Order Date", order.created_at.strftime("%Y-%m-%d %H:%M") if order.created_at else "—"],
+        ["Allocated", allocated_at.strftime("%Y-%m-%d %H:%M") if allocated_at else "—"],
+        ["Total Units", str(sum(line.quantity for line in order.lines))],
+    ]
+    elements.append(_table(info, col_widths=[50 * mm, 115 * mm]))
+    elements.append(Spacer(1, 6 * mm))
+
+    lines = pick_lines(order)
+    rows = [["Seq", "Location", "SKU", "UPC", "Description", "Barcode", "Qty", "Picked"]]
+    for i, line in enumerate(lines, 1):
         rows.append([
-            str(i), a.barcode, a.unit.sku,
-            a.unit.description or "", a.unit.location or "",
+            str(i),
+            line["location"],
+            line["sku"],
+            line["upc"],
+            line["description"],
+            line["barcode"],
+            str(line["qty"]),
+            "☐",
         ])
     if len(rows) == 1:
-        rows.append(["—", "No allocated units", "", "", ""])
-    elements.append(_table(rows, col_widths=[12 * mm, 45 * mm, 30 * mm, 55 * mm, 25 * mm]))
+        rows.append(["—", "", "", "", "No allocated units", "", "", ""])
+    elements.append(
+        _table(
+            rows,
+            col_widths=[12 * mm, 24 * mm, 24 * mm, 28 * mm, 40 * mm, 28 * mm, 12 * mm, 16 * mm],
+        )
+    )
     elements.append(Spacer(1, 6 * mm))
     elements.append(
-        Paragraph(f"Total units to pick: <b>{len(allocs)}</b>", styles["Normal"])
+        Paragraph(
+            f"Total Units to Pick: <b>{len(lines)}</b> &nbsp;&nbsp; "
+            f"Unique Locations: <b>{unique_locations(order)}</b> &nbsp;&nbsp; "
+            f"Status: <b>{getattr(pick_ticket, 'status', None) or 'ACTIVE'}</b>",
+            styles["Normal"],
+        )
     )
     return _persist(
         elements, doc_type=DocumentType.PICK_TICKET, order_id=order.id,

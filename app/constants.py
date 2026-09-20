@@ -101,6 +101,23 @@ class DocumentType:
     BOX_DETAIL = "BOX_DETAIL"
 
 
+class PickTicketStatus:
+    ACTIVE = "ACTIVE"
+
+
+class PrintSource:
+    SCREEN = "SCREEN"
+    REPRINT = "REPRINT"
+    BATCH = "BATCH"
+
+
+class AllocationResult:
+    FULL = "FULL"
+    PARTIAL = "PARTIAL"
+    NO_INVENTORY = "NO INVENTORY"
+    EXCEPTION = "EXCEPTION"
+
+
 class ImportType:
     INVENTORY = "INVENTORY"
     ORDERS = "ORDERS"

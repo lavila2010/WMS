@@ -17,10 +17,8 @@ import re
 import pandas as pd
 from openpyxl import Workbook
 
-from ..constants import ImportType, OrderStatus, UnitStatus
-from ..extensions import db
-from ..models import ImportBatch, InventoryUnit, Order, OrderLine
-from .scope import resolve_scope
+from ..constants import ImportType
+from ..models import ImportBatch
 
 
 class ImportError_(Exception):
@@ -66,123 +64,10 @@ def _merge_header(existing: dict, candidate: dict, key: str) -> None:
 
 
 def import_orders(source, filename: str) -> ImportBatch:
-    """Import Orders.xlsx.
+    """Import Orders.xlsx (one-shot wrapper around the two-step service)."""
+    from .order_import import import_orders as _import_orders
 
-    Columns: Client, Warehouse, OrderType, OrderNumber, Customer, SKU,
-    Description, QtyOrdered, Carrier, ShippingService.
-
-    Rows sharing (Client, Warehouse, OrderType, OrderNumber) form one
-    operational order; their Customer/Carrier/ShippingService must agree.
-    """
-    df = _read_excel(source)
-    _require_columns(
-        df,
-        ["client", "warehouse", "ordertype", "ordernumber", "sku", "qtyordered"],
-        "Orders",
-    )
-
-    # First pass: group + validate consistent header fields (no DB writes yet).
-    groups: dict[tuple, dict] = {}
-    for _, row in df.iterrows():
-        client_code = _val(row, "client")
-        warehouse_code = _val(row, "warehouse")
-        order_type_code = _val(row, "ordertype")
-        order_number = _val(row, "ordernumber")
-        sku = _val(row, "sku")
-        qty_raw = _val(row, "qtyordered")
-        if not (client_code and warehouse_code and order_type_code and order_number and sku and qty_raw):
-            continue
-        try:
-            quantity = int(float(qty_raw))
-        except ValueError:
-            continue
-
-        key = (client_code, warehouse_code, order_type_code, order_number)
-        group = groups.setdefault(
-            key,
-            {
-                "client": client_code,
-                "warehouse": warehouse_code,
-                "order_type": order_type_code,
-                "order_number": order_number,
-                "customer": "",
-                "carrier": "",
-                "shipping_service": "",
-                "lines": [],
-            },
-        )
-        candidate = {
-            "customer": _val(row, "customer"),
-            "carrier": _val(row, "carrier"),
-            "shipping_service": _val(row, "shippingservice"),
-            "_label": None,
-            "_order": order_number,
-        }
-        for field, label in (
-            ("customer", "Customer"),
-            ("carrier", "Carrier"),
-            ("shipping_service", "Shipping Service"),
-        ):
-            candidate["_label"] = label
-            _merge_header(group, candidate, field)
-        group["lines"].append(
-            {"sku": sku, "description": _val(row, "description") or None, "quantity": quantity}
-        )
-
-    # Second pass: persist.
-    batch = ImportBatch(type=ImportType.ORDERS, filename=filename, row_count=0)
-    db.session.add(batch)
-    db.session.flush()
-
-    lines_created = 0
-    orders_created = 0
-    orders_skipped = 0
-    for group in groups.values():
-        client, warehouse, order_type = resolve_scope(
-            group["client"], group["warehouse"], group["order_type"]
-        )
-        existing = Order.query.filter_by(
-            client_id=client.id,
-            warehouse_id=warehouse.id,
-            order_type_id=order_type.id,
-            order_number=group["order_number"],
-        ).first()
-        if existing is not None:
-            orders_skipped += 1
-            continue
-
-        order = Order(
-            order_number=group["order_number"],
-            customer=group["customer"] or None,
-            carrier=group["carrier"] or None,
-            shipping_service=group["shipping_service"] or None,
-            status=OrderStatus.NEW,
-            client_id=client.id,
-            warehouse_id=warehouse.id,
-            order_type_id=order_type.id,
-            import_batch_id=batch.id,
-        )
-        db.session.add(order)
-        db.session.flush()
-        orders_created += 1
-        for line in group["lines"]:
-            db.session.add(
-                OrderLine(
-                    order_id=order.id,
-                    sku=line["sku"],
-                    description=line["description"],
-                    quantity=line["quantity"],
-                )
-            )
-            lines_created += 1
-
-    batch.row_count = lines_created
-    batch.message = (
-        f"Imported {orders_created} order(s), {lines_created} line(s); "
-        f"skipped {orders_skipped} existing order(s)."
-    )
-    db.session.commit()
-    return batch
+    return _import_orders(source, filename)
 
 
 # --- Workbook builders (used for downloadable templates and tests) ---
