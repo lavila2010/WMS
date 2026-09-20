@@ -1,0 +1,47 @@
+{% extends "inventory/_layout.html" %}
+{% block title %}Inventory Transactions{% endblock %}
+{% block inv_content %}
+<div class="panel">
+  <h2>Filters</h2>
+  <form method="get" action="{{ request.path }}" class="scopebar" style="border:none;padding:0;background:none;">
+    {% if scope.client_id %}<input type="hidden" name="client_id" value="{{ scope.client_id }}" />{% endif %}
+    {% if scope.warehouse_id %}<input type="hidden" name="warehouse_id" value="{{ scope.warehouse_id }}" />{% endif %}
+    <div><label>UPC</label><br /><input name="upc" value="{{ filters.upc }}" /></div>
+    <div><label>Barcode</label><br /><input name="barcode" value="{{ filters.barcode }}" /></div>
+    <div><label>Type</label><br /><input name="type" value="{{ filters.type }}" placeholder="ALLOCATE, PACK…" /></div>
+    <div><label>From</label><br /><input type="date" name="date_from" value="{{ filters.date_from }}" /></div>
+    <div><label>To</label><br /><input type="date" name="date_to" value="{{ filters.date_to }}" /></div>
+    <button class="btn" type="submit">Filter</button>
+    {% if can('INVENTORY_EXPORT') %}<a class="btn btn-secondary" href="{{ url_for('inventory.transactions_csv', **request.args) }}">Export CSV</a>{% endif %}
+  </form>
+</div>
+
+<div class="panel">
+  <h2>Movement Ledger ({{ movements|length }})</h2>
+  <table>
+    <thead>
+      <tr><th>Timestamp</th><th>Barcode</th><th>UPC</th><th>Client</th><th>WH</th><th>Transaction</th><th>From</th><th>To</th><th>From Loc</th><th>To Loc</th><th>Order</th><th>Actor</th></tr>
+    </thead>
+    <tbody>
+      {% for m in movements %}
+        <tr>
+          <td class="sub">{{ m.created_at.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+          <td class="mono">{{ m.barcode }}</td>
+          <td class="mono">{{ m.upc or '—' }}</td>
+          <td>{{ m.client.code if m.client else '—' }}</td>
+          <td>{{ m.warehouse.code if m.warehouse else '—' }}</td>
+          <td>{{ m.movement_type }}</td>
+          <td>{{ m.from_status or '—' }}</td>
+          <td>{{ m.to_status or '—' }}</td>
+          <td>{{ m.from_location or '—' }}</td>
+          <td>{{ m.to_location or '—' }}</td>
+          <td>{{ m.order.order_number if m.order else '—' }}</td>
+          <td>{{ m.actor or '—' }}</td>
+        </tr>
+      {% else %}
+        <tr><td colspan="12" class="sub">No movements in scope.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

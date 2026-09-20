@@ -1,0 +1,30 @@
+<div class="card">
+  <form method="get" class="inline-form" action="{{ request.path }}">
+    <label>Client
+      <select name="client_id" onchange="this.form.submit()">
+        <option value="">All clients</option>
+        {% for c in options.clients %}
+          <option value="{{ c.id }}" {{ 'selected' if scope.client_id == c.id }}>{{ c.code }} — {{ c.name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Warehouse
+      <select name="warehouse_id">
+        <option value="">All warehouses</option>
+        {% for w in options.warehouses %}
+          <option value="{{ w.id }}" {{ 'selected' if scope.warehouse_id == w.id }}>{{ w.code }} — {{ w.name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Order Type
+      <select name="order_type_id">
+        <option value="">All order types</option>
+        {% for t in options.order_types %}
+          <option value="{{ t.id }}" {{ 'selected' if scope.order_type_id == t.id }}>{{ t.code }} — {{ t.name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <button type="submit">Apply</button>
+    <a class="btn-secondary btn" href="{{ request.path }}">Clear</a>
+  </form>
+</div>

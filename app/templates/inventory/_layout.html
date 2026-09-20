@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block head %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/inventory.css') }}" />
+{% endblock %}
+
+{% set tabs = [
+  ('overview', 'Overview', 'inventory.overview'),
+  ('upload', 'Upload Inventory', 'inventory.upload'),
+  ('search', 'Inventory Search', 'inventory.search'),
+  ('transactions', 'Transactions', 'inventory.transactions'),
+  ('import_history', 'Import History', 'inventory.import_history'),
+  ('exceptions', 'Exceptions', 'inventory.exceptions'),
+] %}
+
+{% block content %}
+<div class="inv">
+  <h1>Inventory Control</h1>
+  <p class="sub">Physical inventory is partitioned by Client + Warehouse. Order Type is not an inventory dimension.</p>
+
+  <form class="scopebar" method="get" action="{{ request.path }}">
+    <div>
+      <label>Client</label><br />
+      <select name="client_id" onchange="this.form.submit()">
+        <option value="">All Clients</option>
+        {% for c in options.clients %}
+          <option value="{{ c.id }}" {{ 'selected' if scope.client_id == c.id }}>{{ c.code }} — {{ c.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label>Warehouse</label><br />
+      <select name="warehouse_id">
+        <option value="">All Warehouses</option>
+        {% for w in options.warehouses %}
+          <option value="{{ w.id }}" {{ 'selected' if scope.warehouse_id == w.id }}>{{ w.code }} — {{ w.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <button class="btn" type="submit">Apply</button>
+  </form>
+
+  <div class="tabs">
+    {% for key, label, endpoint in tabs %}
+      {% if key != 'upload' or can('INVENTORY_UPLOAD') %}
+      <a class="{{ 'active' if active_tab == key }}"
+         href="{{ url_for(endpoint, client_id=scope.client_id or None, warehouse_id=scope.warehouse_id or None) }}">{{ label }}</a>
+      {% endif %}
+    {% endfor %}
+  </div>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      {% for category, message in messages %}
+        <div class="box {{ 'errbox' if category == 'error' else 'warnbox' if category == 'warning' else '' }}" style="margin-bottom:0.75rem;{% if category=='success' %}border-left:3px solid #10b981;background:#ecfdf5;{% endif %}">{{ message }}</div>
+      {% endfor %}
+    {% endif %}
+  {% endwith %}
+
+  {% block inv_content %}{% endblock %}
+</div>
+{% endblock %}

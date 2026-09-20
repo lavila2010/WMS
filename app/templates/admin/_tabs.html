@@ -1,0 +1,9 @@
+<div class="page-header">
+  <h1>Administration</h1>
+  <p class="sub">Users, permissions, and audit history</p>
+</div>
+<div class="tabs">
+  {% if can('USERS_VIEW') %}<a class="{{ 'active' if active_tab=='users' }}" href="{{ url_for('admin.users') }}">Users</a>{% endif %}
+  {% if can('PERMISSIONS_ASSIGN') %}<a class="{{ 'active' if active_tab=='permissions' }}" href="{{ url_for('admin.permissions_tab') }}">Permissions</a>{% endif %}
+  {% if can('AUDIT_VIEW') %}<a class="{{ 'active' if active_tab=='audit' }}" href="{{ url_for('admin.audit') }}">Audit</a>{% endif %}
+</div>

@@ -1,0 +1,238 @@
+{% extends "base.html" %}
+{% block title %}Order Processing · {{ order.order_number }}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Order Processing</h1>
+  <p class="sub">Confirm Pick Ticket, pack units into cartons, close the order and generate final documentation</p>
+</div>
+
+<div class="card processing-header">
+  <div class="section-title">
+    <h2 style="margin:0;">Active Order</h2>
+    <span class="badge badge-PROCESSING">{{ snap.status }}</span>
+  </div>
+  <div class="kv-grid">
+    <div class="kv"><span>Pick Ticket</span><strong class="mono">{{ snap.pick_ticket }}</strong></div>
+    <div class="kv"><span>Order</span><strong class="mono">{{ snap.order_number }}</strong></div>
+    <div class="kv"><span>Client</span><strong>{{ snap.client }}</strong></div>
+    <div class="kv"><span>Warehouse</span><strong>{{ snap.warehouse }}</strong></div>
+    <div class="kv"><span>Order Type</span><strong>{{ snap.order_type }}</strong></div>
+    <div class="kv"><span>Customer</span><strong>{{ snap.customer }}</strong></div>
+    <div class="kv"><span>Carrier</span><strong>{{ snap.carrier }}</strong></div>
+    <div class="kv"><span>Shipping Service</span><strong>{{ snap.shipping_service }}</strong></div>
+    <div class="kv"><span>Total Units</span><strong class="num-cell">{{ snap.total_units }}</strong></div>
+    <div class="kv"><span>Allocated Units</span><strong class="num-cell">{{ snap.allocated_units }}</strong></div>
+    <div class="kv"><span>Locations</span><strong class="num-cell">{{ snap.locations }}</strong></div>
+    <div class="kv"><span>Status</span><strong><span class="badge badge-{{ snap.status }}">{{ snap.status }}</span></strong></div>
+  </div>
+</div>
+
+<div class="kpis">
+  <div class="kpi"><div class="num">{{ kpis.total_scanned }}</div><div class="label">Total Scanned</div></div>
+  <div class="kpi"><div class="num">{{ kpis.remaining }}</div><div class="label">Remaining</div></div>
+  <div class="kpi"><div class="num">{{ kpis.closed_cartons }}</div><div class="label">Closed Cartons</div></div>
+  <div class="kpi"><div class="num">{{ kpis.units_in_closed }}</div><div class="label">Units in Closed Cartons</div></div>
+  <div class="kpi"><div class="num">{{ kpis.current_carton_units }}</div><div class="label">Current Carton Units</div></div>
+  <div class="kpi"><div class="num">{{ kpis.current_remaining }}</div><div class="label">Remaining</div></div>
+</div>
+
+<div class="processing-layout">
+  <div class="card">
+    <h2>Remaining Pick Ticket Units</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Location</th>
+          <th>SKU</th>
+          <th>UPC</th>
+          <th>Description</th>
+          <th class="right">Qty</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in remaining %}
+          <tr>
+            <td>{{ row.location }}</td>
+            <td class="mono">{{ row.sku }}</td>
+            <td class="mono">{{ row.upc }}</td>
+            <td>{{ row.description }}</td>
+            <td class="right num-cell">{{ row.qty }}</td>
+          </tr>
+        {% else %}
+          <tr><td colspan="5" class="muted">No remaining units.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    {% if current %}
+      <div class="section-title">
+        <h2>Carton {{ current_index }}</h2>
+        <span class="badge badge-{{ current.status }}">{{ current.status }}</span>
+      </div>
+      <p class="muted" style="margin:0 0 0.75rem;">{{ current.box_number }}</p>
+
+      {% if not dims_ready %}
+        <form method="post" action="{{ url_for('processing.dimensions', order_id=order.id) }}" class="inline-form">
+          <input type="hidden" name="box_id" value="{{ current.id }}" />
+          <label>Length<input name="length" type="number" step="0.1" min="0.1" required /></label>
+          <label>Width<input name="width" type="number" step="0.1" min="0.1" required /></label>
+          <label>Height<input name="height" type="number" step="0.1" min="0.1" required /></label>
+          <label>Dimension Unit
+            <select name="dimension_unit">
+              <option value="in" selected>in</option>
+              <option value="cm">cm</option>
+            </select>
+          </label>
+          <button type="submit">Confirm Carton {{ current_index }}</button>
+        </form>
+      {% elif current.status == 'AWAITING_WEIGHT' %}
+        <form method="post" action="{{ url_for('processing.weight', box_id=current.id) }}" class="inline-form">
+          <label>Carton Weight<input name="weight" type="number" step="0.01" min="0.01" required autofocus /></label>
+          <label>Unit
+            <select name="weight_unit">
+              <option value="lb" selected>lb</option>
+              <option value="kg">kg</option>
+            </select>
+          </label>
+          <button type="submit">Save Weight &amp; Continue</button>
+        </form>
+      {% elif current.status == 'REWEIGH_REQUIRED' %}
+        <div class="flash flash-warning" style="margin-bottom:0.75rem;">REWEIGH REQUIRED</div>
+        {% if can('PROCESSING_EXECUTE') %}
+        <form method="post" action="{{ url_for('processing.add_recalled', box_id=current.id) }}" class="inline-form">
+          <label>Add UPC to Recalled Carton
+            <input id="scan-upc" name="upc" autocomplete="off" />
+          </label>
+          <button type="submit">Add Unit</button>
+        </form>
+        {% endif %}
+        <form method="post" action="{{ url_for('processing.weight', box_id=current.id) }}" class="inline-form" style="margin-top:0.7rem;">
+          <label>Updated Carton Weight<input name="weight" type="number" step="0.01" min="0.01" required /></label>
+          <label>Unit
+            <select name="weight_unit">
+              <option value="lb" selected>lb</option>
+              <option value="kg">kg</option>
+            </select>
+          </label>
+          <button type="submit">Save Updated Weight &amp; Close Carton</button>
+        </form>
+      {% else %}
+        {% if can('PROCESSING_EXECUTE') %}
+        <form method="post" action="{{ url_for('processing.scan_upc' if not current.weight_kg else 'processing.add_recalled', order_id=order.id, box_id=current.id) }}" class="inline-form">
+          <input type="hidden" name="box_id" value="{{ current.id }}" />
+          <label>{{ 'Add UPC to Recalled Carton' if current.weight_kg else 'UPC' }}
+            <input id="scan-upc" name="upc" autocomplete="off" autofocus />
+          </label>
+          <button type="submit">Add Unit</button>
+        </form>
+        {% endif %}
+        {% if current.contents and can('BOX_CLOSE') %}
+          <form method="post" action="{{ url_for('processing.request_close', box_id=current.id) }}" style="margin-top:0.75rem;">
+            <button type="submit">
+              {% if kpis.remaining == 0 %}Close Final Carton{% else %}Close Carton {{ current_index }}{% endif %}
+            </button>
+          </form>
+        {% endif %}
+      {% endif %}
+
+      <h2 style="margin-top:1.1rem;">Units in Current Carton</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>UPC</th>
+            <th>SKU</th>
+            <th>Description</th>
+            <th class="right">Qty in Carton</th>
+            {% if current.status in ['OPEN', 'REWEIGH_REQUIRED'] %}<th>Action</th>{% endif %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in contents %}
+            <tr>
+              <td class="mono">{{ row.upc }}</td>
+              <td class="mono">{{ row.sku }}</td>
+              <td>{{ row.description }}</td>
+              <td class="right num-cell">{{ row.qty }}</td>
+              {% if current.status in ['OPEN', 'REWEIGH_REQUIRED'] %}
+                <td>
+                  <form method="post" action="{{ url_for('processing.remove_unit', content_id=row.remove_id) }}">
+                    <button type="submit" class="btn-danger">Remove Unit</button>
+                  </form>
+                </td>
+              {% endif %}
+            </tr>
+          {% else %}
+            <tr><td colspan="5" class="muted">No units in this carton.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <h2>Current Carton</h2>
+      <p class="muted">No open carton.</p>
+    {% endif %}
+  </div>
+</div>
+
+<div class="card">
+  <h2>Cartons Scanned</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Carton #</th>
+        <th>Status</th>
+        <th>Unit count</th>
+        <th>Dimensions</th>
+        <th>Weight</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in cartons %}
+        <tr>
+          <td>Carton {{ row.index }}</td>
+          <td><span class="badge badge-{{ row.status }}">{{ row.status }}</span></td>
+          <td class="num-cell">{{ row.units }} units</td>
+          <td>{{ row.dims }}</td>
+          <td>{{ row.weight }}</td>
+          <td class="right">
+            {% if row.status == 'CLOSED' and order.status != 'CLOSED' %}
+              <form method="post" action="{{ url_for('processing.recall', box_id=row.box.id) }}">
+                <button type="submit" class="btn-secondary">Recall Carton</button>
+              </form>
+            {% endif %}
+          </td>
+        </tr>
+      {% else %}
+        <tr><td colspan="6" class="muted">No cartons yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="btn-row">
+  <form method="post" action="{{ url_for('processing.cancel', order_id=order.id) }}">
+    <button type="submit" class="btn-secondary">Cancel / Reset Station</button>
+  </form>
+</div>
+
+{% if show_modal %}
+<div class="modal-backdrop" id="close-modal">
+  <div class="card modal-card">
+    <h2>All Units Scanned</h2>
+    <p>Close this order now?</p>
+    <div class="btn-row">
+      <form method="post" action="{{ url_for('processing.decision', order_id=order.id) }}">
+        <input type="hidden" name="choice" value="no" />
+        <button type="submit" class="btn-secondary">No - Make Modifications</button>
+      </form>
+      <form method="post" action="{{ url_for('processing.decision', order_id=order.id) }}">
+        <input type="hidden" name="choice" value="yes" />
+        <button type="submit" class="btn-success">Yes - Close Order &amp; Open PDF</button>
+      </form>
+    </div>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

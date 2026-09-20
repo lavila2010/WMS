@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Permissions{% endblock %}
+{% block content %}
+{% include "admin/_tabs.html" %}
+
+<div class="card">
+  <h2>Assign Permissions</h2>
+  <form method="get" action="{{ url_for('admin.permissions_tab') }}" class="inline-form">
+    <label>User
+      <select name="user_id" onchange="this.form.submit()">
+        <option value="">Select a user…</option>
+        {% for u in users %}<option value="{{ u.id }}" {{ 'selected' if user and user.id==u.id }}>{{ u.username }} ({{ u.role }})</option>{% endfor %}
+      </select>
+    </label>
+  </form>
+</div>
+
+{% if user %}
+<div class="card">
+  <h2>{{ user.username }} <span class="badge">{{ user.role }}</span></h2>
+  {% if user.is_admin() %}
+    <p class="muted">ADMIN users automatically have all permissions.</p>
+  {% else %}
+  <form method="post" action="{{ url_for('admin.assign_permissions', user_id=user.id) }}">
+    {% include "admin/_permission_matrix.html" %}
+    <div class="btn-row"><button type="submit">Save permissions</button></div>
+  </form>
+  {% endif %}
+</div>
+{% endif %}
+{% endblock %}

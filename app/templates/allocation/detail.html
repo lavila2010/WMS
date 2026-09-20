@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}Allocate {{ order.order_number }}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div class="section-title">
+    <h1>Allocate · {{ order.order_number }}</h1>
+    <span class="badge badge-{{ order.status }}">{{ order.status }}</span>
+  </div>
+  <p class="sub">
+    Client {{ order.client.code if order.client else '—' }} ·
+    Warehouse {{ order.warehouse.code if order.warehouse else '—' }} ·
+    Order Type {{ order.order_type.code if order.order_type else '—' }}
+  </p>
+</div>
+
+<div class="card">
+  <h2>Scan / enter barcode</h2>
+  {% if order.status in ['VALIDATED', 'ALLOCATING'] and can('ALLOCATION_EXECUTE') %}
+    <form method="post" action="{{ url_for('allocation.scan', order_id=order.id) }}" class="inline-form">
+      <label>Barcode
+        <input name="barcode" autofocus autocomplete="off" placeholder="Scan or type barcode" required />
+      </label>
+      <button type="submit">Allocate unit</button>
+    </form>
+  {% else %}
+    <p class="muted">Order is {{ order.status }}; scanning is closed.</p>
+  {% endif %}
+</div>
+
+<div class="card">
+  <h2>Progress</h2>
+  <table>
+    <thead><tr><th>SKU</th><th class="right">Ordered</th><th class="right">Allocated</th></tr></thead>
+    <tbody>
+      {% for sku, v in progress.per_sku.items() %}
+        <tr><td class="mono">{{ sku }}</td><td class="right num-cell">{{ v.ordered }}</td><td class="right num-cell">{{ v.allocated }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <p class="muted">Total {{ progress.total_allocated }} / {{ progress.total_ordered }}
+    {% if fully_allocated %}<span class="pill-ok">· fully allocated</span>{% endif %}
+  </p>
+  <div class="btn-row">
+    {% if order.status == 'ALLOCATING' and fully_allocated %}
+      <form method="post" action="{{ url_for('allocation.mark_allocated_view', order_id=order.id) }}"><button type="submit">Mark ALLOCATED</button></form>
+    {% endif %}
+    {% if order.status == 'ALLOCATED' %}
+      <form method="post" action="{{ url_for('allocation.ready_to_pick', order_id=order.id) }}"><button type="submit">Release to picking</button></form>
+    {% endif %}
+  </div>
+</div>
+
+<div class="card">
+  <h2>Allocated units ({{ allocations|length }})</h2>
+  <table>
+    <thead><tr><th>Barcode</th><th>SKU</th><th>Location</th><th></th></tr></thead>
+    <tbody>
+      {% for a in allocations %}
+        <tr>
+          <td class="mono">{{ a.barcode }}</td>
+          <td>{{ a.unit.sku }}</td>
+          <td>{{ a.unit.location or '—' }}</td>
+          <td class="right">
+            {% if order.status in ['VALIDATED', 'ALLOCATING'] and can('ALLOCATION_RELEASE') %}
+            <form method="post" action="{{ url_for('allocation.release', allocation_id=a.id) }}"><button class="btn-danger btn" type="submit">Release</button></form>
+            {% endif %}
+          </td>
+        </tr>
+      {% else %}
+        <tr><td colspan="4" class="muted">No units allocated yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

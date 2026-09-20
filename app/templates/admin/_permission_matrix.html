@@ -1,0 +1,16 @@
+{# expects: groups (module -> [(code, desc)]), granted (set of codes) #}
+<div class="grid">
+  {% for module, perms in groups.items() %}
+    {% if perms %}
+    <div class="card" style="margin:0;">
+      <h2 style="font-size:0.95rem;">{{ module }}</h2>
+      {% for code, desc in perms %}
+        <label style="flex-direction:row;align-items:center;gap:0.5rem;color:var(--text);">
+          <input type="checkbox" name="perm_{{ code }}" value="1" {{ 'checked' if code in granted }} />
+          {{ desc }}
+        </label>
+      {% endfor %}
+    </div>
+    {% endif %}
+  {% endfor %}
+</div>

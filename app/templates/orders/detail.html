@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}Order {{ order.order_number }}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div class="section-title">
+    <h1>Order {{ order.order_number }}</h1>
+    <span class="badge badge-{{ order.status }}">{{ order.status }}</span>
+  </div>
+  <p class="sub">
+    Client {{ order.client.code if order.client else '—' }} ·
+    Warehouse {{ order.warehouse.code if order.warehouse else '—' }} ·
+    Order Type {{ order.order_type.code if order.order_type else '—' }}
+  </p>
+</div>
+
+<div class="card">
+  <div class="grid">
+    <div class="kv"><span>Customer</span><span>{{ order.customer or '—' }}</span></div>
+    <div class="kv"><span>Carrier</span><span>{{ order.carrier or '—' }}</span></div>
+    <div class="kv"><span>Shipping Service</span><span>{{ order.shipping_service or '—' }}</span></div>
+    <div class="kv"><span>Pick Ticket</span><span class="mono">{{ order.pick_ticket.pick_ticket_number if order.pick_ticket else '—' }}</span></div>
+    {% if order.invoice %}
+    <div class="kv"><span>Invoice</span><span class="mono">{{ order.invoice.invoice_number }}</span></div>
+    {% endif %}
+  </div>
+</div>
+
+<div class="card">
+  <h2>Lines</h2>
+  <table>
+    <thead><tr><th>SKU</th><th class="right">Ordered</th><th class="right">Allocated</th></tr></thead>
+    <tbody>
+      {% for sku, v in progress.per_sku.items() %}
+        <tr>
+          <td class="mono">{{ sku }}</td>
+          <td class="right num-cell">{{ v.ordered }}</td>
+          <td class="right num-cell">{{ v.allocated }}</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <p class="muted">Total ordered {{ progress.total_ordered }} · allocated {{ progress.total_allocated }}</p>
+</div>
+
+<div class="card">
+  <div class="btn-row">
+    {% if order.status == 'NEW' %}
+      <form method="post" action="{{ url_for('orders.validate', order_id=order.id) }}">
+        <button type="submit">Validate order</button>
+      </form>
+    {% endif %}
+    {% if order.status in ['VALIDATED', 'ALLOCATING', 'ALLOCATED'] %}
+      <a class="btn" href="{{ url_for('allocation.detail', order_id=order.id) }}">Go to Allocation →</a>
+    {% endif %}
+    {% if order.pick_ticket and can('PICK_TICKET_VIEW') %}
+      <a class="btn-secondary btn" href="{{ url_for('orders.pick_ticket_preview', ticket_id=order.pick_ticket.id) }}">Pick Ticket</a>
+    {% endif %}
+    {% if order.status in ['READY_TO_PICK', 'PROCESSING', 'PROCESSED', 'READY_TO_CLOSE'] %}
+      <a class="btn" href="{{ url_for('processing.detail', order_id=order.id) }}">Go to Order Processing →</a>
+    {% endif %}
+    <a class="btn-secondary btn" href="{{ url_for('orders.index', client_id=order.client_id) }}">Back to Orders</a>
+  </div>
+</div>
+{% endblock %}

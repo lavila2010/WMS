@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}Access Denied{% endblock %}
+{% block content %}
+<div class="access-denied">
+  <h1>Access Denied</h1>
+  <p class="muted">You do not have permission to perform this action.</p>
+  <div class="btn-row" style="justify-content:center;">
+    <a class="btn" href="{{ url_for('dashboard.index') }}">Return to Dashboard</a>
+  </div>
+</div>
+{% endblock %}

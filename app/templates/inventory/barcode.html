@@ -1,0 +1,25 @@
+{% extends "inventory/_layout.html" %}
+{% block title %}Barcode {{ unit.barcode }}{% endblock %}
+{% block inv_content %}
+<div class="panel">
+  <h2>Barcode {{ unit.barcode }}</h2>
+  <div class="grid2">
+    <div class="kv"><span>Barcode</span><span class="mono">{{ unit.barcode }}</span></div>
+    <div class="kv"><span>Client</span><span>{{ unit.client.code if unit.client else '—' }}</span></div>
+    <div class="kv"><span>Warehouse</span><span>{{ unit.warehouse.code if unit.warehouse else '—' }}</span></div>
+    <div class="kv"><span>UPC</span><span class="mono">{{ unit.upc }}</span></div>
+    <div class="kv"><span>SKU</span><span>{{ unit.sku }}</span></div>
+    <div class="kv"><span>Description</span><span>{{ unit.description or '—' }}</span></div>
+    <div class="kv"><span>Location</span><span>{{ unit.location }}</span></div>
+    <div class="kv"><span>Status</span><span class="pill pill-{{ unit.status }}">{{ unit.status }}</span></div>
+    <div class="kv"><span>Order Number</span><span>{{ unit.order.order_number if unit.order else '—' }}</span></div>
+    <div class="kv"><span>Box</span><span>{{ box.box_number if box else '—' }}</span></div>
+    <div class="kv"><span>Last Movement</span><span>
+      {% if last_movement %}{{ last_movement.movement_type }} @ {{ last_movement.created_at.strftime('%Y-%m-%d %H:%M') }}{% else %}—{% endif %}
+    </span></div>
+  </div>
+  <div style="margin-top:0.8rem;">
+    <a class="btn btn-secondary" href="{{ url_for('inventory.transactions', barcode=unit.barcode) }}">View Transaction History</a>
+  </div>
+</div>
+{% endblock %}

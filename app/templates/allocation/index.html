@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Allocation{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Allocation</h1>
+  <p class="sub">Barcode-level allocation. Inventory matching uses Client + Warehouse only — Order Type is an order attribute.</p>
+</div>
+<div class="card">
+  <table>
+    <thead><tr><th>Order</th><th>Customer</th><th class="right">Units</th><th>Status</th><th></th></tr></thead>
+    <tbody>
+      {% for o in orders %}
+        <tr>
+          <td class="mono">{{ o.order_number }}</td>
+          <td>{{ o.customer or '—' }}</td>
+          <td class="right num-cell">{{ o.ordered_quantity }}</td>
+          <td><span class="badge badge-{{ o.status }}">{{ o.status }}</span></td>
+          <td class="right"><a class="btn" href="{{ url_for('allocation.detail', order_id=o.id) }}">Allocate</a></td>
+        </tr>
+      {% else %}
+        <tr><td colspan="5" class="muted">No orders ready for allocation. Validate an order first.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

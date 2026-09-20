@@ -1,0 +1,26 @@
+{% extends "inventory/_layout.html" %}
+{% block title %}Inventory Exceptions{% endblock %}
+{% block inv_content %}
+<div class="panel">
+  <h2>Inventory Exceptions</h2>
+  <table>
+    <thead><tr><th>Type</th><th>Barcode</th><th>UPC</th><th>Client</th><th>Warehouse</th><th>Details</th><th>Created At</th><th>Status</th></tr></thead>
+    <tbody>
+      {% for e in items %}
+        <tr>
+          <td><span class="err">{{ e.type }}</span></td>
+          <td class="mono">{{ e.barcode or '—' }}</td>
+          <td class="mono">{{ e.upc or '—' }}</td>
+          <td>{{ e.client.code if e.client else (e.client_code or '—') }}</td>
+          <td>{{ e.warehouse.code if e.warehouse else (e.warehouse_code or '—') }}</td>
+          <td>{{ e.details or '—' }}</td>
+          <td class="sub">{{ e.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+          <td>{{ e.status }}</td>
+        </tr>
+      {% else %}
+        <tr><td colspan="8" class="sub">No inventory exceptions.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}
