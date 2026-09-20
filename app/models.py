@@ -11,6 +11,7 @@ from datetime import datetime
 from .constants import (
     AllocationStatus,
     BoxStatus,
+    InvoiceStatus,
     OrderStatus,
     UnitStatus,
 )
@@ -19,6 +20,47 @@ from .extensions import db
 
 def _utcnow() -> datetime:
     return datetime.utcnow()
+
+
+class Client(db.Model):
+    __tablename__ = "clients"
+
+    id = db.Column(db.Integer, primary_key=True)
+    code = db.Column(db.String(32), unique=True, nullable=False, index=True)
+    name = db.Column(db.String(255), nullable=False)
+    active = db.Column(db.Boolean, default=True, nullable=False)
+    created_at = db.Column(db.DateTime, default=_utcnow, nullable=False)
+
+    warehouses = db.relationship("Warehouse", backref="client")
+    order_types = db.relationship("OrderType", backref="client")
+
+
+class Warehouse(db.Model):
+    __tablename__ = "warehouses"
+    __table_args__ = (
+        db.UniqueConstraint("client_id", "code", name="uq_warehouse_client_code"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    client_id = db.Column(db.Integer, db.ForeignKey("clients.id"), nullable=False)
+    code = db.Column(db.String(32), nullable=False, index=True)
+    name = db.Column(db.String(255), nullable=False)
+    active = db.Column(db.Boolean, default=True, nullable=False)
+    created_at = db.Column(db.DateTime, default=_utcnow, nullable=False)
+
+
+class OrderType(db.Model):
+    __tablename__ = "order_types"
+    __table_args__ = (
+        db.UniqueConstraint("client_id", "code", name="uq_order_type_client_code"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    client_id = db.Column(db.Integer, db.ForeignKey("clients.id"), nullable=False)
+    code = db.Column(db.String(32), nullable=False, index=True)
+    name = db.Column(db.String(255), nullable=False)
+    active = db.Column(db.Boolean, default=True, nullable=False)
+    created_at = db.Column(db.DateTime, default=_utcnow, nullable=False)
 
 
 class ImportBatch(db.Model):
@@ -43,7 +85,10 @@ class InventoryUnit(db.Model):
     sku = db.Column(db.String(64), nullable=False, index=True)
     description = db.Column(db.String(255))
     location = db.Column(db.String(64))
-    status = db.Column(db.String(20), default=UnitStatus.IN_STOCK, nullable=False)
+    status = db.Column(db.String(20), default=UnitStatus.AVAILABLE, nullable=False)
+    client_id = db.Column(db.Integer, db.ForeignKey("clients.id"), nullable=False, index=True)
+    warehouse_id = db.Column(db.Integer, db.ForeignKey("warehouses.id"), nullable=False, index=True)
+    order_type_id = db.Column(db.Integer, db.ForeignKey("order_types.id"), nullable=False, index=True)
     order_id = db.Column(db.Integer, db.ForeignKey("orders.id"), nullable=True)
     import_batch_id = db.Column(
         db.Integer, db.ForeignKey("import_batches.id"), nullable=True
@@ -52,15 +97,32 @@ class InventoryUnit(db.Model):
     updated_at = db.Column(db.DateTime, default=_utcnow, onupdate=_utcnow, nullable=False)
 
     order = db.relationship("Order", backref="units")
+    client = db.relationship("Client")
+    warehouse = db.relationship("Warehouse")
+    order_type = db.relationship("OrderType")
 
 
 class Order(db.Model):
     __tablename__ = "orders"
+    __table_args__ = (
+        db.UniqueConstraint(
+            "client_id",
+            "warehouse_id",
+            "order_type_id",
+            "order_number",
+            name="uq_order_scope_number",
+        ),
+    )
 
     id = db.Column(db.Integer, primary_key=True)
-    order_number = db.Column(db.String(64), unique=True, nullable=False, index=True)
+    order_number = db.Column(db.String(64), nullable=False, index=True)
     customer = db.Column(db.String(255))
+    carrier = db.Column(db.String(128))
+    shipping_service = db.Column(db.String(128))
     status = db.Column(db.String(20), default=OrderStatus.NEW, nullable=False, index=True)
+    client_id = db.Column(db.Integer, db.ForeignKey("clients.id"), nullable=False, index=True)
+    warehouse_id = db.Column(db.Integer, db.ForeignKey("warehouses.id"), nullable=False, index=True)
+    order_type_id = db.Column(db.Integer, db.ForeignKey("order_types.id"), nullable=False, index=True)
     notes = db.Column(db.Text)
     import_batch_id = db.Column(
         db.Integer, db.ForeignKey("import_batches.id"), nullable=True
@@ -71,6 +133,10 @@ class Order(db.Model):
     lines = db.relationship(
         "OrderLine", backref="order", cascade="all, delete-orphan"
     )
+    client = db.relationship("Client")
+    warehouse = db.relationship("Warehouse")
+    order_type = db.relationship("OrderType")
+    invoice = db.relationship("Invoice", backref="order", uselist=False)
 
     @property
     def ordered_quantity(self) -> int:
@@ -215,3 +281,32 @@ class Document(db.Model):
 
     order = db.relationship("Order", backref="documents")
     box = db.relationship("Box", backref="documents")
+
+
+class Invoice(db.Model):
+    __tablename__ = "invoices"
+    __table_args__ = (
+        db.UniqueConstraint("order_id", name="uq_invoice_order"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    invoice_number = db.Column(db.String(64), unique=True, nullable=False, index=True)
+    order_id = db.Column(
+        db.Integer, db.ForeignKey("orders.id"), unique=True, nullable=False
+    )
+    client_id = db.Column(db.Integer, db.ForeignKey("clients.id"), nullable=False)
+    warehouse_id = db.Column(db.Integer, db.ForeignKey("warehouses.id"), nullable=False)
+    order_type_id = db.Column(db.Integer, db.ForeignKey("order_types.id"), nullable=False)
+    customer = db.Column(db.String(255))
+    carrier = db.Column(db.String(128))
+    shipping_service = db.Column(db.String(128))
+    total_units = db.Column(db.Integer, default=0, nullable=False)
+    total_boxes = db.Column(db.Integer, default=0, nullable=False)
+    total_weight = db.Column(db.Float, default=0.0, nullable=False)
+    status = db.Column(db.String(20), default=InvoiceStatus.ISSUED, nullable=False)
+    created_at = db.Column(db.DateTime, default=_utcnow, nullable=False)
+    created_by = db.Column(db.String(128))
+
+    client = db.relationship("Client")
+    warehouse = db.relationship("Warehouse")
+    order_type = db.relationship("OrderType")
