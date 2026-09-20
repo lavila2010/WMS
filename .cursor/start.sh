@@ -1,15 +1,14 @@
 #!/usr/bin/env bash
-# Per-boot startup for the WMS Cloud Agent environment.
-# Starts the PostgreSQL cluster and waits until it is ready. The Next.js
-# dev server itself runs as a named terminal (see environment.json).
+# Per-boot startup: bring up the local PostgreSQL cluster used for local
+# development/testing. The Flask app itself runs as a named terminal
+# (see environment.json) and connects to DATABASE_URL (Aiven in production).
 set -euo pipefail
 
 PG_VERSION=16
 
-echo "==> Starting PostgreSQL cluster"
+echo "==> Starting local PostgreSQL cluster"
 sudo pg_ctlcluster "${PG_VERSION}" main start 2>/dev/null || true
 
-echo "==> Waiting for PostgreSQL to accept connections"
 for _ in $(seq 1 30); do
   if sudo -u postgres pg_isready -q; then
     echo "==> PostgreSQL is ready"

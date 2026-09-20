@@ -1,32 +1,19 @@
-# dependencies
-/node_modules
-/.pnp
-.pnp.*
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+.pytest_cache/
+.venv/
+venv/
+env/
 
-# next.js
-/.next/
-/out/
-next-env.d.ts
-
-# production
-/build
-
-# misc
-.DS_Store
-*.pem
-
-# debug
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-.pnpm-debug.log*
-
-# env files
+# Env / secrets
 .env
 .env*.local
 
-# typescript
-*.tsbuildinfo
+# Instance data (generated PDFs, local artifacts)
+instance/
 
-# prisma
-/prisma/*.db
+# OS
+.DS_Store
