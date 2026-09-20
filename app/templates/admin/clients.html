@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Clients{% endblock %}
+{% block content %}
+{% include "admin/_tabs.html" %}
+<div class="card">
+  <div class="section-title">
+    <h2>Clients</h2>
+    {% if can('CLIENTS_CREATE') %}<a class="btn" href="{{ url_for('admin.new_client') }}">Create Client</a>{% endif %}
+  </div>
+  <table>
+    <thead><tr><th>Code</th><th>Name</th><th>Initials</th><th>Sequence</th><th>Active</th><th></th></tr></thead>
+    <tbody>
+      {% for c in clients %}
+      <tr>
+        <td class="mono">{{ c.client_code }}</td>
+        <td>{{ c.name }}</td>
+        <td class="mono">{{ c.initials }}</td>
+        <td class="num-cell">{{ '%02d'|format(c.sequence_number) }}</td>
+        <td>{% if c.active %}<span class="pill-ok">Yes</span>{% else %}<span class="pill-bad">No</span>{% endif %}</td>
+        <td>{% if can('CLIENTS_EDIT') %}<a class="btn btn-secondary" href="{{ url_for('admin.edit_client', client_id=c.id) }}">Edit</a>{% endif %}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6" class="muted">No clients.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

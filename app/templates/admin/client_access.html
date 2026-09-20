@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Client Access{% endblock %}
+{% block content %}
+{% include "admin/_tabs.html" %}
+<div class="card">
+  <h2>Client access</h2>
+  <form method="get" class="form-grid">
+    <label>User
+      <select name="user_id" onchange="this.form.submit()">
+        <option value="">Select user</option>
+        {% for u in users %}<option value="{{ u.id }}" {{ 'selected' if user and user.id==u.id }}>{{ u.username }} · {{ u.role }}</option>{% endfor %}
+      </select>
+    </label>
+  </form>
+</div>
+{% if user %}
+<div class="card">
+  {% if user.is_admin() %}
+  <p class="muted">ADMIN users have access to every client.</p>
+  {% else %}
+  <form method="post">
+    <input type="hidden" name="user_id" value="{{ user.id }}">
+    {% for c in clients %}
+    <label class="check">
+      <input type="checkbox" name="client_{{ c.id }}" {{ 'checked' if c.id in granted_ids }}>
+      {{ c.client_code }} · {{ c.name }}
+    </label>
+    {% endfor %}
+    <div class="btn-row"><button class="btn" type="submit">Save access</button></div>
+  </form>
+  {% endif %}
+</div>
+{% endif %}
+{% endblock %}

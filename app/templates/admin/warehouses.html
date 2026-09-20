@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Warehouses{% endblock %}
+{% block content %}
+{% include "admin/_tabs.html" %}
+{% if can('WAREHOUSES_CREATE') %}
+<div class="card">
+  <h2>Create warehouse</h2>
+  <form method="post" action="{{ url_for('admin.create_warehouse_view') }}" class="form-grid">
+    <label>Client
+      <select name="client_id" required>
+        {% for c in clients %}<option value="{{ c.id }}">{{ c.client_code }} · {{ c.name }}</option>{% endfor %}
+      </select>
+    </label>
+    <label>Symbol <input name="warehouse_symbol" required placeholder="NY"></label>
+    <label>Name <input name="name" placeholder="New York"></label>
+    <button class="btn" type="submit">Create</button>
+  </form>
+</div>
+{% endif %}
+<div class="card">
+  <h2>Warehouses</h2>
+  <table>
+    <thead><tr><th>Code</th><th>Symbol</th><th>Name</th><th>Client</th><th>Active</th></tr></thead>
+    <tbody>
+      {% for w in warehouses %}
+      <tr>
+        <td class="mono">{{ w.warehouse_code }}</td>
+        <td class="mono">{{ w.warehouse_symbol }}</td>
+        <td>{{ w.name }}</td>
+        <td class="mono">{{ w.client.client_code }}</td>
+        <td>{% if w.active %}<span class="pill-ok">Yes</span>{% else %}<span class="pill-bad">No</span>{% endif %}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="5" class="muted">No warehouses.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

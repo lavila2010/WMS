@@ -1,51 +1,52 @@
-"""Shared enums/constants for the WMS domain."""
+"""V2 enums and constants."""
 
 from __future__ import annotations
 
 
-class OrderStatus:
-    NEW = "NEW"
-    VALIDATED = "VALIDATED"
-    ALLOCATING = "ALLOCATING"
-    ALLOCATED = "ALLOCATED"
-    READY_TO_PICK = "READY_TO_PICK"
-    PROCESSING = "PROCESSING"
-    PROCESSED = "PROCESSED"
-    READY_TO_CLOSE = "READY_TO_CLOSE"
-    CLOSED = "CLOSED"
-
-    ORDER = [
-        NEW,
-        VALIDATED,
-        ALLOCATING,
-        ALLOCATED,
-        READY_TO_PICK,
-        PROCESSING,
-        PROCESSED,
-        READY_TO_CLOSE,
-        CLOSED,
-    ]
+class Role:
+    ADMIN = "ADMIN"
+    USER = "USER"
+    ALL = [ADMIN, USER]
 
 
-# Allowed forward transitions for the order workflow state machine.
-ORDER_TRANSITIONS = {
-    OrderStatus.NEW: {OrderStatus.VALIDATED},
-    OrderStatus.VALIDATED: {OrderStatus.ALLOCATING},
-    OrderStatus.ALLOCATING: {OrderStatus.ALLOCATED},
-    OrderStatus.ALLOCATED: {OrderStatus.READY_TO_PICK},
-    OrderStatus.READY_TO_PICK: {OrderStatus.PROCESSING},
-    OrderStatus.PROCESSING: {OrderStatus.PROCESSED},
-    OrderStatus.PROCESSED: {OrderStatus.READY_TO_CLOSE},
-    OrderStatus.READY_TO_CLOSE: {OrderStatus.CLOSED},
-    OrderStatus.CLOSED: set(),
-}
+class OperationType:
+    ECOM = "ECOM"
+    RTL = "RTL"
+    WHLS = "WHLS"
+    ALL = [ECOM, RTL, WHLS]
+    CHANNEL = {
+        ECOM: "ECOMMERCE",
+        RTL: "RETAIL",
+        WHLS: "WHOLESALE",
+    }
 
 
 class UnitStatus:
     AVAILABLE = "AVAILABLE"
-    ALLOCATED = "ALLOCATED"
+    RESERVED = "RESERVED"
     PACKED = "PACKED"
     SHIPPED = "SHIPPED"
+    ALL = [AVAILABLE, RESERVED, PACKED, SHIPPED]
+    ON_HAND = [AVAILABLE, RESERVED, PACKED]
+
+
+class OrderStatus:
+    UNALLOCATED = "UNALLOCATED"
+    PARTIALLY_ALLOCATED = "PARTIALLY_ALLOCATED"
+    ALLOCATED = "ALLOCATED"
+    PICK_TICKET_READY = "PICK_TICKET_READY"
+    PROCESSING = "PROCESSING"
+    CLOSED = "CLOSED"
+    CANCELLED = "CANCELLED"
+    ALL = [
+        UNALLOCATED,
+        PARTIALLY_ALLOCATED,
+        ALLOCATED,
+        PICK_TICKET_READY,
+        PROCESSING,
+        CLOSED,
+        CANCELLED,
+    ]
 
 
 class AllocationStatus:
@@ -53,71 +54,24 @@ class AllocationStatus:
     RELEASED = "RELEASED"
 
 
-class BoxStatus:
+class CartonStatus:
     OPEN = "OPEN"
     AWAITING_WEIGHT = "AWAITING_WEIGHT"
     REWEIGH_REQUIRED = "REWEIGH_REQUIRED"
     CLOSED = "CLOSED"
 
 
-class InvoiceStatus:
-    OPEN = "OPEN"
-    ISSUED = "ISSUED"
-
-
-class MovementType:
-    IMPORT_RECEIVE = "IMPORT_RECEIVE"
-    IMPORT_UPDATE = "IMPORT_UPDATE"
-    ALLOCATE = "ALLOCATE"
-    RELEASE = "RELEASE"
+class LedgerType:
+    IMPORT = "IMPORT"
+    ADJUSTMENT = "ADJUSTMENT"
+    RESERVE = "RESERVE"
+    UNRESERVE = "UNRESERVE"
     PACK = "PACK"
+    UNPACK = "UNPACK"
     SHIP = "SHIP"
-
-
-class InventoryExceptionType:
-    DUPLICATE_BARCODE = "DUPLICATE_BARCODE"
-    MISSING_LOCATION = "MISSING_LOCATION"
-    UNKNOWN_CLIENT = "UNKNOWN_CLIENT"
-    UNKNOWN_WAREHOUSE = "UNKNOWN_WAREHOUSE"
-    BARCODE_CLIENT_CONFLICT = "BARCODE_CLIENT_CONFLICT"
-    BARCODE_WAREHOUSE_CONFLICT = "BARCODE_WAREHOUSE_CONFLICT"
-    INVALID_UPC = "INVALID_UPC"
-    INVENTORY_STATUS_CONFLICT = "INVENTORY_STATUS_CONFLICT"
-
-    ALL = [
-        DUPLICATE_BARCODE,
-        MISSING_LOCATION,
-        UNKNOWN_CLIENT,
-        UNKNOWN_WAREHOUSE,
-        BARCODE_CLIENT_CONFLICT,
-        BARCODE_WAREHOUSE_CONFLICT,
-        INVALID_UPC,
-        INVENTORY_STATUS_CONFLICT,
-    ]
-
-
-class DocumentType:
-    PICK_TICKET = "PICK_TICKET"
-    ORDER_CLOSURE = "ORDER_CLOSURE"
-    PACKING_REPORT = "PACKING_REPORT"
-    BOX_DETAIL = "BOX_DETAIL"
-
-
-class PickTicketStatus:
-    ACTIVE = "ACTIVE"
-
-
-class PrintSource:
-    SCREEN = "SCREEN"
-    REPRINT = "REPRINT"
-    BATCH = "BATCH"
-
-
-class AllocationResult:
-    FULL = "FULL"
-    PARTIAL = "PARTIAL"
-    NO_INVENTORY = "NO INVENTORY"
-    EXCEPTION = "EXCEPTION"
+    RETURN = "RETURN"
+    TRANSFER_IN = "TRANSFER_IN"
+    TRANSFER_OUT = "TRANSFER_OUT"
 
 
 class ImportType:
@@ -125,75 +79,4 @@ class ImportType:
     ORDERS = "ORDERS"
 
 
-class ExceptionType:
-    DUPLICATE_SCAN = "DUPLICATE_SCAN"
-    WRONG_ORDER = "WRONG_ORDER"
-    WRONG_CLIENT = "WRONG_CLIENT"
-    WRONG_WAREHOUSE = "WRONG_WAREHOUSE"
-    WRONG_ORDER_TYPE = "WRONG_ORDER_TYPE"
-    UNALLOCATED_BARCODE = "UNALLOCATED_BARCODE"
-    UNIT_IN_OTHER_ACTIVE_ORDER = "UNIT_IN_OTHER_ACTIVE_ORDER"
-    UNIT_ALREADY_BOXED = "UNIT_ALREADY_BOXED"
-    UNKNOWN_BARCODE = "UNKNOWN_BARCODE"
-    UNKNOWN_UPC = "UNKNOWN_UPC"
-    NO_REMAINING_UPC = "NO_REMAINING_UPC"
-    ORDER_LOCKED = "ORDER_LOCKED"
-    ORDER_IN_USE = "Order is currently being processed by another user."
-    CARTON_NOT_OPEN = "CARTON_NOT_OPEN"
-    CARTON_NEEDS_DIMENSIONS = "CARTON_NEEDS_DIMENSIONS"
-    STALE_WEIGHT = "STALE_WEIGHT"
-    NO_DEMAND = "NO_DEMAND"
-    RECONCILIATION = "RECONCILIATION"
-    IMPORT_CONFLICT = "IMPORT_CONFLICT"
-
-
-class Channel:
-    """Canonical order-channel buckets used by KPI Orders.
-
-    Channel is an ORDER attribute derived from ``OrderType`` (never from
-    inventory). Known order-type codes are normalized to one of these three
-    values; unmapped types still count in overall totals but not in a channel.
-    """
-
-    ECOMMERCE = "ECOMMERCE"
-    RETAIL = "RETAIL"
-    WHOLESALE = "WHOLESALE"
-    ALL = [ECOMMERCE, RETAIL, WHOLESALE]
-
-    ALIASES = {
-        "ECOMMERCE": ECOMMERCE,
-        "ECOM": ECOMMERCE,
-        "E-COMMERCE": ECOMMERCE,
-        "B2C": ECOMMERCE,
-        "DTC": ECOMMERCE,
-        "RETAIL": RETAIL,
-        "STORE": RETAIL,
-        "WHOLESALE": WHOLESALE,
-        "B2B": WHOLESALE,
-        "WS": WHOLESALE,
-    }
-
-
-def normalize_channel(code: str | None) -> str | None:
-    if not code:
-        return None
-    return Channel.ALIASES.get(str(code).strip().upper())
-
-
-class ProcessingEvent:
-    PROCESSING_STARTED = "PROCESSING_STARTED"
-    CARTON_CREATED = "CARTON_CREATED"
-    UNIT_SCAN = "UNIT_SCAN"
-    CARTON_CLOSED = "CARTON_CLOSED"
-    CARTON_WEIGHT_RECORDED = "CARTON_WEIGHT_RECORDED"
-    CARTON_RECALLED = "CARTON_RECALLED"
-    CARTON_UNIT_ADDED = "CARTON_UNIT_ADDED"
-    CARTON_UNIT_REMOVED = "CARTON_UNIT_REMOVED"
-    CARTON_WEIGHT_INVALIDATED = "CARTON_WEIGHT_INVALIDATED"
-    CARTON_REWEIGHED = "CARTON_REWEIGHED"
-    CARTON_RECLOSED = "CARTON_RECLOSED"
-    ORDER_RECONCILED = "ORDER_RECONCILED"
-    ORDER_CLOSED = "ORDER_CLOSED"
-    PDF_GENERATED = "PDF_GENERATED"
-    PDF_PRINTED = "PDF_PRINTED"
-    PROCESSING_CANCELLED = "PROCESSING_CANCELLED"
+APP_VERSION = "2.0.0"

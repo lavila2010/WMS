@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Mappings{% endblock %}
+{% block content %}
+{% include "admin/_tabs.html" %}
+{% if can('DIVISIONS_EDIT') %}
+<div class="card">
+  <h2>Map division to warehouse</h2>
+  <form method="post" class="form-grid">
+    <label>Division
+      <select name="division_id" required>
+        {% for d in divisions %}<option value="{{ d.id }}">{{ d.code }}</option>{% endfor %}
+      </select>
+    </label>
+    <label>Warehouse
+      <select name="warehouse_id" required>
+        {% for w in warehouses %}<option value="{{ w.id }}">{{ w.warehouse_code }}</option>{% endfor %}
+      </select>
+    </label>
+    <button class="btn" type="submit">Save mapping</button>
+  </form>
+</div>
+{% endif %}
+<div class="card">
+  <h2>Division ↔ Warehouse</h2>
+  <table>
+    <thead><tr><th>Client</th><th>Division</th><th>Warehouse</th><th>Active</th></tr></thead>
+    <tbody>
+      {% for m in mappings %}
+      <tr>
+        <td class="mono">{{ m.client_id }}</td>
+        <td class="mono">{{ m.division.code }}</td>
+        <td class="mono">{{ m.warehouse.warehouse_code }}</td>
+        <td>{% if m.active %}<span class="pill-ok">Yes</span>{% else %}<span class="pill-bad">No</span>{% endif %}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="4" class="muted">No mappings.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

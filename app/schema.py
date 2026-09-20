@@ -1,139 +1,46 @@
-"""Additive schema patches for existing PostgreSQL databases."""
+"""V2 additive schema objects (sequence + same-client mapping trigger)."""
 
 from __future__ import annotations
 
-from sqlalchemy import inspect, text
+from sqlalchemy import text
 
 from .extensions import db
 
 
-_ORDER_COLUMNS = {
-    "closed_at": "TIMESTAMP",
-    "processing_user_id": "INTEGER",
-    "processing_username": "VARCHAR(64)",
-    "processing_started_at": "TIMESTAMP",
-    "processing_lock_id": "VARCHAR(64)",
-}
-
-_BOX_COLUMNS = {
-    "dimension_unit": "VARCHAR(8) DEFAULT 'in'",
-    "weight_unit": "VARCHAR(8) DEFAULT 'lb'",
-    "reweigh_required": "BOOLEAN DEFAULT FALSE",
-}
-
-
-def ensure_processing_columns() -> None:
+def ensure_v2_schema() -> None:
     try:
         bind = db.engine
-        inspector = inspect(bind)
-        tables = set(inspector.get_table_names())
     except Exception:
         return
-    if "orders" not in tables or "boxes" not in tables:
-        return
-    order_cols = {c["name"] for c in inspector.get_columns("orders")}
-    box_cols = {c["name"] for c in inspector.get_columns("boxes")}
-    statements = []
-    for name, spec in _ORDER_COLUMNS.items():
-        if name not in order_cols:
-            statements.append(f"ALTER TABLE orders ADD COLUMN {name} {spec}")
-    for name, spec in _BOX_COLUMNS.items():
-        if name not in box_cols:
-            statements.append(f"ALTER TABLE boxes ADD COLUMN {name} {spec}")
-    existing_indexes = {i["name"] for i in inspector.get_indexes("orders")} if "orders" in tables else set()
-    if "ix_orders_processing_lock_id" not in existing_indexes:
-        statements.append(
-            "CREATE INDEX IF NOT EXISTS ix_orders_processing_lock_id ON orders (processing_lock_id)"
-        )
-    if not statements:
-        return
+    statements = [
+        "CREATE SEQUENCE IF NOT EXISTS client_code_seq START WITH 1 INCREMENT BY 1",
+        """
+        CREATE OR REPLACE FUNCTION enforce_dw_same_client()
+        RETURNS trigger AS $$
+        DECLARE d_client INT; w_client INT;
+        BEGIN
+          SELECT client_id INTO d_client FROM divisions WHERE id = NEW.division_id;
+          SELECT client_id INTO w_client FROM warehouses WHERE id = NEW.warehouse_id;
+          IF d_client IS NULL OR w_client IS NULL
+             OR d_client <> w_client OR NEW.client_id <> d_client THEN
+            RAISE EXCEPTION 'cross-client division/warehouse mapping rejected';
+          END IF;
+          RETURN NEW;
+        END;
+        $$ LANGUAGE plpgsql
+        """,
+        "DROP TRIGGER IF EXISTS trg_dw_same_client ON division_warehouses",
+        """
+        CREATE TRIGGER trg_dw_same_client
+        BEFORE INSERT OR UPDATE ON division_warehouses
+        FOR EACH ROW EXECUTE FUNCTION enforce_dw_same_client()
+        """,
+    ]
     with bind.begin() as conn:
-        for stmt in statements:
-            conn.execute(text(stmt))
-
-
-def ensure_kpi_schema() -> None:
-    """Create Division + channel columns/indexes for existing databases.
-
-    Schema addition (documented): there was no Division model. Warehouse is a
-    physical location and OrderType is the order channel, so a client-scoped
-    ``divisions`` table and ``orders.division_id`` are required.
-
-    Indexes added (only if missing):
-    - ix_orders_created_at: inclusive date-range KPI filter
-    - ix_orders_division_id: Client + Division grouping
-    - ix_order_lines_order_id: unit SUM without scanning all lines
-    """
-    from .constants import normalize_channel
-    from .models import Client, Division, Order, OrderType
-
-    try:
-        bind = db.engine
-        inspector = inspect(bind)
-        tables = set(inspector.get_table_names())
-    except Exception:
-        return
-    if "orders" not in tables:
-        return
-
-    statements = []
-    if "divisions" not in tables:
-        statements.extend(
-            [
-                """
-                CREATE TABLE divisions (
-                    id SERIAL PRIMARY KEY,
-                    client_id INTEGER NOT NULL REFERENCES clients(id),
-                    code VARCHAR(32) NOT NULL,
-                    name VARCHAR(255) NOT NULL,
-                    active BOOLEAN NOT NULL DEFAULT TRUE,
-                    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-                    CONSTRAINT uq_division_client_code UNIQUE (client_id, code)
-                )
-                """,
-                "CREATE INDEX IF NOT EXISTS ix_divisions_client_id ON divisions (client_id)",
-                "CREATE INDEX IF NOT EXISTS ix_divisions_code ON divisions (code)",
-            ]
-        )
-        tables.add("divisions")
-
-    order_cols = {c["name"] for c in inspector.get_columns("orders")}
-    if "division_id" not in order_cols:
-        statements.append(
-            "ALTER TABLE orders ADD COLUMN division_id INTEGER REFERENCES divisions(id)"
-        )
-    ot_cols = {c["name"] for c in inspector.get_columns("order_types")} if "order_types" in tables else set()
-    if "channel" not in ot_cols:
-        statements.append("ALTER TABLE order_types ADD COLUMN channel VARCHAR(16)")
-
-    existing_indexes = set()
-    for table in ("orders", "order_lines"):
-        if table in tables:
-            existing_indexes.update(i["name"] for i in inspector.get_indexes(table))
-    if "ix_orders_created_at" not in existing_indexes:
-        statements.append("CREATE INDEX IF NOT EXISTS ix_orders_created_at ON orders (created_at)")
-    if "ix_orders_division_id" not in existing_indexes:
-        statements.append("CREATE INDEX IF NOT EXISTS ix_orders_division_id ON orders (division_id)")
-    if "ix_order_lines_order_id" not in existing_indexes and "order_lines" in tables:
-        statements.append("CREATE INDEX IF NOT EXISTS ix_order_lines_order_id ON order_lines (order_id)")
-    if "ix_order_types_channel" not in existing_indexes and "order_types" in tables:
-        statements.append("CREATE INDEX IF NOT EXISTS ix_order_types_channel ON order_types (channel)")
-
-    if statements:
-        with bind.begin() as conn:
-            for stmt in statements:
+        tables = conn.execute(
+            text("SELECT to_regclass('public.division_warehouses')")
+        ).scalar()
+        conn.execute(text(statements[0]))
+        if tables:
+            for stmt in statements[1:]:
                 conn.execute(text(stmt))
-
-    for ot in OrderType.query.all():
-        if not ot.channel:
-            ot.channel = normalize_channel(ot.code)
-    for client in Client.query.all():
-        existing = Division.query.filter_by(client_id=client.id, code="MAIN").first()
-        if existing is None:
-            existing = Division(client_id=client.id, code="MAIN", name="Main")
-            db.session.add(existing)
-            db.session.flush()
-        Order.query.filter(
-            Order.client_id == client.id, Order.division_id.is_(None)
-        ).update({"division_id": existing.id}, synchronize_session=False)
-    db.session.commit()

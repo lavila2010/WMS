@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 from flask import Blueprint, render_template, request
+from flask_login import current_user
 
-from ..constants import OrderStatus, UnitStatus
-from ..models import Box, InventoryUnit, Order, OrderException
 from ..auth import permission_required
-from ..services.filters import apply_scope, parse_scope, scope_options
+from ..constants import OrderStatus, UnitStatus
+from ..models import Client, InventoryUnit, Order, Warehouse
+from ..services.tenant import accessible_clients, user_can_access_client
 
 bp = Blueprint("dashboard", __name__)
 
@@ -13,49 +14,45 @@ bp = Blueprint("dashboard", __name__)
 @bp.route("/")
 @permission_required("DASHBOARD_VIEW")
 def index():
-    scope = parse_scope(request.args)
+    clients = accessible_clients(current_user)
+    client_id = request.args.get("client_id", type=int)
+    warehouse_id = request.args.get("warehouse_id", type=int)
+    if client_id and not user_can_access_client(current_user, client_id):
+        client_id = None
+    warehouses = []
+    if client_id:
+        warehouses = Warehouse.query.filter_by(client_id=client_id).order_by(Warehouse.warehouse_symbol).all()
+        if warehouse_id and not any(w.id == warehouse_id for w in warehouses):
+            warehouse_id = None
 
-    def orders_q():
-        return apply_scope(Order.query, Order, scope)
+    units = InventoryUnit.query
+    orders = Order.query
+    if client_id:
+        units = units.filter_by(client_id=client_id)
+        orders = orders.filter_by(client_id=client_id)
+    elif not current_user.is_admin():
+        ids = [c.id for c in clients]
+        units = units.filter(InventoryUnit.client_id.in_(ids or [-1]))
+        orders = orders.filter(Order.client_id.in_(ids or [-1]))
+    if warehouse_id:
+        units = units.filter_by(warehouse_id=warehouse_id)
+        orders = orders.filter_by(warehouse_id=warehouse_id)
 
-    def units_q():
-        return apply_scope(InventoryUnit.query, InventoryUnit, scope)
-
-    status_counts = {
-        status: orders_q().filter(Order.status == status).count()
-        for status in OrderStatus.ORDER
-    }
     unit_counts = {
-        "total": units_q().count(),
-        "available": units_q().filter(InventoryUnit.status == UnitStatus.AVAILABLE).count(),
-        "allocated": units_q().filter(InventoryUnit.status == UnitStatus.ALLOCATED).count(),
-        "packed": units_q().filter(InventoryUnit.status == UnitStatus.PACKED).count(),
-        "shipped": units_q().filter(InventoryUnit.status == UnitStatus.SHIPPED).count(),
+        "total": units.count(),
+        "available": units.filter_by(status=UnitStatus.AVAILABLE).count(),
+        "reserved": units.filter_by(status=UnitStatus.RESERVED).count(),
+        "packed": units.filter_by(status=UnitStatus.PACKED).count(),
+        "shipped": units.filter_by(status=UnitStatus.SHIPPED).count(),
     }
-
-    box_q = Box.query.join(Order, Box.order_id == Order.id)
-    box_q = apply_scope(box_q, Order, scope)
-    exc_q = OrderException.query.filter_by(resolved=False)
-    if any(scope.values()):
-        exc_q = exc_q.join(Order, OrderException.order_id == Order.id)
-        exc_q = apply_scope(exc_q, Order, scope)
-
-    stats = {
-        "orders_total": orders_q().count(),
-        "open_exceptions": exc_q.count(),
-        "boxes_total": box_q.count(),
-    }
-    recent_orders = orders_q().order_by(Order.created_at.desc()).limit(8).all()
-    recent_exceptions = (
-        OrderException.query.order_by(OrderException.created_at.desc()).limit(8).all()
-    )
+    status_counts = {s: orders.filter_by(status=s).count() for s in OrderStatus.ALL}
     return render_template(
         "dashboard.html",
-        status_counts=status_counts,
+        clients=clients,
+        warehouses=warehouses,
+        client_id=client_id,
+        warehouse_id=warehouse_id,
         unit_counts=unit_counts,
-        stats=stats,
-        recent_orders=recent_orders,
-        recent_exceptions=recent_exceptions,
-        options=scope_options(scope["client_id"]),
-        scope=scope,
+        status_counts=status_counts,
+        stats={"orders_total": orders.count(), "boxes_total": 0, "open_exceptions": 0},
     )

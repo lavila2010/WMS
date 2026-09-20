@@ -1,15 +1,9 @@
-"""Permission catalog, module groupings, and role defaults."""
+"""V2 permission catalog and navigation."""
 
 from __future__ import annotations
 
+from .constants import Role
 
-class Role:
-    ADMIN = "ADMIN"
-    USER = "USER"
-    ALL = [ADMIN, USER]
-
-
-# (code, description, module)
 PERMISSIONS = [
     ("DASHBOARD_VIEW", "View the dashboard", "Dashboard"),
     ("INVENTORY_VIEW", "View inventory", "Inventory"),
@@ -36,25 +30,38 @@ PERMISSIONS = [
     ("USERS_DISABLE", "Enable / disable users", "Administration"),
     ("PERMISSIONS_ASSIGN", "Assign permissions", "Administration"),
     ("AUDIT_VIEW", "View audit log", "Administration"),
+    ("CLIENTS_VIEW", "View clients", "Administration"),
+    ("CLIENTS_CREATE", "Create clients", "Administration"),
+    ("CLIENTS_EDIT", "Edit clients", "Administration"),
+    ("WAREHOUSES_VIEW", "View warehouses", "Administration"),
+    ("WAREHOUSES_CREATE", "Create warehouses", "Administration"),
+    ("WAREHOUSES_EDIT", "Edit warehouses", "Administration"),
+    ("DIVISIONS_VIEW", "View divisions", "Administration"),
+    ("DIVISIONS_CREATE", "Create divisions", "Administration"),
+    ("DIVISIONS_EDIT", "Edit divisions", "Administration"),
 ]
 
 ALL_CODES = [p[0] for p in PERMISSIONS]
 
-# Permissions granted to a freshly created USER by default.
 USER_DEFAULTS = [
     "DASHBOARD_VIEW",
     "INVENTORY_VIEW",
     "ORDERS_VIEW",
     "PICK_TICKET_VIEW",
     "ALLOCATION_VIEW",
-    "ALLOCATION_EXECUTE",
     "PROCESSING_VIEW",
-    "PROCESSING_EXECUTE",
     "REPORTS_VIEW",
 ]
 
-# Ordered grouping for the create/edit user permission matrix.
-MODULE_ORDER = ["Dashboard", "Inventory", "Orders", "Allocation", "Processing", "Reports", "Administration"]
+MODULE_ORDER = [
+    "Dashboard",
+    "Inventory",
+    "Orders",
+    "Allocation",
+    "Processing",
+    "Reports",
+    "Administration",
+]
 
 
 def grouped_permissions():
@@ -64,7 +71,6 @@ def grouped_permissions():
     return groups
 
 
-# Modules shown in the top nav, keyed by the VIEW permission that reveals them.
 NAV_MODULES = [
     ("DASHBOARD_VIEW", "Dashboard", "dashboard.index"),
     ("INVENTORY_VIEW", "Inventory", "inventory.overview"),
@@ -74,4 +80,13 @@ NAV_MODULES = [
     ("REPORTS_VIEW", "Order Reports", "reports.index"),
     ("REPORTS_VIEW", "KPI Orders", "kpi.orders"),
     ("USERS_VIEW", "Administration", "admin.users"),
+]
+
+__all__ = [
+    "Role",
+    "PERMISSIONS",
+    "ALL_CODES",
+    "USER_DEFAULTS",
+    "grouped_permissions",
+    "NAV_MODULES",
 ]

@@ -3,17 +3,36 @@
 {% block content %}
 <div class="page-header">
   <h1>Dashboard</h1>
-  <p class="sub">Operational overview for the selected Client, Warehouse, and Order Type</p>
+  <p class="sub">Operational overview for the selected Client and Warehouse</p>
 </div>
 
-{% include "_scope_filter.html" %}
+<div class="card">
+  <form method="get" class="form-grid">
+    <label>Client
+      <select name="client_id" onchange="this.form.submit()">
+        <option value="">All accessible</option>
+        {% for c in clients %}
+        <option value="{{ c.id }}" {{ 'selected' if client_id==c.id }}>{{ c.client_code }} · {{ c.name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Warehouse
+      <select name="warehouse_id" onchange="this.form.submit()">
+        <option value="">All</option>
+        {% for w in warehouses %}
+        <option value="{{ w.id }}" {{ 'selected' if warehouse_id==w.id }}>{{ w.warehouse_code }}</option>
+        {% endfor %}
+      </select>
+    </label>
+  </form>
+</div>
 
 <div class="card">
   <h2>Inventory units</h2>
   <div class="grid">
     <div class="stat"><div class="num">{{ unit_counts.total }}</div><div class="label">Total</div></div>
     <div class="stat"><div class="num">{{ unit_counts.available }}</div><div class="label">Available</div></div>
-    <div class="stat"><div class="num">{{ unit_counts.allocated }}</div><div class="label">Allocated</div></div>
+    <div class="stat"><div class="num">{{ unit_counts.reserved }}</div><div class="label">Reserved</div></div>
     <div class="stat"><div class="num">{{ unit_counts.packed }}</div><div class="label">Packed</div></div>
     <div class="stat"><div class="num">{{ unit_counts.shipped }}</div><div class="label">Shipped</div></div>
   </div>
@@ -25,7 +44,7 @@
     {% for status, count in status_counts.items() %}
       <div class="stat">
         <div class="num">{{ count }}</div>
-        <div class="label"><span class="badge badge-{{ status }}">{{ status }}</span></div>
+        <div class="label"><span class="badge">{{ status }}</span></div>
       </div>
     {% endfor %}
   </div>
@@ -35,47 +54,8 @@
   <h2>Overview</h2>
   <div class="grid">
     <div class="stat"><div class="num">{{ stats.orders_total }}</div><div class="label">Orders</div></div>
-    <div class="stat"><div class="num">{{ stats.boxes_total }}</div><div class="label">Boxes</div></div>
+    <div class="stat"><div class="num">{{ stats.boxes_total }}</div><div class="label">Cartons</div></div>
     <div class="stat"><div class="num">{{ stats.open_exceptions }}</div><div class="label">Open exceptions</div></div>
   </div>
-</div>
-
-<div class="card">
-  <div class="section-title"><h2>Recent orders</h2><a class="muted" href="{{ url_for('orders.index') }}">All orders →</a></div>
-  <table>
-    <thead><tr><th>Order</th><th>Customer</th><th>Status</th><th class="right">Units</th></tr></thead>
-    <tbody>
-      {% for o in recent_orders %}
-        <tr>
-          <td><a class="mono" href="{{ url_for('orders.detail', order_id=o.id) }}">{{ o.order_number }}</a></td>
-          <td>{{ o.customer or '—' }}</td>
-          <td><span class="badge badge-{{ o.status }}">{{ o.status }}</span></td>
-          <td class="right num-cell">{{ o.ordered_quantity }}</td>
-        </tr>
-      {% else %}
-        <tr><td colspan="4" class="muted">No orders yet. Import Orders.xlsx to begin.</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
-</div>
-
-<div class="card">
-  <h2>Recent exceptions</h2>
-  <table>
-    <thead><tr><th>When</th><th>Order</th><th>Barcode</th><th>Type</th><th>Message</th></tr></thead>
-    <tbody>
-      {% for e in recent_exceptions %}
-        <tr>
-          <td class="muted">{{ e.created_at.strftime('%m-%d %H:%M') }}</td>
-          <td>{{ e.order.order_number if e.order else '—' }}</td>
-          <td class="mono">{{ e.barcode or '—' }}</td>
-          <td>{{ e.type }}</td>
-          <td class="muted">{{ e.message }}</td>
-        </tr>
-      {% else %}
-        <tr><td colspan="5" class="muted">No exceptions recorded.</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
 </div>
 {% endblock %}

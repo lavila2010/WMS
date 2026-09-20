@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Edit' if client else 'Create' }} Client{% endblock %}
+{% block content %}
+{% include "admin/_tabs.html" %}
+<div class="card">
+  <h2>{{ 'Edit client' if client else 'Create client' }}</h2>
+  <form method="post" class="form-grid">
+    <label>Name
+      <input name="name" required value="{{ client.name if client else '' }}">
+    </label>
+    <label>Initials
+      <input name="initials" required maxlength="8" value="{{ client.initials if client else '' }}" {{ 'readonly' if client }}>
+    </label>
+    {% if client %}
+    <label>Client code
+      <input value="{{ client.client_code }}" readonly>
+    </label>
+    <label class="check"><input type="checkbox" name="active" {{ 'checked' if client.active }}> Active</label>
+    {% endif %}
+    <div class="btn-row">
+      <button class="btn" type="submit">Save</button>
+      <a class="btn btn-secondary" href="{{ url_for('admin.clients') }}">Cancel</a>
+    </div>
+  </form>
+  {% if client %}<p class="muted">Client code is assigned by the database and cannot be changed.</p>{% endif %}
+</div>
+{% endblock %}
