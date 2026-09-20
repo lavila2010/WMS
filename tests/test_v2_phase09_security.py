@@ -50,11 +50,15 @@ def test_p9_secure_cookie_flag_in_production(monkeypatch):
     monkeypatch.setenv("WMS_ENV", "production")
     monkeypatch.setenv("SECRET_KEY", "unique-production-secret-key-value")
     monkeypatch.setenv("SESSION_COOKIE_SECURE", "true")
-    monkeypatch.setenv("DATABASE_URL", "postgresql://wms:wms@127.0.0.1:5432/wms_test")
-    monkeypatch.delenv("WMS_V2_DATABASE_URL", raising=False)
+    monkeypatch.setenv(
+        "WMS_V2_DATABASE_URL",
+        "postgresql://wms:wms@pg-wms-v2.example.aivencloud.com:25432/wms?sslmode=require",
+    )
+    monkeypatch.delenv("DATABASE_URL", raising=False)
     cfg = Config()
     assert cfg.SESSION_COOKIE_SECURE is True
     assert cfg.SESSION_COOKIE_HTTPONLY is True
+    assert "sslmode=require" in cfg.SQLALCHEMY_DATABASE_URI
 
 
 def test_p9_duplicate_scan_and_double_close(app, db, admin_user):
