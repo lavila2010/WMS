@@ -25,7 +25,9 @@ def test_templates_download(client):
 
 
 def test_import_inventory_via_http(client, db):
-    wb = build_inventory_workbook([{"barcode": "R-1", "sku": "SKU-A"}])
+    wb = build_inventory_workbook(
+        [{"client": "ACME", "warehouse": "WH1", "order_type": "B2C", "barcode": "R-1", "sku": "SKU-A"}]
+    )
     data = {"file": (io.BytesIO(wb.read()), "Inventory.xlsx")}
     resp = client.post(
         "/inventory/import", data=data, content_type="multipart/form-data",
@@ -37,7 +39,7 @@ def test_import_inventory_via_http(client, db):
 
 def test_import_orders_via_http(client, db):
     wb = build_orders_workbook(
-        [{"order_number": "SO-HTTP", "sku": "SKU-A", "quantity": 3}]
+        [{"client": "ACME", "warehouse": "WH1", "order_type": "B2C", "order_number": "SO-HTTP", "sku": "SKU-A", "quantity": 3}]
     )
     data = {"file": (io.BytesIO(wb.read()), "Orders.xlsx")}
     resp = client.post(
@@ -46,3 +48,8 @@ def test_import_orders_via_http(client, db):
     )
     assert resp.status_code == 200
     assert Order.query.filter_by(order_number="SO-HTTP").count() == 1
+
+
+def test_reports_search_by_invoice_number_route(client, db):
+    resp = client.get("/reports/?invoice_number=INV-")
+    assert resp.status_code == 200

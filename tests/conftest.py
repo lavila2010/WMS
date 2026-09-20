@@ -6,6 +6,7 @@ from app import create_app
 from app.config import Config
 from app.extensions import db as _db
 from app.models import InventoryUnit, Order, OrderLine
+from app.services.scope import resolve_scope
 
 TEST_DB_URL = os.environ.get(
     "TEST_DATABASE_URL", "postgresql://wms:wms@127.0.0.1:5432/wms_test"
@@ -38,9 +39,35 @@ def client(app):
 
 # --- Factory helpers ---
 
+DEFAULT_SCOPE = ("ACME", "WH1", "B2C")
 
-def make_order(order_number="SO-1", customer="Acme", lines=None):
-    order = Order(order_number=order_number, customer=customer)
+
+def make_scope(client="ACME", warehouse="WH1", order_type="B2C"):
+    scope = resolve_scope(client, warehouse, order_type)
+    _db.session.commit()
+    return scope
+
+
+def make_order(
+    order_number="SO-1",
+    customer="Acme",
+    lines=None,
+    client="ACME",
+    warehouse="WH1",
+    order_type="B2C",
+    carrier="UPS",
+    shipping_service="Ground",
+):
+    c, w, ot = resolve_scope(client, warehouse, order_type)
+    order = Order(
+        order_number=order_number,
+        customer=customer,
+        carrier=carrier,
+        shipping_service=shipping_service,
+        client_id=c.id,
+        warehouse_id=w.id,
+        order_type_id=ot.id,
+    )
     _db.session.add(order)
     _db.session.flush()
     for sku, qty in (lines or []):
@@ -49,8 +76,23 @@ def make_order(order_number="SO-1", customer="Acme", lines=None):
     return order
 
 
-def make_unit(barcode, sku, location="A-01"):
-    unit = InventoryUnit(barcode=barcode, sku=sku, location=location)
+def make_unit(
+    barcode,
+    sku,
+    location="A-01",
+    client="ACME",
+    warehouse="WH1",
+    order_type="B2C",
+):
+    c, w, ot = resolve_scope(client, warehouse, order_type)
+    unit = InventoryUnit(
+        barcode=barcode,
+        sku=sku,
+        location=location,
+        client_id=c.id,
+        warehouse_id=w.id,
+        order_type_id=ot.id,
+    )
     _db.session.add(unit)
     _db.session.commit()
     return unit
@@ -58,4 +100,4 @@ def make_unit(barcode, sku, location="A-01"):
 
 @pytest.fixture()
 def factories():
-    return {"make_order": make_order, "make_unit": make_unit}
+    return {"make_order": make_order, "make_unit": make_unit, "make_scope": make_scope}

@@ -91,7 +91,7 @@ def test_scan_unallocated_unit_rejected(db, ready_order):
     db.session.commit()
     with pytest.raises(BarcodeError) as exc:
         scan_into_box(box, "PK-3")  # never allocated to this order
-    assert exc.value.exc_type == ExceptionType.WRONG_ORDER
+    assert exc.value.exc_type == ExceptionType.UNALLOCATED_BARCODE
 
 
 def test_close_box_requires_weight_and_contents(db, ready_order):
