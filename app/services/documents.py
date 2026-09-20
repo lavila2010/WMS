@@ -1,328 +1,132 @@
-"""PDF document generation using reportlab.
-
-Documents:
-    - Pick Ticket
-    - Order Closure Report
-    - Packing Report
-    - Box Detail
-"""
+"""Document storage abstraction and closure PDF."""
 
 from __future__ import annotations
 
 import os
-from datetime import datetime
+from io import BytesIO
+from pathlib import Path
+from uuid import uuid4
 
 from flask import current_app
-from reportlab.lib import colors
-from reportlab.lib.pagesizes import A4
-from reportlab.lib.styles import getSampleStyleSheet
-from reportlab.lib.units import mm
-from reportlab.platypus import (
-    SimpleDocTemplate,
-    Paragraph,
-    Spacer,
-    Table,
-    TableStyle,
-)
+from reportlab.lib.pagesizes import letter
+from reportlab.pdfgen import canvas
 
-from ..constants import AllocationStatus, DocumentType
+from ..auth import current_actor, record_audit
 from ..extensions import db
-from ..models import Allocation, Box, Document, Order
-from .packing import reconcile
+from ..models import Carton, CartonContent, Document, InventoryUnit, Order, PickTicket
 
 
-def _styles():
-    return getSampleStyleSheet()
+class DocumentStore:
+    def save(self, name: str, data: bytes, content_type: str) -> str:
+        raise NotImplementedError
+
+    def open(self, storage_key: str) -> bytes:
+        raise NotImplementedError
+
+    def url_or_path(self, storage_key: str) -> str:
+        raise NotImplementedError
 
 
-def _table(data, col_widths=None):
-    tbl = Table(data, colWidths=col_widths, repeatRows=1)
-    tbl.setStyle(
-        TableStyle(
-            [
-                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#F4F6F8")),
-                ("TEXTCOLOR", (0, 0), (-1, 0), colors.HexColor("#6B7280")),
-                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-                ("FONTSIZE", (0, 0), (-1, -1), 8),
-                ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#E3E7EB")),
-                ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#F9FBFC")]),
-                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-                ("TEXTCOLOR", (0, 1), (-1, -1), colors.HexColor("#182230")),
-            ]
+class LocalDocumentStore(DocumentStore):
+    def __init__(self, root: str):
+        self.root = Path(root)
+        self.root.mkdir(parents=True, exist_ok=True)
+
+    def save(self, name: str, data: bytes, content_type: str) -> str:
+        key = f"{uuid4().hex}_{name}"
+        path = self.root / key
+        path.write_bytes(data)
+        return key
+
+    def open(self, storage_key: str) -> bytes:
+        return (self.root / storage_key).read_bytes()
+
+    def url_or_path(self, storage_key: str) -> str:
+        return str(self.root / storage_key)
+
+
+def get_store() -> DocumentStore:
+    kind = (current_app.config.get("DOCUMENT_STORE") or os.environ.get("DOCUMENT_STORE") or "local").lower()
+    if kind == "s3":
+        # Credentials are optional during build; fall back to local and do not claim durable storage.
+        if not os.environ.get("S3_BUCKET"):
+            return LocalDocumentStore(current_app.config["DOCUMENTS_DIR"])
+    return LocalDocumentStore(current_app.config["DOCUMENTS_DIR"])
+
+
+def render_closure_pdf(order: Order) -> bytes:
+    ticket = PickTicket.query.filter_by(order_id=order.id).first()
+    cartons = Carton.query.filter_by(order_id=order.id).order_by(Carton.id).all()
+    buffer = BytesIO()
+    pdf = canvas.Canvas(buffer, pagesize=letter)
+    width, height = letter
+    y = height - 56
+    pdf.setFont("Helvetica-Bold", 14)
+    pdf.drawString(56, y, f"Order Closure {order.wms_order_id}")
+    y -= 18
+    pdf.setFont("Helvetica", 10)
+    for line in (
+        f"Client {order.client.client_code}  Division {order.division.code}  Warehouse {order.warehouse.warehouse_code}",
+        f"Pick Ticket {ticket.pick_ticket_number if ticket else '—'}  Customer {order.customer or '—'}",
+        f"Carrier {order.carrier or '—'}  Service {order.shipping_service or '—'}",
+        f"Closed {order.closed_at}  by {order.closed_by_username or '—'}",
+    ):
+        pdf.drawString(56, y, line)
+        y -= 14
+    y -= 8
+    pdf.setFont("Helvetica-Bold", 10)
+    pdf.drawString(56, y, "Cartons")
+    y -= 14
+    pdf.setFont("Helvetica", 9)
+    for carton in cartons:
+        units = CartonContent.query.filter_by(carton_id=carton.id).count()
+        pdf.drawString(
+            56,
+            y,
+            f"{carton.carton_number}  {carton.length}x{carton.width}x{carton.height} {carton.dimension_unit}  "
+            f"{carton.weight} {carton.weight_unit}  units={units}",
         )
-    )
-    return tbl
+        y -= 12
+        if y < 72:
+            pdf.showPage()
+            y = height - 56
+    pdf.setFont("Helvetica-Bold", 10)
+    pdf.drawString(56, y, "Units")
+    y -= 14
+    pdf.setFont("Helvetica", 9)
+    for unit in InventoryUnit.query.filter_by(allocated_order_id=order.id).order_by(InventoryUnit.id):
+        pdf.drawString(56, y, f"{unit.upc}  {unit.sku or '—'}  {unit.location}  {unit.status}")
+        y -= 11
+        if y < 72:
+            pdf.showPage()
+            y = height - 56
+    pdf.save()
+    return buffer.getvalue()
 
 
-def _persist(elements, *, doc_type: str, order_id=None, box_id=None, label: str) -> Document:
-    docs_dir = current_app.config["DOCUMENTS_DIR"]
-    os.makedirs(docs_dir, exist_ok=True)
-    stamp = datetime.utcnow().strftime("%Y%m%d%H%M%S%f")
-    filename = f"{doc_type.lower()}_{label}_{stamp}.pdf"
-    path = os.path.join(docs_dir, filename)
-
-    pdf = SimpleDocTemplate(path, pagesize=A4, title=f"{doc_type} {label}")
-    pdf.build(elements)
-
-    record = Document(
-        order_id=order_id,
-        box_id=box_id,
-        type=doc_type,
+def persist_closure_pdf(order: Order) -> Document:
+    store = get_store()
+    data = render_closure_pdf(order)
+    filename = f"{order.wms_order_id}-closure.pdf"
+    key = store.save(filename, data, "application/pdf")
+    uid, uname = current_actor()
+    document = Document(
+        client_id=order.client_id,
+        order_id=order.id,
+        type="ORDER_CLOSURE",
         filename=filename,
-        path=path,
+        storage_key=key,
+        created_by_user_id=uid,
+        created_by_username=uname,
     )
-    db.session.add(record)
-    db.session.commit()
-    return record
-
-
-def _header(styles, title: str, subtitle: str) -> list:
-    return [
-        Paragraph(f"<b>{title}</b>", styles["Title"]),
-        Paragraph(subtitle, styles["Normal"]),
-        Paragraph(
-            f"Generated {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}",
-            styles["Normal"],
-        ),
-        Spacer(1, 8 * mm),
-    ]
-
-
-def _scope_line(order: Order) -> str:
-    client = order.client.code if order.client else "?"
-    wh = order.warehouse.code if order.warehouse else "?"
-    ot = order.order_type.code if order.order_type else "?"
-    return f"Client {client} · Warehouse {wh} · Order Type {ot}"
-
-
-def generate_pick_ticket(order: Order, pick_ticket=None) -> Document:
-    """Warehouse Pick Ticket showing exact allocated barcode + location."""
-    from .pick_tickets import pick_lines, unique_locations
-
-    styles = _styles()
-    pt_number = getattr(pick_ticket, "pick_ticket_number", None) or (
-        order.pick_ticket.pick_ticket_number if getattr(order, "pick_ticket", None) else "—"
+    db.session.add(document)
+    db.session.flush()
+    record_audit(
+        "PDF_GENERATED",
+        module="Processing",
+        entity_type="document",
+        entity_id=document.id,
+        client_id=order.client_id,
+        detail=filename,
     )
-    allocated_at = None
-    if pick_ticket is not None:
-        allocated_at = pick_ticket.assigned_at
-    elif getattr(order, "pick_ticket", None):
-        allocated_at = order.pick_ticket.assigned_at
-
-    head = [
-        [
-            Paragraph("<b>WMS SYSTEM</b><br/>Warehouse Pick Ticket", styles["Heading2"]),
-            Paragraph(
-                f"<b>Pick Ticket</b> {pt_number}<br/>"
-                f"<b>Order</b> {order.order_number}",
-                styles["Normal"],
-            ),
-        ]
-    ]
-    head_tbl = Table(head, colWidths=[110 * mm, 55 * mm])
-    head_tbl.setStyle(TableStyle([
-        ("VALIGN", (0, 0), (-1, -1), "TOP"),
-        ("ALIGN", (1, 0), (1, 0), "RIGHT"),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
-    ]))
-    elements = [head_tbl, Spacer(1, 4 * mm)]
-
-    info = [
-        ["Order Information", ""],
-        ["Client", order.client.code if order.client else "—"],
-        ["Warehouse", order.warehouse.code if order.warehouse else "—"],
-        ["Order Type", order.order_type.code if order.order_type else "—"],
-        ["Customer", order.customer or "—"],
-        ["Carrier", order.carrier or "—"],
-        ["Shipping Service", order.shipping_service or "—"],
-        ["Order Date", order.created_at.strftime("%Y-%m-%d %H:%M") if order.created_at else "—"],
-        ["Allocated", allocated_at.strftime("%Y-%m-%d %H:%M") if allocated_at else "—"],
-        ["Total Units", str(sum(line.quantity for line in order.lines))],
-    ]
-    elements.append(_table(info, col_widths=[50 * mm, 115 * mm]))
-    elements.append(Spacer(1, 6 * mm))
-
-    lines = pick_lines(order)
-    rows = [["Seq", "Location", "SKU", "UPC", "Description", "Barcode", "Qty", "Picked"]]
-    for i, line in enumerate(lines, 1):
-        rows.append([
-            str(i),
-            line["location"],
-            line["sku"],
-            line["upc"],
-            line["description"],
-            line["barcode"],
-            str(line["qty"]),
-            "☐",
-        ])
-    if len(rows) == 1:
-        rows.append(["—", "", "", "", "No allocated units", "", "", ""])
-    elements.append(
-        _table(
-            rows,
-            col_widths=[12 * mm, 24 * mm, 24 * mm, 28 * mm, 40 * mm, 28 * mm, 12 * mm, 16 * mm],
-        )
-    )
-    elements.append(Spacer(1, 6 * mm))
-    elements.append(
-        Paragraph(
-            f"Total Units to Pick: <b>{len(lines)}</b> &nbsp;&nbsp; "
-            f"Unique Locations: <b>{unique_locations(order)}</b> &nbsp;&nbsp; "
-            f"Status: <b>{getattr(pick_ticket, 'status', None) or 'ACTIVE'}</b>",
-            styles["Normal"],
-        )
-    )
-    return _persist(
-        elements, doc_type=DocumentType.PICK_TICKET, order_id=order.id,
-        label=order.order_number,
-    )
-
-
-def generate_packing_report(order: Order) -> Document:
-    styles = _styles()
-    elements = _header(
-        styles, "Packing Report", f"Order {order.order_number}"
-    )
-    for box in sorted(order.boxes, key=lambda b: b.box_number):
-        dims = "×".join(
-            str(d) for d in [box.length_cm, box.width_cm, box.height_cm] if d
-        ) or "n/a"
-        elements.append(
-            Paragraph(
-                f"<b>Box {box.box_number}</b> — status {box.status}, "
-                f"dims {dims} cm, weight {box.weight_kg or 'n/a'} kg, "
-                f"{len(box.contents)} units",
-                styles["Normal"],
-            )
-        )
-        rows = [["#", "Barcode", "SKU"]]
-        for i, c in enumerate(box.contents, 1):
-            rows.append([str(i), c.barcode, c.unit.sku])
-        if len(rows) == 1:
-            rows.append(["—", "empty", ""])
-        elements.append(_table(rows, col_widths=[12 * mm, 60 * mm, 40 * mm]))
-        elements.append(Spacer(1, 5 * mm))
-    if not order.boxes:
-        elements.append(Paragraph("No boxes created yet.", styles["Normal"]))
-    return _persist(
-        elements, doc_type=DocumentType.PACKING_REPORT, order_id=order.id,
-        label=order.order_number,
-    )
-
-
-def generate_box_detail(box: Box) -> Document:
-    styles = _styles()
-    dims = "×".join(
-        str(d) for d in [box.length_cm, box.width_cm, box.height_cm] if d
-    ) or "n/a"
-    elements = _header(
-        styles, "Box Detail",
-        f"Box {box.box_number} — order {box.order.order_number}",
-    )
-    elements.append(
-        Paragraph(
-            f"Status: {box.status} · Dimensions: {dims} cm · "
-            f"Weight: {box.weight_kg or 'n/a'} kg · Units: {len(box.contents)}",
-            styles["Normal"],
-        )
-    )
-    elements.append(Spacer(1, 5 * mm))
-    rows = [["#", "Barcode", "SKU", "Description"]]
-    for i, c in enumerate(box.contents, 1):
-        rows.append([str(i), c.barcode, c.unit.sku, c.unit.description or ""])
-    if len(rows) == 1:
-        rows.append(["—", "empty", "", ""])
-    elements.append(_table(rows, col_widths=[12 * mm, 55 * mm, 30 * mm, 65 * mm]))
-    return _persist(
-        elements, doc_type=DocumentType.BOX_DETAIL, order_id=box.order_id,
-        box_id=box.id, label=f"{box.order.order_number}-{box.box_number}",
-    )
-
-
-def generate_order_closure(order: Order) -> Document:
-    from .processing import carton_content_rows, format_dims, format_weight
-
-    styles = _styles()
-    rec = reconcile(order)
-    ticket = getattr(order, "pick_ticket", None)
-    closed_at = order.closed_at or datetime.utcnow()
-    total_weight = round(sum(b.weight_kg or 0.0 for b in order.boxes), 3)
-    weight_unit = next((b.weight_unit for b in order.boxes if b.weight_unit), "lb")
-
-    head = [
-        [
-            Paragraph("<b>WMS SYSTEM</b><br/>Order Closure Report", styles["Heading2"]),
-            Paragraph(
-                f"<b>Order</b> {order.order_number}<br/>"
-                f"<b>Status</b> {order.status}",
-                styles["Normal"],
-            ),
-        ]
-    ]
-    head_tbl = Table(head, colWidths=[110 * mm, 55 * mm])
-    head_tbl.setStyle(TableStyle([
-        ("VALIGN", (0, 0), (-1, -1), "TOP"),
-        ("ALIGN", (1, 0), (1, 0), "RIGHT"),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
-    ]))
-    elements = [head_tbl, Spacer(1, 4 * mm)]
-
-    info = [
-        ["Order Information", ""],
-        ["Order Number", order.order_number],
-        ["Pick Ticket Number", ticket.pick_ticket_number if ticket else "—"],
-        ["Client", order.client.code if order.client else "—"],
-        ["Warehouse", order.warehouse.code if order.warehouse else "—"],
-        ["Order Type", order.order_type.code if order.order_type else "—"],
-        ["Customer", order.customer or "—"],
-        ["Carrier", order.carrier or "—"],
-        ["Shipping Service", order.shipping_service or "—"],
-        ["Closed At", closed_at.strftime("%Y-%m-%d %H:%M UTC")],
-        ["Closed By", order.closed_by_username or "—"],
-        ["Status", order.status],
-    ]
-    elements.append(_table(info, col_widths=[50 * mm, 115 * mm]))
-    elements.append(Spacer(1, 6 * mm))
-
-    summary = [
-        ["Summary", ""],
-        ["Ordered Units", str(rec["ordered"])],
-        ["Allocated Units", str(rec["allocated"])],
-        ["Packed Units", str(rec["packed"])],
-        ["Carton Count", str(len(order.boxes))],
-        ["Total Weight", f"{total_weight:g} {weight_unit}"],
-        ["Reconciliation", "PASS" if rec["ok"] else "FAIL"],
-    ]
-    elements.append(_table(summary, col_widths=[50 * mm, 115 * mm]))
-    elements.append(Spacer(1, 6 * mm))
-
-    for box in sorted(order.boxes, key=lambda b: b.box_number):
-        elements.append(
-            Paragraph(
-                f"<b>Carton {box.box_number}</b> — {box.status} · "
-                f"{format_dims(box)} · {format_weight(box)} · "
-                f"{len(box.contents)} units",
-                styles["Normal"],
-            )
-        )
-        rows = [["Location", "SKU", "UPC", "Description", "Qty"]]
-        for line in carton_content_rows(box):
-            rows.append([
-                line["location"],
-                line["sku"],
-                line["upc"],
-                line["description"],
-                str(line["qty"]),
-            ])
-        if len(rows) == 1:
-            rows.append(["—", "", "", "No units", "0"])
-        elements.append(
-            _table(rows, col_widths=[28 * mm, 28 * mm, 32 * mm, 62 * mm, 15 * mm])
-        )
-        elements.append(Spacer(1, 5 * mm))
-    if not order.boxes:
-        elements.append(Paragraph("No cartons.", styles["Normal"]))
-    return _persist(
-        elements, doc_type=DocumentType.ORDER_CLOSURE, order_id=order.id,
-        label=order.order_number,
-    )
+    return document
