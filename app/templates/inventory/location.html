@@ -1,0 +1,24 @@
+{% extends "inventory/_layout.html" %}
+{% block title %}Location {{ location }}{% endblock %}
+{% block inv_content %}
+<div class="panel">
+  <h2>Units at {{ location }} — UPC {{ upc }}</h2>
+  <table>
+    <thead><tr><th>Barcode</th><th>SKU</th><th>Status</th><th>Order</th><th>Created</th><th>Updated</th></tr></thead>
+    <tbody>
+      {% for u in units %}
+        <tr>
+          <td class="mono"><a href="{{ url_for('inventory.barcode_detail', barcode=u.barcode) }}">{{ u.barcode }}</a></td>
+          <td>{{ u.sku }}</td>
+          <td><span class="pill pill-{{ u.status }}">{{ u.status }}</span></td>
+          <td>{{ u.order.order_number if u.order else '—' }}</td>
+          <td class="sub">{{ u.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+          <td class="sub">{{ u.updated_at.strftime('%Y-%m-%d %H:%M') }}</td>
+        </tr>
+      {% else %}
+        <tr><td colspan="6" class="sub">No units found.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

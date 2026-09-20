@@ -1,0 +1,30 @@
+{% extends "inventory/_layout.html" %}
+{% block title %}Import History{% endblock %}
+{% block inv_content %}
+<div class="panel">
+  <h2>Inventory Import History</h2>
+  <table>
+    <thead>
+      <tr><th>Date</th><th>Filename</th><th>Clients</th><th>Warehouses</th><th class="right">Submitted</th><th class="right">Imported</th><th class="right">Updated</th><th class="right">Rejected</th><th class="right">Warnings</th><th>Status</th></tr>
+    </thead>
+    <tbody>
+      {% for b in batches %}
+        <tr>
+          <td class="sub">{{ b.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+          <td><a href="{{ url_for('inventory.import_detail', batch_id=b.id) }}">{{ b.filename }}</a></td>
+          <td>{{ b.clients or '—' }}</td>
+          <td>{{ b.warehouses or '—' }}</td>
+          <td class="right">{{ b.rows_submitted }}</td>
+          <td class="right">{{ b.rows_imported }}</td>
+          <td class="right">{{ b.rows_updated }}</td>
+          <td class="right">{{ b.rows_rejected }}</td>
+          <td class="right">{{ b.warnings_count }}</td>
+          <td><span class="{{ 'ok' if b.status=='COMPLETED' else 'err' }}">{{ b.status }}</span></td>
+        </tr>
+      {% else %}
+        <tr><td colspan="10" class="sub">No inventory imports yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

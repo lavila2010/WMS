@@ -1,0 +1,57 @@
+{% extends "inventory/_layout.html" %}
+{% block title %}Inventory Overview{% endblock %}
+{% block inv_content %}
+<div class="kpis">
+  <div class="kpi"><div class="num">{{ kpis.total }}</div><div class="label">Total Units</div></div>
+  <div class="kpi"><div class="num">{{ kpis.available }}</div><div class="label">Available</div></div>
+  <div class="kpi"><div class="num">{{ kpis.reserved }}</div><div class="label">Reserved / Allocated</div></div>
+  <div class="kpi"><div class="num">{{ kpis.packed }}</div><div class="label">Packed</div></div>
+  <div class="kpi"><div class="num">{{ kpis.unique_upcs }}</div><div class="label">Unique UPCs</div></div>
+  <div class="kpi"><div class="num">{{ kpis.unique_skus }}</div><div class="label">Unique SKUs</div></div>
+  <div class="kpi"><div class="num">{{ kpis.locations }}</div><div class="label">Locations</div></div>
+  <div class="kpi"><div class="num">{{ kpis.open_exceptions }}</div><div class="label">Open Exceptions</div></div>
+</div>
+
+{% if comparison %}
+<div class="panel">
+  <h2>Warehouse Comparison</h2>
+  <table>
+    <thead><tr><th>Warehouse</th><th class="right">Available</th><th class="right">Reserved</th><th class="right">Packed</th><th class="right">Total</th></tr></thead>
+    <tbody>
+      {% for w in comparison %}
+        <tr><td>{{ w.warehouse }}</td><td class="right">{{ w.available }}</td><td class="right">{{ w.reserved }}</td><td class="right">{{ w.packed }}</td><td class="right">{{ w.total }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+<div class="panel">
+  <h2>Inventory by UPC</h2>
+  <table>
+    <thead>
+      <tr><th>UPC</th><th>SKU</th><th>Description</th><th class="right">Available</th><th class="right">Reserved</th><th class="right">Packed</th><th class="right">Total</th><th class="right">Locations</th></tr>
+    </thead>
+    <tbody>
+      {% for r in by_upc %}
+        <tr>
+          <td class="mono">
+            {% if scope.client_id %}
+              <a href="{{ url_for('inventory.upc_view', client_id=scope.client_id, warehouse_id=scope.warehouse_id or None, upc=r.upc) }}">{{ r.upc }}</a>
+            {% else %}{{ r.upc }}{% endif %}
+          </td>
+          <td>{{ r.sku }}</td>
+          <td>{{ r.description or '—' }}</td>
+          <td class="right">{{ r.available }}</td>
+          <td class="right">{{ r.reserved }}</td>
+          <td class="right">{{ r.packed }}</td>
+          <td class="right"><b>{{ r.total }}</b></td>
+          <td class="right">{{ r.locations }}</td>
+        </tr>
+      {% else %}
+        <tr><td colspan="8" class="sub">No inventory in scope. Upload Inventory.xlsx to begin.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

@@ -1,0 +1,58 @@
+{% extends "inventory/_layout.html" %}
+{% block title %}UPC {{ upc }}{% endblock %}
+{% block inv_content %}
+<div class="panel">
+  <h2>UPC Lookup</h2>
+  <form method="get" action="{{ request.path }}" class="scopebar" style="border:none;padding:0;background:none;">
+    {% if scope.client_id %}<input type="hidden" name="client_id" value="{{ scope.client_id }}" />{% endif %}
+    {% if scope.warehouse_id %}<input type="hidden" name="warehouse_id" value="{{ scope.warehouse_id }}" />{% endif %}
+    <div><label>UPC</label><br /><input name="upc" value="{{ upc }}" placeholder="enter UPC" /></div>
+    <button class="btn" type="submit">Lookup</button>
+  </form>
+  {% if not scope.client_id %}<p class="err" style="margin-top:0.5rem;">Select a Client to look up UPC inventory.</p>{% endif %}
+</div>
+
+{% if summary %}
+<div class="panel">
+  <h2>{{ summary.upc }} — {{ summary.sku }}</h2>
+  <div class="grid2">
+    <div class="kv"><span>Client</span><span>{{ client.code if client else '—' }}</span></div>
+    <div class="kv"><span>Warehouse</span><span>{{ warehouse.code if warehouse else 'All' }}</span></div>
+    <div class="kv"><span>UPC</span><span class="mono">{{ summary.upc }}</span></div>
+    <div class="kv"><span>SKU</span><span>{{ summary.sku }}</span></div>
+    <div class="kv"><span>Description</span><span>{{ summary.description or '—' }}</span></div>
+    <div class="kv"><span>Total</span><span><b>{{ summary.total }}</b></span></div>
+    <div class="kv"><span>Available</span><span>{{ summary.available }}</span></div>
+    <div class="kv"><span>Reserved</span><span>{{ summary.reserved }}</span></div>
+    <div class="kv"><span>Packed</span><span>{{ summary.packed }}</span></div>
+    <div class="kv"><span># Locations</span><span>{{ summary.num_locations }}</span></div>
+  </div>
+</div>
+
+<div class="panel">
+  <h2>Locations</h2>
+  <table>
+    <thead><tr><th>Location</th><th class="right">Available</th><th class="right">Reserved</th><th class="right">Packed</th><th class="right">Total</th><th></th></tr></thead>
+    <tbody>
+      {% for loc in summary.locations %}
+        <tr>
+          <td>{{ loc.location }}</td>
+          <td class="right">{{ loc.available }}</td>
+          <td class="right">{{ loc.reserved }}</td>
+          <td class="right">{{ loc.packed }}</td>
+          <td class="right"><b>{{ loc.total }}</b></td>
+          <td class="right">
+            {% if scope.warehouse_id %}
+            <a href="{{ url_for('inventory.location_view', client_id=scope.client_id, warehouse_id=scope.warehouse_id, upc=summary.upc, location=loc.location) }}">units →</a>
+            {% endif %}
+          </td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% if not scope.warehouse_id %}<p class="sub">Select a specific Warehouse to drill into physical units at a location.</p>{% endif %}
+</div>
+{% elif upc and scope.client_id %}
+<div class="panel"><p class="sub">No on-hand inventory for UPC {{ upc }} in this scope.</p></div>
+{% endif %}
+{% endblock %}
