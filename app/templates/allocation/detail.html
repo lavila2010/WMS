@@ -8,7 +8,7 @@
 
 <div class="card">
   <h2>Scan / enter barcode</h2>
-  {% if order.status in ['VALIDATED', 'ALLOCATING'] %}
+  {% if order.status in ['VALIDATED', 'ALLOCATING'] and can('ALLOCATION_EXECUTE') %}
     <form method="post" action="{{ url_for('allocation.scan', order_id=order.id) }}" class="inline-form">
       <label>Barcode
         <input name="barcode" autofocus autocomplete="off" placeholder="Scan or type barcode" required />
@@ -54,7 +54,7 @@
           <td>{{ a.unit.sku }}</td>
           <td>{{ a.unit.location or '—' }}</td>
           <td class="right">
-            {% if order.status in ['VALIDATED', 'ALLOCATING'] %}
+            {% if order.status in ['VALIDATED', 'ALLOCATING'] and can('ALLOCATION_RELEASE') %}
             <form method="post" action="{{ url_for('allocation.release', allocation_id=a.id) }}"><button class="btn-danger btn" type="submit">Release</button></form>
             {% endif %}
           </td>

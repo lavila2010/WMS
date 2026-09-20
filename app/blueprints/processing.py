@@ -9,6 +9,9 @@ from flask import (
     url_for,
 )
 
+from flask_login import current_user
+
+from ..auth import current_actor, permission_required, record_audit
 from ..constants import OrderStatus
 from ..extensions import db
 from ..models import Box, Order
@@ -35,6 +38,7 @@ _PROCESSABLE = {
 
 
 @bp.route("/")
+@permission_required("PROCESSING_VIEW")
 def index():
     orders = (
         Order.query.filter(Order.status.in_(_PROCESSABLE))
@@ -45,6 +49,7 @@ def index():
 
 
 @bp.route("/<int:order_id>")
+@permission_required("PROCESSING_VIEW")
 def detail(order_id: int):
     order = Order.query.get_or_404(order_id)
     rec = reconcile(order)
@@ -52,6 +57,7 @@ def detail(order_id: int):
 
 
 @bp.route("/<int:order_id>/box", methods=["POST"])
+@permission_required("PROCESSING_EXECUTE")
 def new_box(order_id: int):
     order = Order.query.get_or_404(order_id)
 
@@ -63,7 +69,8 @@ def new_box(order_id: int):
     if not box_number:
         box_number = f"BOX-{len(order.boxes) + 1:03d}"
     try:
-        create_box(order, box_number, _f("length_cm"), _f("width_cm"), _f("height_cm"))
+        box = create_box(order, box_number, _f("length_cm"), _f("width_cm"), _f("height_cm"))
+        record_audit("BOX_CREATE", module="Processing", entity_type="Box", entity_id=box.id, detail=box_number)
         db.session.commit()
         flash(f"Box {box_number} created.", "success")
     except WorkflowError as exc:
@@ -72,11 +79,13 @@ def new_box(order_id: int):
 
 
 @bp.route("/box/<int:box_id>/scan", methods=["POST"])
+@permission_required("PROCESSING_EXECUTE")
 def scan(box_id: int):
     box = Box.query.get_or_404(box_id)
     barcode = request.form.get("barcode", "")
     try:
         scan_into_box(box, barcode)
+        record_audit("UNIT_SCAN", module="Processing", entity_type="Box", entity_id=box.id, detail=barcode.strip())
         db.session.commit()
         flash(f"Packed {barcode.strip()} into {box.box_number}.", "success")
     except BarcodeError as exc:
@@ -86,11 +95,13 @@ def scan(box_id: int):
 
 
 @bp.route("/box/<int:box_id>/close", methods=["POST"])
+@permission_required("BOX_CLOSE")
 def close(box_id: int):
     box = Box.query.get_or_404(box_id)
     weight = request.form.get("weight_kg", "").strip()
     try:
         close_box(box, float(weight) if weight else None)
+        record_audit("BOX_CLOSE", module="Processing", entity_type="Box", entity_id=box.id, detail=f"{weight}kg")
         db.session.commit()
         flash(f"Box {box.box_number} closed.", "success")
     except (ValueError, TypeError) as exc:
@@ -99,6 +110,7 @@ def close(box_id: int):
 
 
 @bp.route("/<int:order_id>/processed", methods=["POST"])
+@permission_required("PROCESSING_EXECUTE")
 def processed(order_id: int):
     order = Order.query.get_or_404(order_id)
     try:
@@ -111,6 +123,7 @@ def processed(order_id: int):
 
 
 @bp.route("/<int:order_id>/ready-to-close", methods=["POST"])
+@permission_required("PROCESSING_EXECUTE")
 def ready_to_close(order_id: int):
     order = Order.query.get_or_404(order_id)
     try:
@@ -124,10 +137,15 @@ def ready_to_close(order_id: int):
 
 
 @bp.route("/<int:order_id>/close", methods=["POST"])
+@permission_required("ORDER_CLOSE")
 def close_order_view(order_id: int):
     order = Order.query.get_or_404(order_id)
     try:
-        _, invoice = close_order(order)
+        _, invoice = close_order(order, created_by=current_user.username)
+        uid, uname = current_actor()
+        order.closed_by_user_id = uid
+        order.closed_by_username = uname
+        record_audit("ORDER_CLOSE", module="Processing", entity_type="Order", entity_id=order.id, detail=invoice.invoice_number)
         db.session.commit()
         flash(
             f"Order {order.order_number} CLOSED. Invoice {invoice.invoice_number} created.",

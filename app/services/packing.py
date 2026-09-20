@@ -167,9 +167,12 @@ def close_box(box: Box, weight_kg: float) -> Box:
         raise ValueError("A positive box weight (kg) is required to close a box.")
     if not box.contents:
         raise ValueError("Cannot close an empty box.")
+    from ..auth import current_actor
+
     box.status = BoxStatus.CLOSED
     box.weight_kg = float(weight_kg)
     box.closed_at = datetime.utcnow()
+    box.closed_by_user_id, box.closed_by_username = current_actor()
     db.session.add(
         Transaction(
             type="CLOSE_BOX",

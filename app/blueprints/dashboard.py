@@ -4,12 +4,14 @@ from flask import Blueprint, render_template, request
 
 from ..constants import OrderStatus, UnitStatus
 from ..models import Box, InventoryUnit, Order, OrderException
+from ..auth import permission_required
 from ..services.filters import apply_scope, parse_scope, scope_options
 
 bp = Blueprint("dashboard", __name__)
 
 
 @bp.route("/")
+@permission_required("DASHBOARD_VIEW")
 def index():
     scope = parse_scope(request.args)
 

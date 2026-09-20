@@ -15,6 +15,7 @@ from datetime import datetime
 
 from sqlalchemy import func
 
+from ..auth import permission_required, record_audit
 from ..models import Box, Document, Invoice, Order
 from ..services.documents import (
     generate_box_detail,
@@ -28,6 +29,7 @@ bp = Blueprint("reports", __name__, url_prefix="/reports")
 
 
 @bp.route("/")
+@permission_required("REPORTS_VIEW")
 def index():
     args = request.args
     scope = parse_scope(args)
@@ -83,43 +85,57 @@ def index():
     )
 
 
+def _audit_pdf(doc, order_id=None):
+    record_audit("PDF_GENERATED", module="Reports", entity_type="Document", entity_id=doc.id, detail=doc.type, commit=True)
+
+
 @bp.route("/order/<int:order_id>/pick-ticket", methods=["POST"])
+@permission_required("REPORTS_EXPORT")
 def pick_ticket(order_id: int):
     order = Order.query.get_or_404(order_id)
     doc = generate_pick_ticket(order)
+    _audit_pdf(doc)
     flash(f"Pick Ticket generated for {order.order_number}.", "success")
-    return redirect(url_for("reports.download", document_id=doc.id))
+    return redirect(url_for("reports.index"))
 
 
 @bp.route("/order/<int:order_id>/packing-report", methods=["POST"])
+@permission_required("REPORTS_EXPORT")
 def packing_report(order_id: int):
     order = Order.query.get_or_404(order_id)
     doc = generate_packing_report(order)
+    _audit_pdf(doc)
     flash(f"Packing Report generated for {order.order_number}.", "success")
-    return redirect(url_for("reports.download", document_id=doc.id))
+    return redirect(url_for("reports.index"))
 
 
 @bp.route("/order/<int:order_id>/closure", methods=["POST"])
+@permission_required("REPORTS_EXPORT")
 def closure(order_id: int):
     order = Order.query.get_or_404(order_id)
     doc = generate_order_closure(order)
+    _audit_pdf(doc)
     flash(f"Order Closure Report generated for {order.order_number}.", "success")
-    return redirect(url_for("reports.download", document_id=doc.id))
+    return redirect(url_for("reports.index"))
 
 
 @bp.route("/box/<int:box_id>/detail", methods=["POST"])
+@permission_required("REPORTS_EXPORT")
 def box_detail(box_id: int):
     box = Box.query.get_or_404(box_id)
     doc = generate_box_detail(box)
+    _audit_pdf(doc)
     flash(f"Box Detail generated for {box.box_number}.", "success")
-    return redirect(url_for("reports.download", document_id=doc.id))
+    return redirect(url_for("reports.index"))
 
 
 @bp.route("/document/<int:document_id>")
+@permission_required("DOCUMENT_REPRINT")
 def download(document_id: int):
     doc = Document.query.get_or_404(document_id)
     import os
 
     if not os.path.exists(doc.path):
         abort(404)
+    record_audit("DOCUMENT_REPRINT", module="Reports", entity_type="Document", entity_id=doc.id, detail=doc.filename, commit=True)
     return send_file(doc.path, as_attachment=True, download_name=doc.filename)

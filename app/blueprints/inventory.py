@@ -20,6 +20,9 @@ from flask import (
     url_for,
 )
 
+from flask_login import current_user
+
+from ..auth import permission_required, record_audit
 from ..constants import InventoryExceptionType, OrderStatus, UnitStatus
 from ..models import (
     Box,
@@ -64,11 +67,13 @@ def _ctx(active_tab, client_id, warehouse_id, **extra):
 
 
 @bp.route("/")
+@permission_required("INVENTORY_VIEW")
 def index():
     return redirect(url_for("inventory.overview", **request.args))
 
 
 @bp.route("/overview")
+@permission_required("INVENTORY_VIEW")
 def overview():
     client_id, warehouse_id = _scope()
     kpis = invq.kpis(client_id, warehouse_id)
@@ -85,6 +90,7 @@ def overview():
 # ---------------------------------------------------------------- Upload / import
 
 @bp.route("/upload")
+@permission_required("INVENTORY_UPLOAD")
 def upload():
     client_id, warehouse_id = _scope()
     preview = None
@@ -99,6 +105,7 @@ def upload():
 
 
 @bp.route("/import/preview", methods=["POST"])
+@permission_required("INVENTORY_UPLOAD")
 def import_preview():
     file = request.files.get("file")
     if not file or not file.filename:
@@ -111,18 +118,23 @@ def import_preview():
     path = os.path.join(_TMP_DIR, f"{token}.xlsx")
     file.save(path)
     session["inv_import"] = {"path": path, "filename": file.filename}
+    record_audit("INVENTORY_PREVIEW", module="Inventory", detail=file.filename, commit=True)
     return redirect(url_for("inventory.upload"))
 
 
 @bp.route("/import/confirm", methods=["POST"])
+@permission_required("INVENTORY_UPLOAD")
 def import_confirm():
     pending = session.get("inv_import")
     if not pending or not os.path.exists(pending["path"]):
         flash("No pending import to confirm. Please upload a file first.", "error")
         return redirect(url_for("inventory.upload"))
-    actor = request.form.get("actor") or "operator"
     with open(pending["path"], "rb") as fh:
-        result = confirm_import(fh, pending["filename"], actor=actor)
+        result = confirm_import(fh, pending["filename"], actor=current_user.username)
+    record_audit(
+        "INVENTORY_IMPORT", module="Inventory", entity_type="ImportBatch",
+        entity_id=result.get("batch_id"), detail=result["status"], commit=True,
+    )
     _cleanup_pending()
     session["inv_result"] = {
         "status": result["status"],
@@ -146,6 +158,7 @@ def import_confirm():
 
 
 @bp.route("/import/cancel", methods=["POST"])
+@permission_required("INVENTORY_UPLOAD")
 def import_cancel():
     _cleanup_pending()
     flash("Pending import cancelled.", "success")
@@ -162,6 +175,7 @@ def _cleanup_pending():
 
 
 @bp.route("/template")
+@permission_required("INVENTORY_UPLOAD")
 def template():
     buf = build_inventory_workbook(
         [
@@ -178,6 +192,7 @@ def template():
 # ---------------------------------------------------------------- Search / drill-down
 
 @bp.route("/search")
+@permission_required("INVENTORY_VIEW")
 def search():
     client_id, warehouse_id = _scope()
     q = (request.args.get("q") or "").strip()
@@ -222,6 +237,7 @@ def search():
 
 
 @bp.route("/upc")
+@permission_required("INVENTORY_VIEW")
 def upc_view():
     client_id, warehouse_id = _scope()
     upc = (request.args.get("upc") or "").strip()
@@ -238,6 +254,7 @@ def upc_view():
 
 
 @bp.route("/location")
+@permission_required("INVENTORY_VIEW")
 def location_view():
     client_id, warehouse_id = _scope()
     upc = (request.args.get("upc") or "").strip()
@@ -252,6 +269,7 @@ def location_view():
 
 
 @bp.route("/barcode/<barcode>")
+@permission_required("INVENTORY_VIEW")
 def barcode_detail(barcode):
     client_id, warehouse_id = _scope()
     unit = InventoryUnit.query.filter_by(barcode=barcode).first()
@@ -303,6 +321,7 @@ def _movement_query():
 
 
 @bp.route("/transactions")
+@permission_required("INVENTORY_VIEW")
 def transactions():
     client_id, warehouse_id = _scope()
     movements = _movement_query().limit(1000).all()
@@ -315,8 +334,10 @@ def transactions():
 
 
 @bp.route("/transactions.csv")
+@permission_required("INVENTORY_EXPORT")
 def transactions_csv():
     movements = _movement_query().limit(10000).all()
+    record_audit("REPORT_EXPORT", module="Inventory", detail="transactions.csv", commit=True)
     buf = io.StringIO()
     writer = csv.writer(buf)
     writer.writerow([
@@ -343,6 +364,7 @@ def transactions_csv():
 # ---------------------------------------------------------------- Import history
 
 @bp.route("/import-history")
+@permission_required("INVENTORY_VIEW")
 def import_history():
     client_id, warehouse_id = _scope()
     batches = (
@@ -358,6 +380,7 @@ def import_history():
 
 
 @bp.route("/import-history/<int:batch_id>")
+@permission_required("INVENTORY_VIEW")
 def import_detail(batch_id):
     client_id, warehouse_id = _scope()
     batch = ImportBatch.query.get_or_404(batch_id)
@@ -370,6 +393,7 @@ def import_detail(batch_id):
 # ---------------------------------------------------------------- Exceptions
 
 @bp.route("/exceptions")
+@permission_required("INVENTORY_VIEW")
 def exceptions():
     client_id, warehouse_id = _scope()
     q = InventoryException.query

@@ -41,8 +41,10 @@
 
   <div class="tabs">
     {% for key, label, endpoint in tabs %}
+      {% if key != 'upload' or can('INVENTORY_UPLOAD') %}
       <a class="{{ 'active' if active_tab == key }}"
          href="{{ url_for(endpoint, client_id=scope.client_id or None, warehouse_id=scope.warehouse_id or None) }}">{{ label }}</a>
+      {% endif %}
     {% endfor %}
   </div>
 

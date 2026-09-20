@@ -4,8 +4,10 @@
 <div class="section-title">
   <h1>Orders</h1>
   <div class="btn-row">
+    {% if can('ORDERS_UPLOAD') %}
     <a class="btn-secondary btn" href="{{ url_for('orders.template') }}">Download template</a>
     <a class="btn" href="{{ url_for('orders.import_view') }}">Import Orders.xlsx</a>
+    {% endif %}
   </div>
 </div>
 

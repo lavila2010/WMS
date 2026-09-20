@@ -11,6 +11,9 @@ from flask import (
     url_for,
 )
 
+from flask_login import current_user
+
+from ..auth import current_actor, permission_required, record_audit
 from ..constants import OrderStatus
 from ..models import Order
 from ..services.allocation import active_allocations, allocation_progress
@@ -23,6 +26,7 @@ bp = Blueprint("orders", __name__, url_prefix="/orders")
 
 
 @bp.route("/")
+@permission_required("ORDERS_VIEW")
 def index():
     scope = parse_scope(request.args)
     query = apply_scope(Order.query, Order, scope)
@@ -48,6 +52,7 @@ def index():
 
 
 @bp.route("/<int:order_id>")
+@permission_required("ORDERS_VIEW")
 def detail(order_id: int):
     order = Order.query.get_or_404(order_id)
     progress = allocation_progress(order)
@@ -55,6 +60,7 @@ def detail(order_id: int):
 
 
 @bp.route("/<int:order_id>/validate", methods=["POST"])
+@permission_required("ORDERS_VIEW")
 def validate(order_id: int):
     order = Order.query.get_or_404(order_id)
     if not order.lines:
@@ -62,6 +68,9 @@ def validate(order_id: int):
         return redirect(url_for("orders.detail", order_id=order.id))
     try:
         transition(order, OrderStatus.VALIDATED, "Order validated.")
+        uid, uname = current_actor()
+        order.validated_by_user_id = uid
+        order.validated_by_username = uname
         from ..extensions import db
 
         db.session.commit()
@@ -72,6 +81,7 @@ def validate(order_id: int):
 
 
 @bp.route("/import", methods=["GET", "POST"])
+@permission_required("ORDERS_UPLOAD")
 def import_view():
     if request.method == "POST":
         file = request.files.get("file")
@@ -83,12 +93,14 @@ def import_view():
         except ImportError_ as exc:
             flash(str(exc), "error")
             return redirect(url_for("orders.import_view"))
+        record_audit("ORDER_IMPORT", module="Orders", entity_type="ImportBatch", entity_id=batch.id, detail=batch.message, commit=True)
         flash(batch.message, "success")
         return redirect(url_for("orders.index"))
     return render_template("orders/import.html")
 
 
 @bp.route("/template")
+@permission_required("ORDERS_UPLOAD")
 def template():
     buf = build_orders_workbook(
         [

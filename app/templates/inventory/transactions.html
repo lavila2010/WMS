@@ -12,7 +12,7 @@
     <div><label>From</label><br /><input type="date" name="date_from" value="{{ filters.date_from }}" /></div>
     <div><label>To</label><br /><input type="date" name="date_to" value="{{ filters.date_to }}" /></div>
     <button class="btn" type="submit">Filter</button>
-    <a class="btn btn-secondary" href="{{ url_for('inventory.transactions_csv', **request.args) }}">Export CSV</a>
+    {% if can('INVENTORY_EXPORT') %}<a class="btn btn-secondary" href="{{ url_for('inventory.transactions_csv', **request.args) }}">Export CSV</a>{% endif %}
   </form>
 </div>
 

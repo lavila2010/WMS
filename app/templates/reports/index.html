@@ -64,11 +64,13 @@
           <td>{{ o.shipping_service or '—' }}</td>
           <td><span class="badge badge-{{ o.status }}">{{ o.status }}</span></td>
           <td>
+            {% if can('REPORTS_EXPORT') %}
             <div class="btn-row">
               <form method="post" action="{{ url_for('reports.pick_ticket', order_id=o.id) }}"><button type="submit">Pick</button></form>
               <form method="post" action="{{ url_for('reports.packing_report', order_id=o.id) }}"><button type="submit">Packing</button></form>
               <form method="post" action="{{ url_for('reports.closure', order_id=o.id) }}"><button type="submit">Closure</button></form>
             </div>
+            {% else %}<span class="muted">view only</span>{% endif %}
           </td>
         </tr>
       {% else %}
@@ -88,7 +90,7 @@
           <td class="muted">{{ d.created_at.strftime('%m-%d %H:%M') }}</td>
           <td>{{ d.type }}</td>
           <td class="mono">{{ d.filename }}</td>
-          <td class="right"><a class="btn-secondary btn" href="{{ url_for('reports.download', document_id=d.id) }}">Download</a></td>
+          <td class="right">{% if can('DOCUMENT_REPRINT') %}<a class="btn-secondary btn" href="{{ url_for('reports.download', document_id=d.id) }}">Download</a>{% else %}<span class="muted">—</span>{% endif %}</td>
         </tr>
       {% else %}
         <tr><td colspan="4" class="muted">No documents generated yet.</td></tr>
