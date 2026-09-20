@@ -2,27 +2,32 @@
 {% block title %}Upload Inventory{% endblock %}
 {% block inv_content %}
 
-{% if result %}
 <div class="panel">
-  <h2>Last Import Result</h2>
-  <div class="grid2">
-    <div class="kv"><span>Status</span><span class="{{ 'ok' if result.status=='COMPLETED' else 'err' }}">{{ result.status }}</span></div>
-    <div class="kv"><span>Rows submitted</span><span>{{ result.rows_submitted }}</span></div>
-    <div class="kv"><span>Rows imported</span><span>{{ result.rows_imported }}</span></div>
-    <div class="kv"><span>Rows updated</span><span>{{ result.rows_updated }}</span></div>
-    <div class="kv"><span>Rows rejected</span><span>{{ result.rows_rejected }}</span></div>
-    <div class="kv"><span>Warnings</span><span>{{ result.warnings }}</span></div>
-    <div class="kv"><span>User</span><span>{{ result.created_by }}</span></div>
-    <div class="kv"><span>Timestamp</span><span>{{ result.timestamp }}</span></div>
-  </div>
-</div>
-{% endif %}
-
-<div class="panel">
-  <h2>Select File</h2>
-  <p class="sub">Required columns: Client, Warehouse, UPC, SKU, Description, Barcode, Location. One upload may span multiple clients and warehouses. Barcodes are globally unique.</p>
-  <form method="post" action="{{ url_for('inventory.import_preview') }}" enctype="multipart/form-data">
-    <input type="file" name="file" accept=".xlsx" required />
+  <h2>Select Context, Then File</h2>
+  <p class="sub">Required columns: UPC, SKU, Style, Color, Size, Quantity, Location. Client and Warehouse come from the selected context. If the file includes Client or Warehouse columns they are validated only and cannot override context. Quantity N creates N physical units.</p>
+  <form method="post" action="{{ url_for('inventory.import_preview') }}" enctype="multipart/form-data" class="scopebar" style="border:none;padding:0;background:none;">
+    <div>
+      <label>Client</label><br />
+      <select name="client_id" id="inv-client" required>
+        <option value="">Select client</option>
+        {% for c in options.clients %}
+          <option value="{{ c.id }}" {{ 'selected' if scope.client_id == c.id }}>{{ c.client_code }} — {{ c.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label>Warehouse</label><br />
+      <select name="warehouse_id" id="inv-warehouse" required>
+        <option value="">Select warehouse</option>
+        {% for w in options.warehouses %}
+          <option value="{{ w.id }}" data-client="{{ w.client_id }}" {{ 'selected' if scope.warehouse_id == w.id }}>{{ w.warehouse_code }} — {{ w.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label>Excel file</label><br />
+      <input type="file" name="file" accept=".xlsx" required />
+    </div>
     <button class="btn" type="submit">Validate &amp; Preview</button>
     <a class="btn btn-secondary" href="{{ url_for('inventory.template') }}">Download template</a>
   </form>
@@ -31,29 +36,15 @@
 {% if preview %}
 <div class="panel">
   <h2>Preview — {{ preview.filename }}</h2>
+  <p class="sub">Context {{ preview.client_code }} / {{ preview.warehouse_code }}</p>
   <div class="kpis">
     <div class="kpi"><div class="num">{{ preview.total_rows }}</div><div class="label">Total Rows</div></div>
-    <div class="kpi"><div class="num">{{ preview.clients|length }}</div><div class="label">Clients</div></div>
-    <div class="kpi"><div class="num">{{ preview.warehouses|length }}</div><div class="label">Warehouses</div></div>
+    <div class="kpi"><div class="num">{{ preview.valid_rows }}</div><div class="label">Valid Rows</div></div>
+    <div class="kpi"><div class="num">{{ preview.units }}</div><div class="label">Physical Units</div></div>
     <div class="kpi"><div class="num">{{ preview.unique_upcs }}</div><div class="label">Unique UPCs</div></div>
     <div class="kpi"><div class="num">{{ preview.unique_skus }}</div><div class="label">Unique SKUs</div></div>
-    <div class="kpi"><div class="num">{{ preview.unique_barcodes }}</div><div class="label">Unique Barcodes</div></div>
-    <div class="kpi"><div class="num">{{ preview.unique_locations }}</div><div class="label">Unique Locations</div></div>
-    <div class="kpi"><div class="num ok">{{ preview.valid_rows }}</div><div class="label">Valid Rows</div></div>
-    <div class="kpi"><div class="num warn">{{ preview.warnings|length }}</div><div class="label">Warnings</div></div>
+    <div class="kpi"><div class="num">{{ preview.unique_locations }}</div><div class="label">Locations</div></div>
     <div class="kpi"><div class="num err">{{ preview.blocking|length }}</div><div class="label">Blocking Errors</div></div>
-  </div>
-
-  <h2>Breakdown</h2>
-  <div class="tree">
-    {% for client, whs in preview.breakdown.items() %}
-      <div class="client">{{ client }}</div>
-      {% for wh, count in whs.items() %}
-        <div class="wh">{{ wh }} &nbsp; {{ '{:,}'.format(count) }}</div>
-      {% endfor %}
-    {% else %}
-      <div class="sub">No valid rows.</div>
-    {% endfor %}
   </div>
 
   {% if preview.blocking %}
@@ -63,11 +54,25 @@
     {% endfor %}
   {% endif %}
 
-  {% if preview.warnings %}
-    <h2 style="margin-top:1rem;">Warnings</h2>
-    {% for w in preview.warnings %}
-      <div class="box warnbox" style="margin-bottom:0.4rem;"><b class="warn">{{ w.type }}</b> — {{ w.message }}</div>
-    {% endfor %}
+  {% if preview.rows %}
+    <h2 style="margin-top:1rem;">Valid Rows</h2>
+    <table>
+      <thead><tr><th>Row</th><th>UPC</th><th>SKU</th><th>Style</th><th>Color</th><th>Size</th><th>Qty</th><th>Location</th></tr></thead>
+      <tbody>
+        {% for r in preview.rows %}
+          <tr>
+            <td>{{ r.excel_row }}</td>
+            <td class="mono">{{ r.upc }}</td>
+            <td>{{ r.sku or '—' }}</td>
+            <td>{{ r.style or '—' }}</td>
+            <td>{{ r.color or '—' }}</td>
+            <td>{{ r.size or '—' }}</td>
+            <td class="right">{{ r.quantity }}</td>
+            <td>{{ r.location }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
   {% endif %}
 
   <div style="margin-top:1rem; display:flex; gap:0.6rem;">
@@ -79,7 +84,7 @@
     </form>
   </div>
   {% if preview.has_blocking %}
-    <p class="err" style="margin-top:0.5rem;">Confirm is disabled while blocking errors exist.</p>
+    <p class="err" style="margin-top:0.5rem;">Confirm is disabled while blocking errors exist. Zero units will be inserted.</p>
   {% endif %}
 </div>
 {% endif %}

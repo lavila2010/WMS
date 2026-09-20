@@ -89,6 +89,7 @@
 
 .inv .pill { display:inline-block; padding: 0.1rem 0.5rem; border-radius: 999px; font-size: 0.72rem; font-weight: 600; border: 1px solid #d1d5db; }
 .inv .pill-AVAILABLE { color: #047857; border-color: #6ee7b7; background: #ecfdf5; }
+.inv .pill-RESERVED { color: #9A6700; border-color: #fcd34d; background: #FFF6DC; }
 .inv .pill-ALLOCATED { color: #b45309; border-color: #fcd34d; background: #fffbeb; }
 .inv .pill-PACKED { color: #1d4ed8; border-color: #93c5fd; background: #eff6ff; }
 .inv .pill-SHIPPED { color: #6b7280; }

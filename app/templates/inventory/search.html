@@ -6,7 +6,7 @@
   <form method="get" action="{{ request.path }}" class="scopebar" style="border:none;padding:0;background:none;">
     {% if scope.client_id %}<input type="hidden" name="client_id" value="{{ scope.client_id }}" />{% endif %}
     {% if scope.warehouse_id %}<input type="hidden" name="warehouse_id" value="{{ scope.warehouse_id }}" />{% endif %}
-    <div><label>Search (UPC, SKU, Barcode, Description, Location, Order #)</label><br />
+    <div><label>Search (UPC, SKU, Style, Color, Size, Location, Unit ID)</label><br />
       <input name="q" value="{{ q }}" style="min-width:340px;" placeholder="type a value…" /></div>
     <div><label>Status</label><br />
       <select name="status">
@@ -16,31 +16,29 @@
     </div>
     <button class="btn" type="submit">Search</button>
   </form>
-  <p class="sub" style="margin-top:0.5rem;">Tip: select a Client above, then open a UPC from the results (or Overview) to see warehouse locations and quantities. An exact barcode match opens the barcode detail card.</p>
 </div>
 
-{% if q %}
+{% if q or status %}
 <div class="panel">
   <h2>Results ({{ results|length }})</h2>
   <table>
-    <thead><tr><th>Barcode</th><th>UPC</th><th>SKU</th><th>Description</th><th>Client</th><th>WH</th><th>Location</th><th>Status</th><th>Order</th></tr></thead>
+    <thead><tr><th>Unit</th><th>UPC</th><th>SKU</th><th>Style</th><th>Client</th><th>WH</th><th>Location</th><th>Status</th></tr></thead>
     <tbody>
       {% for u in results %}
         <tr>
-          <td class="mono"><a href="{{ url_for('inventory.barcode_detail', barcode=u.barcode) }}">{{ u.barcode }}</a></td>
+          <td class="mono">{{ u.id }}</td>
           <td class="mono">
-            {% if scope.client_id %}<a href="{{ url_for('inventory.upc_view', client_id=scope.client_id, warehouse_id=scope.warehouse_id or None, upc=u.upc) }}">{{ u.upc }}</a>{% else %}{{ u.upc }}{% endif %}
+            <a href="{{ url_for('inventory.upc_view', client_id=scope.client_id or u.client_id, warehouse_id=scope.warehouse_id or None, upc=u.upc) }}">{{ u.upc }}</a>
           </td>
-          <td>{{ u.sku }}</td>
-          <td>{{ u.description or '—' }}</td>
-          <td>{{ u.client.code if u.client else '—' }}</td>
-          <td>{{ u.warehouse.code if u.warehouse else '—' }}</td>
+          <td>{{ u.sku or '—' }}</td>
+          <td>{{ u.style or '—' }}</td>
+          <td>{{ u.client.client_code if u.client else '—' }}</td>
+          <td>{{ u.warehouse.warehouse_code if u.warehouse else '—' }}</td>
           <td>{{ u.location }}</td>
           <td><span class="pill pill-{{ u.status }}">{{ u.status }}</span></td>
-          <td>{{ u.order.order_number if u.order else '—' }}</td>
         </tr>
       {% else %}
-        <tr><td colspan="9" class="sub">No matches.</td></tr>
+        <tr><td colspan="8" class="sub">No matches.</td></tr>
       {% endfor %}
     </tbody>
   </table>

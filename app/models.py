@@ -225,6 +225,10 @@ class ImportBatch(db.Model):
     created_by_username = db.Column(db.String(64))
     created_at = db.Column(db.DateTime, default=_utcnow, nullable=False)
 
+    client = db.relationship("Client")
+    warehouse = db.relationship("Warehouse")
+    division = db.relationship("Division")
+
 
 class InventoryUnit(db.Model):
     __tablename__ = "inventory_units"
@@ -255,6 +259,10 @@ class InventoryUnit(db.Model):
     import_batch_id = db.Column(db.Integer, db.ForeignKey("import_batches.id"))
     created_at = db.Column(db.DateTime, default=_utcnow, nullable=False)
     updated_at = db.Column(db.DateTime, default=_utcnow, onupdate=_utcnow, nullable=False)
+
+    client = db.relationship("Client")
+    warehouse = db.relationship("Warehouse")
+    import_batch = db.relationship("ImportBatch")
 
 
 class Order(db.Model):
@@ -345,6 +353,11 @@ class InventoryTransaction(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey("users.id"))
     reference = db.Column(db.String(255))
     created_at = db.Column(db.DateTime, default=_utcnow, nullable=False, index=True)
+
+    client = db.relationship("Client")
+    warehouse = db.relationship("Warehouse")
+    unit = db.relationship("InventoryUnit")
+    actor = db.relationship("User", foreign_keys=[user_id])
 
 
 class PickTicket(db.Model):
