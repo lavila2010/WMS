@@ -16,7 +16,7 @@ and **PostgreSQL** (Aiven in production), rendered with **Jinja templates**.
 
 1. **Dashboard** — inventory + order-status overview and recent exceptions.
 2. **Inventory** — browse units, import `Inventory.xlsx`.
-3. **Orders** — browse/import `Orders.xlsx`, validate orders.
+3. **Orders** — Order Management, two-step `Orders.xlsx` upload, Pick Tickets, Allocation Report.
 4. **Allocation** — barcode-level allocation (scan or manual).
 5. **Order Processing** — packing workflow (boxes, scanning, weights, reconciliation).
 6. **Order Reports** — Pick Ticket, Packing Report, Order Closure, Box Detail PDFs.
@@ -53,6 +53,13 @@ weight → repeat until all units packed → close order after quantity reconcil
   Number**. Master tables `clients`, `warehouses`, `order_types` keep clients
   independent. Barcodes are globally unique.
 
+## Orders module
+
+Tabs: **Order Management**, **Upload Orders**, **Pick Tickets**, **Allocation Report**.
+A client must be selected before any order data is shown. Upload is a two-step
+preview → confirm flow. Allocation matches inventory by **Client + Warehouse +
+SKU + AVAILABLE** (not Order Type). Pick Ticket numbers are permanent per order.
+
 ## Inventory Control module
 
 Tabbed operational UI (Overview, Upload Inventory, Inventory Search,
@@ -77,6 +84,9 @@ so client-specific schemes can be added later.
   expiration, or the account being disabled. Public endpoints: `/login`,
   `/health`, `/health/db`.
 - Roles: `ADMIN` (all permissions) and `USER` (granular permissions).
+- Pick Ticket permissions: `PICK_TICKET_VIEW`, `PICK_TICKET_GENERATE`,
+  `PICK_TICKET_PRINT`. A Pick Ticket Number (`PT-YYYY-000001`) is assigned
+  once when an order becomes fully allocated and never changes on reprint.
 - Every route is protected server-side with `@permission_required("...")`;
   navigation and action buttons are also permission-driven. Unauthorized
   authenticated actions return HTTP 403 with an Access Denied page.
@@ -98,7 +108,7 @@ flask --app wsgi create-admin
 `warehouses`, `order_types`, `inventory_units`, `orders`, `order_lines`,
 `allocations`, `boxes`, `box_contents`, `invoices`, `transactions`,
 `inventory_movements`, `order_exceptions`, `inventory_exceptions`,
-`documents`, `import_batches`.
+`documents`, `import_batches`, `pick_tickets`, `pick_ticket_print_events`.
 
 ## Local development
 
