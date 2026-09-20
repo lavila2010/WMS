@@ -114,3 +114,39 @@ def _register_cli(app):
         db.session.add(admin)
         db.session.commit()
         click.echo(f"Admin user '{username}' created.")
+
+    @app.cli.command("create-test-users")
+    def create_test_users():
+        """Create UAT users. Passwords come from environment, never hardcoded."""
+        from werkzeug.security import generate_password_hash
+
+        from .auth import seed_permissions
+        from .models import User
+        from .schema import ensure_v2_schema
+
+        db.create_all()
+        ensure_v2_schema()
+        seed_permissions()
+        specs = [
+            ("WMS_UAT_ADMIN_PASSWORD", "uat-admin", "ADMIN"),
+            ("WMS_UAT_USER_PASSWORD", "uat-user", "USER"),
+        ]
+        for env_name, username, role in specs:
+            password = os.environ.get(env_name)
+            if not password:
+                click.echo(f"Skipped {username}: set {env_name}.")
+                continue
+            if User.query.filter_by(username=username).first():
+                click.echo(f"User '{username}' already exists.")
+                continue
+            db.session.add(
+                User(
+                    username=username,
+                    password_hash=generate_password_hash(password),
+                    role=role,
+                    active=True,
+                    must_change_password=True,
+                )
+            )
+            db.session.commit()
+            click.echo(f"Created {username} ({role}).")
