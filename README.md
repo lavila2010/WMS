@@ -70,12 +70,35 @@ transactions. If invoice creation fails, the whole close is rolled back.
 Invoice numbering (`INV-YYYY-000001`) is isolated in `app/services/invoices.py`
 so client-specific schemes can be added later.
 
+## Authentication & RBAC
+
+- Flask-Login session auth. Credentials are entered once at `/login`; the
+  authenticated session then persists across all modules until logout,
+  expiration, or the account being disabled. Public endpoints: `/login`,
+  `/health`, `/health/db`.
+- Roles: `ADMIN` (all permissions) and `USER` (granular permissions).
+- Every route is protected server-side with `@permission_required("...")`;
+  navigation and action buttons are also permission-driven. Unauthorized
+  authenticated actions return HTTP 403 with an Access Denied page.
+- Administration module (`/admin/users`) — Users, Permissions, Audit tabs;
+  create/edit/enable/disable users, reset passwords, assign permissions.
+- Every human action is attributed to the authenticated user (transactions,
+  inventory movements, import batches, invoices, boxes, documents, order
+  close/validate, exceptions) and recorded in `audit_events`.
+
+Bootstrap the first admin (no hard-coded credentials):
+
+```bash
+flask --app wsgi create-admin
+```
+
 ## Database tables
 
-`clients`, `warehouses`, `order_types`, `inventory_units`, `orders`,
-`order_lines`, `allocations`, `boxes`, `box_contents`, `invoices`,
-`transactions`, `inventory_movements`, `order_exceptions`,
-`inventory_exceptions`, `documents`, `import_batches`.
+`users`, `permissions`, `user_permissions`, `audit_events`, `clients`,
+`warehouses`, `order_types`, `inventory_units`, `orders`, `order_lines`,
+`allocations`, `boxes`, `box_contents`, `invoices`, `transactions`,
+`inventory_movements`, `order_exceptions`, `inventory_exceptions`,
+`documents`, `import_batches`.
 
 ## Local development
 
