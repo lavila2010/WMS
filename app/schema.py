@@ -12,6 +12,7 @@ _ORDER_COLUMNS = {
     "processing_user_id": "INTEGER",
     "processing_username": "VARCHAR(64)",
     "processing_started_at": "TIMESTAMP",
+    "processing_lock_id": "VARCHAR(64)",
 }
 
 _BOX_COLUMNS = {
@@ -39,6 +40,11 @@ def ensure_processing_columns() -> None:
     for name, spec in _BOX_COLUMNS.items():
         if name not in box_cols:
             statements.append(f"ALTER TABLE boxes ADD COLUMN {name} {spec}")
+    existing_indexes = {i["name"] for i in inspector.get_indexes("orders")} if "orders" in tables else set()
+    if "ix_orders_processing_lock_id" not in existing_indexes:
+        statements.append(
+            "CREATE INDEX IF NOT EXISTS ix_orders_processing_lock_id ON orders (processing_lock_id)"
+        )
     if not statements:
         return
     with bind.begin() as conn:

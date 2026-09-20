@@ -7,6 +7,9 @@ allocated unit. Inventory scope is Client + Warehouse only (never Order Type).
 from __future__ import annotations
 
 from datetime import datetime
+from uuid import uuid4
+
+from sqlalchemy import text
 
 from ..auth import current_actor
 from ..constants import (
@@ -164,6 +167,9 @@ def order_snapshot(order: Order) -> dict:
     }
 
 
+LOCKED_BY_OTHER_MESSAGE = ExceptionType.ORDER_IN_USE
+
+
 def locked_by_other(order: Order, user=None) -> bool:
     if not order.processing_user_id:
         return False
@@ -177,30 +183,79 @@ def assert_lock(order: Order, user=None) -> None:
             "This order is not in an active processing session.",
         )
     if locked_by_other(order, user):
-        raise ProcessingError(
-            ExceptionType.ORDER_LOCKED,
-            f"Order {order.order_number} is locked by {order.processing_username}.",
-        )
+        raise ProcessingError(ExceptionType.ORDER_LOCKED, LOCKED_BY_OTHER_MESSAGE)
 
 
 def acquire_lock(order: Order, user=None) -> None:
-    if locked_by_other(order, user):
-        raise ProcessingError(
-            ExceptionType.ORDER_LOCKED,
-            f"Order {order.order_number} is already being processed by "
-            f"{order.processing_username}.",
-        )
+    """Atomically take exclusive processing ownership in PostgreSQL.
+
+    ``UPDATE ... WHERE processing_user_id IS NULL OR processing_user_id = :uid``
+    makes simultaneous first-acquire attempts produce exactly one winner.
+    The same owner may re-enter without creating a second lock. A refresh
+    never clears these columns.
+    """
     uid, uname = _actor(user)
-    order.processing_user_id = uid
-    order.processing_username = uname
-    if order.processing_started_at is None:
-        order.processing_started_at = datetime.utcnow()
+    if uid is None:
+        raise ProcessingError(ExceptionType.ORDER_LOCKED, "A signed-in user is required to process an order.")
+    lock_id = str(uuid4())
+    now = datetime.utcnow()
+    row = db.session.execute(
+        text(
+            """
+            UPDATE orders
+            SET processing_user_id = :uid,
+                processing_username = :uname,
+                processing_started_at = COALESCE(processing_started_at, :now),
+                processing_lock_id = CASE
+                    WHEN processing_user_id IS NULL THEN :lock_id
+                    ELSE COALESCE(processing_lock_id, :lock_id)
+                END
+            WHERE id = :order_id
+              AND (processing_user_id IS NULL OR processing_user_id = :uid)
+            RETURNING id, processing_user_id, processing_username,
+                      processing_started_at, processing_lock_id
+            """
+        ),
+        {
+            "uid": uid,
+            "uname": uname,
+            "now": now,
+            "lock_id": lock_id,
+            "order_id": order.id,
+        },
+    ).first()
+    if row is None:
+        raise ProcessingError(ExceptionType.ORDER_LOCKED, LOCKED_BY_OTHER_MESSAGE)
+    db.session.expire(order)
+    db.session.refresh(order)
 
 
-def release_lock(order: Order) -> None:
+def release_lock(order: Order, user=None, *, require_owner: bool = False) -> None:
+    """Clear the exclusive processing lock.
+
+    Release is allowed only after an authorized close or cancel. Pass
+    ``require_owner=True`` so another user cannot steal or drop the lock.
+    """
+    if require_owner:
+        assert_lock(order, user)
     order.processing_user_id = None
     order.processing_username = None
     order.processing_started_at = None
+    order.processing_lock_id = None
+
+
+def require_processing_owner(order: Order, user=None, *, acquire_if_free: bool = False) -> None:
+    """Block processing mutations unless this user owns the lock."""
+    if order.processing_user_id:
+        assert_lock(order, user)
+        return
+    if acquire_if_free:
+        acquire_lock(order, user)
+        return
+    raise ProcessingError(
+        ExceptionType.ORDER_LOCKED,
+        "This order is not in an active processing session.",
+    )
 
 
 def lookup_pick_ticket(number: str, user=None) -> tuple[PickTicket, Order]:
@@ -242,10 +297,7 @@ def lookup_pick_ticket(number: str, user=None) -> tuple[PickTicket, Order]:
             f"(status {order.status}).",
         )
     if locked_by_other(order, user):
-        raise ProcessingError(
-            ExceptionType.ORDER_LOCKED,
-            f"Order {order.order_number} is locked by {order.processing_username}.",
-        )
+        raise ProcessingError(ExceptionType.ORDER_LOCKED, LOCKED_BY_OTHER_MESSAGE)
     return ticket, order
 
 
@@ -306,7 +358,7 @@ def cancel_session(order: Order, user=None) -> None:
         detail="Processing session cancelled; lock released.",
         user=user,
     )
-    release_lock(order)
+    release_lock(order, user=user, require_owner=True)
     db.session.flush()
 
 

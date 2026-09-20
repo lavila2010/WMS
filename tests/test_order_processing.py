@@ -122,9 +122,10 @@ def test_processing_lock_prevents_two_users(db):
     db.session.commit()
     with pytest.raises(ProcessingError) as exc:
         lookup_pick_ticket(ticket.pick_ticket_number, user=bob)
-    assert "alice" in exc.value.message
-    with pytest.raises(ProcessingError):
+    assert exc.value.message == "Order is currently being processed by another user."
+    with pytest.raises(ProcessingError) as blocked:
         confirm_order(order, user=bob)
+    assert blocked.value.message == "Order is currently being processed by another user."
 
 
 def test_confirm_order_starts_processing(db):
@@ -512,7 +513,7 @@ def test_http_lock_and_attribution(app, db):
     login(c_bob, "bob")
     c_alice.post(f"/processing/{order.id}/confirm", follow_redirects=True)
     locked = c_bob.post("/processing/find", data={"pick_ticket_number": ticket.pick_ticket_number})
-    assert "alice" in locked.get_data(as_text=True)
+    assert "Order is currently being processed by another user." in locked.get_data(as_text=True)
     txn = Transaction.query.filter_by(order_id=order.id, type=ProcessingEvent.PROCESSING_STARTED).first()
     assert txn.username == "alice"
     assert txn.user_id is not None

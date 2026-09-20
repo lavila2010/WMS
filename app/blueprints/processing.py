@@ -27,6 +27,7 @@ from ..services.packing import (
     scan_into_box,
 )
 from ..services.processing import (
+    LOCKED_BY_OTHER_MESSAGE,
     ProcessingError,
     add_upc_to_recalled_carton,
     cancel_session,
@@ -44,7 +45,9 @@ from ..services.processing import (
     recall_carton,
     remaining_unit_rows,
     remove_unit_from_carton,
+    release_lock,
     request_close_carton,
+    require_processing_owner,
     save_carton_weight,
     scan_upc_into_box,
     station_kpis,
@@ -173,11 +176,8 @@ def detail(order_id: int):
             order=order,
             snap=order_snapshot(order),
         )
-    if order.processing_user_id != current_user.id and not current_user.is_admin():
-        flash(
-            f"Order {order.order_number} is locked by {order.processing_username}.",
-            "error",
-        )
+    if order.processing_user_id != current_user.id:
+        flash(LOCKED_BY_OTHER_MESSAGE, "error")
         return redirect(url_for("processing.index"))
     rec = reconcile(order)
     focus = request.args.get("box_id", type=int)
@@ -195,6 +195,7 @@ def dimensions(order_id: int):
     if box.order_id != order.id:
         abort(404)
     try:
+        require_processing_owner(order, user=current_user)
         confirm_dimensions(
             box,
             request.form.get("length"),
@@ -219,6 +220,7 @@ def scan_upc(order_id: int):
         abort(404)
     upc = request.form.get("upc", "")
     try:
+        require_processing_owner(order, user=current_user)
         scan_upc_into_box(box, upc, user=current_user)
         record_audit(
             ProcessingEvent.UNIT_SCAN,
@@ -239,6 +241,7 @@ def scan_upc(order_id: int):
 def request_close(box_id: int):
     box = Box.query.get_or_404(box_id)
     try:
+        require_processing_owner(box.order, user=current_user)
         request_close_carton(box, user=current_user)
         record_audit(
             ProcessingEvent.CARTON_CLOSED,
@@ -259,6 +262,7 @@ def request_close(box_id: int):
 def weight(box_id: int):
     box = Box.query.get_or_404(box_id)
     try:
+        require_processing_owner(box.order, user=current_user)
         save_carton_weight(
             box,
             request.form.get("weight"),
@@ -292,6 +296,7 @@ def weight(box_id: int):
 def recall(box_id: int):
     box = Box.query.get_or_404(box_id)
     try:
+        require_processing_owner(box.order, user=current_user)
         recall_carton(box, user=current_user)
         record_audit(
             ProcessingEvent.CARTON_RECALLED,
@@ -313,6 +318,7 @@ def add_recalled(box_id: int):
     box = Box.query.get_or_404(box_id)
     upc = request.form.get("upc", "")
     try:
+        require_processing_owner(box.order, user=current_user)
         add_upc_to_recalled_carton(box, upc, user=current_user)
         record_audit(
             ProcessingEvent.CARTON_UNIT_ADDED,
@@ -334,6 +340,7 @@ def remove_unit(content_id: int):
     content = BoxContent.query.get_or_404(content_id)
     box = content.box
     try:
+        require_processing_owner(box.order, user=current_user)
         remove_unit_from_carton(content, user=current_user)
         record_audit(
             ProcessingEvent.CARTON_UNIT_REMOVED,
@@ -359,6 +366,7 @@ def decision(order_id: int):
     if not current_user.has_permission("ORDER_CLOSE"):
         abort(403)
     try:
+        require_processing_owner(order, user=current_user)
         _, document = finalize_order(order, user=current_user)
         record_audit(
             ProcessingEvent.ORDER_CLOSED,
@@ -432,12 +440,13 @@ def new_box(order_id: int):
     if not box_number:
         box_number = f"{order.order_number}-BOX{len(order.boxes) + 1:02d}"
     try:
+        require_processing_owner(order, user=current_user, acquire_if_free=True)
         box = create_box(order, box_number, _f("length_cm"), _f("width_cm"), _f("height_cm"))
         record_audit("BOX_CREATE", module="Processing", entity_type="Box", entity_id=box.id, detail=box_number)
         db.session.commit()
         flash(f"Box {box_number} created.", "success")
-    except WorkflowError as exc:
-        flash(str(exc), "error")
+    except (WorkflowError, ProcessingError) as exc:
+        flash(getattr(exc, "message", str(exc)), "error")
     return redirect(url_for("processing.detail", order_id=order.id))
 
 
@@ -447,10 +456,14 @@ def scan(box_id: int):
     box = Box.query.get_or_404(box_id)
     barcode = request.form.get("barcode", "")
     try:
+        require_processing_owner(box.order, user=current_user, acquire_if_free=True)
         scan_into_box(box, barcode)
         record_audit("UNIT_SCAN", module="Processing", entity_type="Box", entity_id=box.id, detail=barcode.strip())
         db.session.commit()
         flash(f"Packed {barcode.strip()} into {box.box_number}.", "success")
+    except ProcessingError as exc:
+        db.session.rollback()
+        flash(exc.message, "error")
     except BarcodeError as exc:
         db.session.commit()
         flash(f"{exc.exc_type}: {exc.message}", "error")
@@ -463,12 +476,13 @@ def close(box_id: int):
     box = Box.query.get_or_404(box_id)
     weight_value = request.form.get("weight_kg", "").strip()
     try:
+        require_processing_owner(box.order, user=current_user, acquire_if_free=True)
         close_box(box, float(weight_value) if weight_value else None)
         record_audit("BOX_CLOSE", module="Processing", entity_type="Box", entity_id=box.id, detail=f"{weight_value}kg")
         db.session.commit()
         flash(f"Box {box.box_number} closed.", "success")
-    except (ValueError, TypeError) as exc:
-        flash(str(exc), "error")
+    except (ValueError, TypeError, ProcessingError) as exc:
+        flash(getattr(exc, "message", str(exc)), "error")
     return redirect(url_for("processing.detail", order_id=box.order_id))
 
 
@@ -477,11 +491,12 @@ def close(box_id: int):
 def processed(order_id: int):
     order = Order.query.get_or_404(order_id)
     try:
+        require_processing_owner(order, user=current_user, acquire_if_free=True)
         mark_processed(order)
         db.session.commit()
         flash(f"Order {order.order_number} marked PROCESSED.", "success")
-    except (ValueError, WorkflowError) as exc:
-        flash(str(exc), "error")
+    except (ValueError, WorkflowError, ProcessingError) as exc:
+        flash(getattr(exc, "message", str(exc)), "error")
     return redirect(url_for("processing.detail", order_id=order.id))
 
 
@@ -490,12 +505,13 @@ def processed(order_id: int):
 def ready_to_close(order_id: int):
     order = Order.query.get_or_404(order_id)
     try:
+        require_processing_owner(order, user=current_user, acquire_if_free=True)
         mark_ready_to_close(order)
         db.session.commit()
         flash(f"Order {order.order_number} ready to close.", "success")
-    except (ValueError, WorkflowError) as exc:
+    except (ValueError, WorkflowError, ProcessingError) as exc:
         db.session.commit()
-        flash(str(exc), "error")
+        flash(getattr(exc, "message", str(exc)), "error")
     return redirect(url_for("processing.detail", order_id=order.id))
 
 
@@ -504,19 +520,21 @@ def ready_to_close(order_id: int):
 def close_order_view(order_id: int):
     order = Order.query.get_or_404(order_id)
     try:
+        require_processing_owner(order, user=current_user, acquire_if_free=True)
         _, invoice = close_order(order, created_by=current_user.username)
         uid, uname = current_actor()
         order.closed_by_user_id = uid
         order.closed_by_username = uname
+        release_lock(order, user=current_user, require_owner=True)
         record_audit("ORDER_CLOSE", module="Processing", entity_type="Order", entity_id=order.id, detail=invoice.invoice_number)
         db.session.commit()
         flash(
             f"Order {order.order_number} CLOSED. Invoice {invoice.invoice_number} created.",
             "success",
         )
-    except (ValueError, WorkflowError) as exc:
+    except (ValueError, WorkflowError, ProcessingError) as exc:
         db.session.rollback()
-        flash(str(exc), "error")
+        flash(getattr(exc, "message", str(exc)), "error")
     except Exception as exc:
         db.session.rollback()
         flash(f"Order close failed and was rolled back: {exc}", "error")

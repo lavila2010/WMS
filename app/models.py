@@ -292,6 +292,7 @@ class Order(db.Model):
     processing_user_id = db.Column(db.Integer, db.ForeignKey("users.id"))
     processing_username = db.Column(db.String(64))
     processing_started_at = db.Column(db.DateTime)
+    processing_lock_id = db.Column(db.String(64), index=True)
     created_at = db.Column(db.DateTime, default=_utcnow, nullable=False, index=True)
     updated_at = db.Column(db.DateTime, default=_utcnow, onupdate=_utcnow, nullable=False)
 
