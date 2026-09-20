@@ -84,7 +84,7 @@ class Config:
         self.DOCUMENTS_DIR = os.environ.get(
             "DOCUMENTS_DIR", os.path.join(os.getcwd(), "instance", "documents")
         )
-        self.MAX_CONTENT_LENGTH = int(os.environ.get("MAX_UPLOAD_MB", "25")) * 1024 * 1024
+        self.MAX_CONTENT_LENGTH = int(os.environ.get("MAX_UPLOAD_MB", "50")) * 1024 * 1024
         self.SESSION_COOKIE_HTTPONLY = True
         self.SESSION_COOKIE_SAMESITE = "Lax"
         self.SESSION_COOKIE_SECURE = os.environ.get("SESSION_COOKIE_SECURE", secure_default).lower() in (

@@ -6,6 +6,7 @@ from flask_login import current_user
 from ..auth import permission_required
 from ..constants import OrderStatus, UnitStatus
 from ..models import Client, InventoryUnit, Order, Warehouse
+from ..services.inventory_visibility import apply_operational_visibility
 from ..services.tenant import accessible_clients, user_can_access_client
 
 bp = Blueprint("dashboard", __name__)
@@ -25,25 +26,25 @@ def index():
         if warehouse_id and not any(w.id == warehouse_id for w in warehouses):
             warehouse_id = None
 
-    units = InventoryUnit.query
+    units = apply_operational_visibility(InventoryUnit.query)
     orders = Order.query
     if client_id:
-        units = units.filter_by(client_id=client_id)
+        units = units.filter(InventoryUnit.client_id == client_id)
         orders = orders.filter_by(client_id=client_id)
     elif not current_user.is_admin():
         ids = [c.id for c in clients]
         units = units.filter(InventoryUnit.client_id.in_(ids or [-1]))
         orders = orders.filter(Order.client_id.in_(ids or [-1]))
     if warehouse_id:
-        units = units.filter_by(warehouse_id=warehouse_id)
+        units = units.filter(InventoryUnit.warehouse_id == warehouse_id)
         orders = orders.filter_by(warehouse_id=warehouse_id)
 
     unit_counts = {
         "total": units.count(),
-        "available": units.filter_by(status=UnitStatus.AVAILABLE).count(),
-        "reserved": units.filter_by(status=UnitStatus.RESERVED).count(),
-        "packed": units.filter_by(status=UnitStatus.PACKED).count(),
-        "shipped": units.filter_by(status=UnitStatus.SHIPPED).count(),
+        "available": units.filter(InventoryUnit.status == UnitStatus.AVAILABLE).count(),
+        "reserved": units.filter(InventoryUnit.status == UnitStatus.RESERVED).count(),
+        "packed": units.filter(InventoryUnit.status == UnitStatus.PACKED).count(),
+        "shipped": units.filter(InventoryUnit.status == UnitStatus.SHIPPED).count(),
     }
     status_counts = {s: orders.filter_by(status=s).count() for s in OrderStatus.ALL}
     return render_template(

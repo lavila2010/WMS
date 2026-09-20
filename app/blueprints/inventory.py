@@ -8,6 +8,7 @@ from flask import (
     Blueprint,
     abort,
     flash,
+    jsonify,
     redirect,
     render_template,
     request,
@@ -24,14 +25,21 @@ from ..models import Client, ImportBatch, InventoryUnit, Warehouse
 from ..services.inventory_import import (
     ImportErrorClosed,
     analyze,
+    begin_processing,
+    cancel_validated_batch,
+    cleanup_failed_import,
     clear_preview,
-    commit_import,
     load_preview,
+    preview_from_batch,
+    process_import_batch,
     resolve_context,
+    retry_import,
     save_preview,
+    batch_progress,
     template_bytes,
 )
 from ..services import inventory_query as iq
+from ..services.inventory_visibility import apply_operational_visibility
 from ..services.tenant import accessible_clients, user_can_access_client
 
 bp = Blueprint("inventory", __name__, url_prefix="/inventory")
@@ -116,14 +124,39 @@ def overview():
     )
 
 
+def _active_batch():
+    batch_id = request.args.get("import_batch_id", type=int) or session.get("inv_import_batch_id")
+    if not batch_id:
+        return None
+    batch = db.session.get(ImportBatch, batch_id)
+    if batch is None or not user_can_access_client(current_user, batch.client_id):
+        return None
+    return batch
+
+
 @bp.route("/upload", methods=["GET", "POST"])
 @permission_required("INVENTORY_UPLOAD")
 def upload():
     preview = None
+    processing_batch = None
     token = session.get("inv_preview_token")
     if token:
         preview = load_preview(token)
-    return _page("inventory/upload.html", "upload", preview=preview, result=None)
+        if preview and preview.get("batch_id"):
+            batch = db.session.get(ImportBatch, preview["batch_id"])
+            if batch is not None:
+                preview = preview_from_batch(batch)
+    batch = _active_batch()
+    if batch is not None and batch.status in {"PROCESSING", "COMPLETED", "FAILED"}:
+        processing_batch = batch_progress(batch)
+        preview = None
+    return _page(
+        "inventory/upload.html",
+        "upload",
+        preview=preview,
+        processing_batch=processing_batch,
+        result=None,
+    )
 
 
 @bp.route("/upload/preview", methods=["POST"])
@@ -149,7 +182,7 @@ def import_preview():
             )
         )
     try:
-        preview = analyze(file.stream, file.filename, client, warehouse)
+        preview = analyze(file.stream, file.filename, client, warehouse, user=current_user)
     except ImportErrorClosed as exc:
         flash(str(exc), "error")
         return redirect(
@@ -157,6 +190,7 @@ def import_preview():
         )
     token = save_preview(preview)
     session["inv_preview_token"] = token
+    session["inv_import_batch_id"] = preview["batch_id"]
     return redirect(url_for("inventory.upload", client_id=client.id, warehouse_id=warehouse.id))
 
 
@@ -165,32 +199,24 @@ def import_preview():
 def import_confirm():
     token = session.get("inv_preview_token")
     preview = load_preview(token) if token else None
-    if not preview:
+    batch_id = (preview or {}).get("batch_id") or session.get("inv_import_batch_id")
+    if not batch_id:
         flash("Preview expired. Upload the file again.", "error")
         return redirect(url_for("inventory.upload"))
     try:
-        resolve_context(current_user, preview["client_id"], preview["warehouse_id"])
-        if preview["has_blocking"]:
-            raise ImportErrorClosed("Confirm is disabled while blocking errors exist.")
-        batch = commit_import(preview, user=current_user)
-    except (ImportErrorClosed, Exception) as exc:
+        batch = begin_processing(int(batch_id), user=current_user, run="async")
+    except ImportErrorClosed as exc:
         flash(str(exc), "error")
-        return redirect(
-            url_for(
-                "inventory.upload",
-                client_id=preview["client_id"],
-                warehouse_id=preview["warehouse_id"],
-            )
-        )
+        return redirect(url_for("inventory.upload"))
     clear_preview(token)
     session.pop("inv_preview_token", None)
-    flash(f"Imported {batch.rows_imported} units from {batch.filename}.", "success")
+    session["inv_import_batch_id"] = batch.id
     return redirect(
         url_for(
-            "inventory.import_detail",
-            batch_id=batch.id,
+            "inventory.upload",
             client_id=batch.client_id,
             warehouse_id=batch.warehouse_id,
+            import_batch_id=batch.id,
         )
     )
 
@@ -199,9 +225,76 @@ def import_confirm():
 @permission_required("INVENTORY_UPLOAD")
 def import_cancel():
     token = session.pop("inv_preview_token", None)
+    preview = load_preview(token) if token else None
+    batch_id = (preview or {}).get("batch_id") or session.pop("inv_import_batch_id", None)
     clear_preview(token)
+    if batch_id:
+        try:
+            cancel_validated_batch(int(batch_id), user=current_user)
+        except ImportErrorClosed as exc:
+            flash(str(exc), "error")
+            return redirect(url_for("inventory.upload"))
     flash("Import preview cancelled.", "success")
     return redirect(url_for("inventory.upload"))
+
+
+@bp.route("/imports/<int:batch_id>/status")
+@permission_required("INVENTORY_UPLOAD")
+def import_status(batch_id):
+    batch = db.session.get(ImportBatch, batch_id)
+    if batch is None or not user_can_access_client(current_user, batch.client_id):
+        abort(404)
+    return jsonify(batch_progress(batch))
+
+
+@bp.route("/imports/<int:batch_id>/advance", methods=["POST"])
+@permission_required("INVENTORY_UPLOAD")
+def import_advance(batch_id):
+    batch = db.session.get(ImportBatch, batch_id)
+    if batch is None or not user_can_access_client(current_user, batch.client_id):
+        abort(404)
+    try:
+        resolve_context(current_user, batch.client_id, batch.warehouse_id)
+        if batch.status == "PROCESSING":
+            process_import_batch(batch.id, max_chunks=3)
+            batch = db.session.get(ImportBatch, batch.id)
+    except ImportErrorClosed as exc:
+        return jsonify({"error": str(exc), **batch_progress(batch)}), 400
+    return jsonify(batch_progress(batch))
+
+
+@bp.route("/imports/<int:batch_id>/retry", methods=["POST"])
+@permission_required("INVENTORY_UPLOAD")
+def import_retry(batch_id):
+    try:
+        batch = retry_import(batch_id, user=current_user, run="async")
+    except ImportErrorClosed as exc:
+        flash(str(exc), "error")
+        return redirect(url_for("inventory.upload"))
+    session["inv_import_batch_id"] = batch.id
+    return redirect(
+        url_for(
+            "inventory.upload",
+            client_id=batch.client_id,
+            warehouse_id=batch.warehouse_id,
+            import_batch_id=batch.id,
+        )
+    )
+
+
+@bp.route("/imports/<int:batch_id>/cleanup", methods=["POST"])
+@permission_required("INVENTORY_UPLOAD")
+def import_cleanup(batch_id):
+    try:
+        batch = cleanup_failed_import(batch_id, user=current_user)
+    except ImportErrorClosed as exc:
+        flash(str(exc), "error")
+        return redirect(url_for("inventory.upload"))
+    flash("Failed import cleaned up. No operational inventory remains from that file.", "success")
+    session.pop("inv_import_batch_id", None)
+    return redirect(
+        url_for("inventory.upload", client_id=batch.client_id, warehouse_id=batch.warehouse_id)
+    )
 
 
 @bp.route("/template")
@@ -282,7 +375,7 @@ def location_view():
     units = []
     if upc and location:
         units = (
-            InventoryUnit.query.filter_by(upc=upc, location=location)
+            apply_operational_visibility(InventoryUnit.query.filter_by(upc=upc, location=location))
             .filter(
                 InventoryUnit.client_id.in_(
                     [ctx["scope"]["client_id"]]

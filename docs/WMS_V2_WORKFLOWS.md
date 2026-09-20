@@ -50,10 +50,11 @@ All mutations fail closed. Tenant and permission checks run on the server before
 1. User selects Client + Warehouse (both active; warehouse belongs to client; user may access client).  
 2. Upload Excel: UPC, SKU, Description, Style, Color, Size, Quantity, Location.  
 3. Optional Client/Warehouse columns: must match selected context or the file is rejected.  
-4. Preview parses; validate entire file. Quantity must be integer > 0. UPC, Description, and Location required. Description is copied onto every physical unit created from Quantity.  
-5. Confirm runs one transaction: for each row, insert `Quantity` `AVAILABLE` units; each unit gets `IMPORT` ledger row; `ImportBatch` COMPLETED.  
-6. Any error rolls back the entire commit (zero units).  
-7. Audit `INVENTORY_IMPORT`.
+4. Preview parses once into `inventory_import_rows`. Quantity must be integer > 0. UPC, Description, Style, Color, Size, and Location required. SKU may be blank. Description is copied onto every physical unit created from Quantity. Preview JSON stores only batch identity, counts, and the first 100 rows.  
+5. Confirm authorizes, marks the batch `PROCESSING`, starts server-side execution, and returns immediately. The browser polls status.  
+6. A Gunicorn worker thread (same `wms-v2` web service) bulk-inserts units and IMPORT ledger rows in 2,000-unit chunks. PostgreSQL advisory locks plus `units_created` make Confirm/retry/refresh idempotent. Poll `POST /inventory/imports/<id>/advance` can resume if the thread is interrupted. `flask process-inventory-import --batch-id` is the operator fallback. There is no separate Render worker service.  
+7. Units stay invisible to allocation and operational availability until `ImportBatch.status = COMPLETED`. A `FAILED` batch is also invisible; Retry resumes remaining chunks; Cleanup deletes the batch's units and ledger rows.  
+8. Audit `INVENTORY_IMPORT` when the batch completes.
 
 ---
 

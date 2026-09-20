@@ -7,8 +7,9 @@ from sqlalchemy import select
 from ..auth import current_actor, record_audit
 from ..constants import AllocationStatus, LedgerType, OrderStatus, UnitStatus
 from ..extensions import db
-from ..models import Allocation, InventoryUnit, Order, OrderLine
+from ..models import Allocation, ImportBatch, InventoryUnit, Order, OrderLine
 from .inventory_ledger import LedgerError, transition_unit
+from .inventory_visibility import operational_batch_clause
 
 
 class AllocationError(ValueError):
@@ -30,14 +31,16 @@ def _lock_order(order_id: int) -> Order:
 def _candidate_units(order: Order, upc: str, need: int) -> list[InventoryUnit]:
     stmt = (
         select(InventoryUnit)
+        .outerjoin(ImportBatch, InventoryUnit.import_batch_id == ImportBatch.id)
         .where(
             InventoryUnit.client_id == order.client_id,
             InventoryUnit.warehouse_id == order.warehouse_id,
             InventoryUnit.upc == upc,
             InventoryUnit.status == UnitStatus.AVAILABLE,
+            operational_batch_clause(),
         )
         .order_by(InventoryUnit.location.asc(), InventoryUnit.id.asc())
-        .with_for_update(skip_locked=True)
+        .with_for_update(skip_locked=True, of=InventoryUnit)
         .limit(need)
     )
     return list(db.session.execute(stmt).scalars().all())

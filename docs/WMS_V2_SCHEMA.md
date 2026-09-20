@@ -225,14 +225,52 @@ Same-client rule: application + `CHECK` enforced by trigger `division_warehouses
 | division_id | INT FK divisions | YES | order imports |
 | type | VARCHAR(20) | NO | INVENTORY / ORDERS |
 | filename | VARCHAR(255) | NO | |
-| status | VARCHAR(20) | NO | COMPLETED / REJECTED |
+| status | VARCHAR(20) | NO | UPLOADED / VALIDATING / VALIDATED / PROCESSING / COMPLETED / FAILED |
+| source_storage_key | VARCHAR(512) | YES | staged workbook path |
 | rows_submitted | INT | NO | |
-| rows_imported | INT | NO | |
+| rows_imported | INT | NO | physical units created (inventory) |
 | rows_rejected | INT | NO | |
+| rows_validated | INT | NO | |
+| units_expected | INT | NO | |
+| units_created | INT | NO | |
+| transactions_created | INT | NO | |
+| current_source_row | INT | NO | |
+| progress_percent | INT | NO | |
+| unique_upc_count | INT | NO | |
+| unique_style_count | INT | NO | |
+| unique_location_count | INT | NO | |
+| started_at | TIMESTAMP | YES | |
+| completed_at | TIMESTAMP | YES | |
+| failed_at | TIMESTAMP | YES | |
+| error_message | TEXT | YES | safe operator message |
 | message | TEXT | YES | |
 | created_by_user_id | INT FK users | YES | |
 | created_by_username | VARCHAR(64) | YES | |
 | created_at | TIMESTAMP | NO | |
+
+Indexes: `(status)`, `(client_id, warehouse_id, created_at)`.
+
+### `inventory_import_rows`
+
+Durable staging for inventory workbooks. Preview JSON is not the source of truth.
+
+| Column | Type | Null |
+|---|---|---|
+| id | INT PK | NO |
+| import_batch_id | INT FK import_batches | NO |
+| source_row_number | INT | NO | Excel row |
+| upc | VARCHAR(64) | YES | stored as text |
+| sku | VARCHAR(64) | YES | optional |
+| description | VARCHAR(255) | YES | required when VALID |
+| style | VARCHAR(64) | YES | |
+| color | VARCHAR(64) | YES | |
+| size | VARCHAR(32) | YES | |
+| quantity | INT | NO | |
+| location | VARCHAR(64) | YES | stored as text |
+| validation_status | VARCHAR(16) | NO | VALID / INVALID |
+| validation_error | TEXT | YES | |
+
+Indexes: `(import_batch_id)`, `(import_batch_id, validation_status)`.
 
 ### `inventory_units`
 
@@ -260,6 +298,9 @@ Indexes:
 
 - `(client_id, warehouse_id, upc)`
 - `(client_id, warehouse_id, upc, location, status)`
+- `(client_id, warehouse_id, upc, status)` allocation/availability
+- `(import_batch_id)` visibility, resume, cleanup
+- `(client_id, warehouse_id, location)` location search
 - `(allocated_order_id)`
 - `(carton_id)`
 
@@ -284,10 +325,11 @@ No unique barcode. Physical identity is `id`.
 | pick_ticket_id | INT FK pick_tickets | YES | |
 | carton_id | INT FK cartons | YES | |
 | user_id | INT FK users | YES | |
+| import_batch_id | INT FK import_batches | YES | set on IMPORT rows |
 | reference | VARCHAR(255) | YES | |
 | created_at | TIMESTAMP | NO | |
 
-No UPDATE/DELETE from application. Indexes: `client_id`, `inventory_unit_id`, `created_at`, `order_id`.
+No UPDATE/DELETE from application except failed-import cleanup. Indexes: `client_id`, `inventory_unit_id`, `created_at`, `order_id`, `import_batch_id`, `(client_id, warehouse_id, upc)`.
 
 ### `orders`
 

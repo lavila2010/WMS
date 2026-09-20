@@ -164,7 +164,7 @@ Administration tabs add: Users, Permissions, Client Access, Clients, Divisions, 
 | `app/models.py` | V2 schema |
 | `app/auth.py` | Login, RBAC, tenant require_* |
 | `app/services/masters.py` | Client/division/warehouse/mapping writes |
-| `app/services/inventory_import.py` | Context + atomic unit expansion |
+| `app/services/inventory_import.py` | Stage Excel → compact preview → bulk unit/ledger chunks |
 | `app/services/order_import.py` | Context + atomic header/lines |
 | `app/services/allocation.py` | UPC reserve + ledger |
 | `app/services/pick_tickets.py` | Permanent numbers + print events |

@@ -55,6 +55,7 @@ def record_transaction(
         client_id=unit.client_id,
         warehouse_id=unit.warehouse_id,
         inventory_unit_id=unit.id,
+        import_batch_id=unit.import_batch_id,
         upc=unit.upc,
         location=unit.location,
         transaction_type=transaction_type,

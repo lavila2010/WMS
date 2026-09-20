@@ -6,11 +6,14 @@ from sqlalchemy import String, case, cast, func, or_
 
 from ..constants import UnitStatus
 from ..extensions import db
-from ..models import InventoryTransaction, InventoryUnit
+from ..models import ImportBatch, InventoryTransaction, InventoryUnit
+from .inventory_visibility import apply_operational_visibility, operational_batch_clause
 
 
-def _base(client_id=None, warehouse_id=None, client_ids=None):
+def _base(client_id=None, warehouse_id=None, client_ids=None, *, operational=True):
     query = InventoryUnit.query
+    if operational:
+        query = apply_operational_visibility(query)
     if client_id:
         query = query.filter(InventoryUnit.client_id == client_id)
     elif client_ids is not None:
@@ -78,7 +81,8 @@ def aggregate_rows(client_id=None, warehouse_id=None, client_ids=None):
             packed.label("packed"),
             shipped.label("shipped"),
         )
-        .filter(*filters)
+        .outerjoin(ImportBatch, InventoryUnit.import_batch_id == ImportBatch.id)
+        .filter(operational_batch_clause(), *filters)
         .group_by(
             InventoryUnit.client_id,
             InventoryUnit.warehouse_id,
@@ -186,11 +190,13 @@ def unique_client_upc_description(client_id: int, upc: str) -> str | None:
         return None
     values = (
         db.session.query(InventoryUnit.description)
+        .outerjoin(ImportBatch, InventoryUnit.import_batch_id == ImportBatch.id)
         .filter(
             InventoryUnit.client_id == client_id,
             InventoryUnit.upc == upc,
             InventoryUnit.description.isnot(None),
             InventoryUnit.description != "",
+            operational_batch_clause(),
         )
         .distinct()
         .all()
@@ -213,7 +219,8 @@ def warehouse_comparison(client_id, client_ids=None):
             func.sum(case((InventoryUnit.status == UnitStatus.RESERVED, 1), else_=0)).label("reserved"),
             func.sum(case((InventoryUnit.status == UnitStatus.PACKED, 1), else_=0)).label("packed"),
         )
-        .filter(*filters)
+        .outerjoin(ImportBatch, InventoryUnit.import_batch_id == ImportBatch.id)
+        .filter(operational_batch_clause(), *filters)
         .group_by(InventoryUnit.warehouse_id)
         .all()
     )

@@ -171,3 +171,12 @@ def _register_cli(app):
             )
             db.session.commit()
             click.echo(f"Created {username} ({role}).")
+
+    @app.cli.command("process-inventory-import")
+    @click.option("--batch-id", required=True, type=int)
+    def process_inventory_import_cmd(batch_id):
+        """Resume a PROCESSING/FAILED inventory import on the web service or a one-off job."""
+        from .services.inventory_import import process_import_batch
+
+        batch = process_import_batch(batch_id)
+        click.echo(f"Batch {batch.id} status={batch.status} units={batch.units_created}")

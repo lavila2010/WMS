@@ -209,6 +209,10 @@ class DivisionWarehouse(db.Model):
 
 class ImportBatch(db.Model):
     __tablename__ = "import_batches"
+    __table_args__ = (
+        db.Index("ix_import_batches_status", "status"),
+        db.Index("ix_import_batches_cwc", "client_id", "warehouse_id", "created_at"),
+    )
 
     id = db.Column(db.Integer, primary_key=True)
     client_id = db.Column(db.Integer, db.ForeignKey("clients.id"), nullable=False, index=True)
@@ -216,10 +220,24 @@ class ImportBatch(db.Model):
     division_id = db.Column(db.Integer, db.ForeignKey("divisions.id"))
     type = db.Column(db.String(20), nullable=False)
     filename = db.Column(db.String(255), nullable=False)
-    status = db.Column(db.String(20), nullable=False, default="COMPLETED")
+    source_storage_key = db.Column(db.String(512))
+    status = db.Column(db.String(20), nullable=False, default="UPLOADED")
     rows_submitted = db.Column(db.Integer, nullable=False, default=0)
     rows_imported = db.Column(db.Integer, nullable=False, default=0)
     rows_rejected = db.Column(db.Integer, nullable=False, default=0)
+    rows_validated = db.Column(db.Integer, nullable=False, default=0)
+    units_expected = db.Column(db.Integer, nullable=False, default=0)
+    units_created = db.Column(db.Integer, nullable=False, default=0)
+    transactions_created = db.Column(db.Integer, nullable=False, default=0)
+    current_source_row = db.Column(db.Integer, nullable=False, default=0)
+    progress_percent = db.Column(db.Integer, nullable=False, default=0)
+    unique_upc_count = db.Column(db.Integer, nullable=False, default=0)
+    unique_style_count = db.Column(db.Integer, nullable=False, default=0)
+    unique_location_count = db.Column(db.Integer, nullable=False, default=0)
+    started_at = db.Column(db.DateTime)
+    completed_at = db.Column(db.DateTime)
+    failed_at = db.Column(db.DateTime)
+    error_message = db.Column(db.Text)
     message = db.Column(db.Text)
     created_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"))
     created_by_username = db.Column(db.String(64))
@@ -228,6 +246,29 @@ class ImportBatch(db.Model):
     client = db.relationship("Client")
     warehouse = db.relationship("Warehouse")
     division = db.relationship("Division")
+    import_rows = db.relationship("InventoryImportRow", backref="import_batch", cascade="all, delete-orphan")
+
+
+class InventoryImportRow(db.Model):
+    __tablename__ = "inventory_import_rows"
+    __table_args__ = (
+        db.Index("ix_inv_import_rows_batch", "import_batch_id"),
+        db.Index("ix_inv_import_rows_batch_status", "import_batch_id", "validation_status"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    import_batch_id = db.Column(db.Integer, db.ForeignKey("import_batches.id"), nullable=False)
+    source_row_number = db.Column(db.Integer, nullable=False)
+    upc = db.Column(db.String(64))
+    sku = db.Column(db.String(64))
+    description = db.Column(db.String(255))
+    style = db.Column(db.String(64))
+    color = db.Column(db.String(64))
+    size = db.Column(db.String(32))
+    quantity = db.Column(db.Integer, nullable=False, default=0)
+    location = db.Column(db.String(64))
+    validation_status = db.Column(db.String(16), nullable=False, default="INVALID")
+    validation_error = db.Column(db.Text)
 
 
 class InventoryUnit(db.Model):
@@ -235,6 +276,9 @@ class InventoryUnit(db.Model):
     __table_args__ = (
         db.Index("ix_units_cwu", "client_id", "warehouse_id", "upc"),
         db.Index("ix_units_cwuls", "client_id", "warehouse_id", "upc", "location", "status"),
+        db.Index("ix_units_cwus", "client_id", "warehouse_id", "upc", "status"),
+        db.Index("ix_units_import_batch", "import_batch_id"),
+        db.Index("ix_units_cwl", "client_id", "warehouse_id", "location"),
     )
 
     id = db.Column(db.Integer, primary_key=True)
@@ -337,11 +381,16 @@ class Allocation(db.Model):
 
 class InventoryTransaction(db.Model):
     __tablename__ = "inventory_transactions"
+    __table_args__ = (
+        db.Index("ix_txn_import_batch", "import_batch_id"),
+        db.Index("ix_txn_cwu", "client_id", "warehouse_id", "upc"),
+    )
 
     id = db.Column(db.Integer, primary_key=True)
     client_id = db.Column(db.Integer, db.ForeignKey("clients.id"), nullable=False, index=True)
     warehouse_id = db.Column(db.Integer, db.ForeignKey("warehouses.id"), nullable=False)
     inventory_unit_id = db.Column(db.Integer, db.ForeignKey("inventory_units.id"), nullable=False, index=True)
+    import_batch_id = db.Column(db.Integer, db.ForeignKey("import_batches.id"))
     upc = db.Column(db.String(64), nullable=False)
     location = db.Column(db.String(64), nullable=False)
     transaction_type = db.Column(db.String(24), nullable=False)

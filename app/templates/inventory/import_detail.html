@@ -10,9 +10,27 @@
     <div class="kv"><span>Client</span><span>{{ batch.client.client_code if batch.client else batch.client_id }}</span></div>
     <div class="kv"><span>Warehouse</span><span>{{ batch.warehouse.warehouse_code if batch.warehouse else batch.warehouse_id }}</span></div>
     <div class="kv"><span>Rows submitted</span><span>{{ batch.rows_submitted }}</span></div>
-    <div class="kv"><span>Units imported</span><span>{{ batch.rows_imported }}</span></div>
+    <div class="kv"><span>Rows validated</span><span>{{ batch.rows_validated }}</span></div>
+    <div class="kv"><span>Units expected</span><span>{{ batch.units_expected }}</span></div>
+    <div class="kv"><span>Units imported</span><span>{{ batch.units_created or batch.rows_imported }}</span></div>
+    <div class="kv"><span>Transactions</span><span>{{ batch.transactions_created }}</span></div>
     <div class="kv"><span>Rows rejected</span><span>{{ batch.rows_rejected }}</span></div>
+    <div class="kv"><span>Progress</span><span>{{ batch.progress_percent }}%</span></div>
   </div>
-  {% if batch.message %}<p class="sub" style="margin-top:0.6rem;">{{ batch.message }}</p>{% endif %}
+  {% if batch.error_message and batch.status == 'FAILED' %}
+    <p class="err" style="margin-top:0.6rem;">{{ batch.error_message }}</p>
+    <div style="margin-top:0.6rem; display:flex; gap:0.6rem;">
+      <form method="post" action="{{ url_for('inventory.import_retry', batch_id=batch.id) }}">
+        {% include "_csrf.html" %}
+        <button class="btn" type="submit">Retry Import</button>
+      </form>
+      <form method="post" action="{{ url_for('inventory.import_cleanup', batch_id=batch.id) }}">
+        {% include "_csrf.html" %}
+        <button class="btn btn-danger" type="submit">Cancel/Cleanup Failed Import</button>
+      </form>
+    </div>
+  {% elif batch.message %}
+    <p class="sub" style="margin-top:0.6rem;">{{ batch.message }}</p>
+  {% endif %}
 </div>
 {% endblock %}

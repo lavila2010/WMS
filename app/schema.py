@@ -46,6 +46,70 @@ def ensure_v2_schema() -> None:
             conn.execute(
                 text("ALTER TABLE inventory_units ADD COLUMN IF NOT EXISTS description VARCHAR(255)")
             )
+        batches = conn.execute(text("SELECT to_regclass('public.import_batches')")).scalar()
+        if batches:
+            for stmt in (
+                "ALTER TABLE import_batches ADD COLUMN IF NOT EXISTS source_storage_key VARCHAR(512)",
+                "ALTER TABLE import_batches ADD COLUMN IF NOT EXISTS rows_validated INTEGER NOT NULL DEFAULT 0",
+                "ALTER TABLE import_batches ADD COLUMN IF NOT EXISTS units_expected INTEGER NOT NULL DEFAULT 0",
+                "ALTER TABLE import_batches ADD COLUMN IF NOT EXISTS units_created INTEGER NOT NULL DEFAULT 0",
+                "ALTER TABLE import_batches ADD COLUMN IF NOT EXISTS transactions_created INTEGER NOT NULL DEFAULT 0",
+                "ALTER TABLE import_batches ADD COLUMN IF NOT EXISTS current_source_row INTEGER NOT NULL DEFAULT 0",
+                "ALTER TABLE import_batches ADD COLUMN IF NOT EXISTS progress_percent INTEGER NOT NULL DEFAULT 0",
+                "ALTER TABLE import_batches ADD COLUMN IF NOT EXISTS unique_upc_count INTEGER NOT NULL DEFAULT 0",
+                "ALTER TABLE import_batches ADD COLUMN IF NOT EXISTS unique_style_count INTEGER NOT NULL DEFAULT 0",
+                "ALTER TABLE import_batches ADD COLUMN IF NOT EXISTS unique_location_count INTEGER NOT NULL DEFAULT 0",
+                "ALTER TABLE import_batches ADD COLUMN IF NOT EXISTS started_at TIMESTAMP",
+                "ALTER TABLE import_batches ADD COLUMN IF NOT EXISTS completed_at TIMESTAMP",
+                "ALTER TABLE import_batches ADD COLUMN IF NOT EXISTS failed_at TIMESTAMP",
+                "ALTER TABLE import_batches ADD COLUMN IF NOT EXISTS error_message TEXT",
+            ):
+                conn.execute(text(stmt))
+        txns = conn.execute(text("SELECT to_regclass('public.inventory_transactions')")).scalar()
+        if txns:
+            conn.execute(
+                text(
+                    "ALTER TABLE inventory_transactions ADD COLUMN IF NOT EXISTS import_batch_id INTEGER "
+                    "REFERENCES import_batches(id)"
+                )
+            )
+        if batches:
+            conn.execute(
+                text(
+                    """
+                    CREATE TABLE IF NOT EXISTS inventory_import_rows (
+                        id SERIAL PRIMARY KEY,
+                        import_batch_id INTEGER NOT NULL REFERENCES import_batches(id),
+                        source_row_number INTEGER NOT NULL,
+                        upc VARCHAR(64),
+                        sku VARCHAR(64),
+                        description VARCHAR(255),
+                        style VARCHAR(64),
+                        color VARCHAR(64),
+                        size VARCHAR(32),
+                        quantity INTEGER NOT NULL DEFAULT 0,
+                        location VARCHAR(64),
+                        validation_status VARCHAR(16) NOT NULL DEFAULT 'INVALID',
+                        validation_error TEXT
+                    )
+                    """
+                )
+            )
+        for idx in (
+            "CREATE INDEX IF NOT EXISTS ix_import_batches_status ON import_batches (status)",
+            "CREATE INDEX IF NOT EXISTS ix_import_batches_cwc ON import_batches (client_id, warehouse_id, created_at)",
+            "CREATE INDEX IF NOT EXISTS ix_units_cwus ON inventory_units (client_id, warehouse_id, upc, status)",
+            "CREATE INDEX IF NOT EXISTS ix_units_import_batch ON inventory_units (import_batch_id)",
+            "CREATE INDEX IF NOT EXISTS ix_units_cwl ON inventory_units (client_id, warehouse_id, location)",
+            "CREATE INDEX IF NOT EXISTS ix_txn_import_batch ON inventory_transactions (import_batch_id)",
+            "CREATE INDEX IF NOT EXISTS ix_txn_cwu ON inventory_transactions (client_id, warehouse_id, upc)",
+            "CREATE INDEX IF NOT EXISTS ix_inv_import_rows_batch ON inventory_import_rows (import_batch_id)",
+            "CREATE INDEX IF NOT EXISTS ix_inv_import_rows_batch_status ON inventory_import_rows (import_batch_id, validation_status)",
+        ):
+            try:
+                conn.execute(text(idx))
+            except Exception:
+                pass
         if tables:
             for stmt in statements[1:]:
                 conn.execute(text(stmt))

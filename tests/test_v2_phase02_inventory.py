@@ -88,8 +88,9 @@ def test_p2_03_atomic_rollback_on_injected_failure(app, db, admin_user):
     preview = analyze(_xlsx([_row(qty=4)]), "fail.xlsx", celine, cel_ny)
     with pytest.raises(LedgerError, match="injected"):
         commit_import(preview, user=admin_user, _fail_after=2)
-    assert InventoryUnit.query.count() == 0
-    assert InventoryTransaction.query.count() == 0
+    assert status_counts(client_id=celine.id, warehouse_id=cel_ny.id)["available"] == 0
+    failed = ImportBatch.query.filter_by(filename="fail.xlsx").one()
+    assert failed.status == "FAILED"
     assert_invariants()
 
 
@@ -224,13 +225,19 @@ def test_p2_http_import_and_isolation(app, db, admin_client):
         follow_redirects=True,
     )
     assert preview_resp.status_code == 200
-    assert b"Physical Units" in preview_resp.data
+    assert b"Expected Units" in preview_resp.data
     confirm = admin_client.post(
         "/inventory/upload/confirm",
         data=form_data(admin_client),
         follow_redirects=True,
     )
     assert confirm.status_code == 200
+    assert b"Inventory Import Processing" in confirm.data or b"COMPLETED" in confirm.data
+    batch = ImportBatch.query.filter_by(type="INVENTORY", client_id=celine.id).one()
+    if batch.status != "COMPLETED":
+        from app.services.inventory_import import process_import_batch
+
+        process_import_batch(batch.id)
     assert InventoryUnit.query.count() == 3
 
     other = app.test_client()

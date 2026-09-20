@@ -36,4 +36,4 @@ services:
       - key: DOCUMENT_STORE
         value: local
       - key: MAX_UPLOAD_MB
-        value: "25"
+        value: "50"

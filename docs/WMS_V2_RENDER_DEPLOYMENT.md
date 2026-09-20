@@ -52,7 +52,7 @@ Production `Config` rejects a missing `WMS_V2_DATABASE_URL`, a local host, and a
 | `DATABASE_URL` | no | Do not rely on this in production. Render may still set it; V2 ignores it when `WMS_ENV=production`. |
 | `DOCUMENT_STORE` | recommended | `local` until object-storage credentials exist |
 | `DOCUMENTS_DIR` | optional | default `instance/documents` |
-| `MAX_UPLOAD_MB` | optional | `25` |
+| `MAX_UPLOAD_MB` | optional | `50` (upload size is not the large-import bottleneck) |
 | `WTF_CSRF_TIME_LIMIT` | optional | seconds; default `28800` |
 | `S3_BUCKET` | optional | only if `DOCUMENT_STORE=s3` |
 | `PORT` | Render-provided | do not hardcode |
@@ -157,7 +157,7 @@ Browser smoke (two sessions):
 1. Open `https://HOST/login` — CSRF hidden field present.
 2. Sign in as the admin created in step 8.
 3. Create Client / Division / Warehouse / mapping.
-4. Upload one inventory file (preview then confirm).
+4. Upload one inventory file (preview then confirm). Confirm returns immediately and the page shows Inventory Import Processing; it must reach COMPLETED without keeping the browser request open. See `docs/WMS_V2_LARGE_IMPORT.md`.
 5. Upload one order file (preview then confirm).
 6. Allocate, generate pick ticket, process one UPC scan, close if in scope.
 7. Confirm a second browser cannot close/scan the locked order (`Order is currently being processed by another user.`).
