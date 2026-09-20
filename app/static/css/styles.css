@@ -151,6 +151,21 @@ input:focus, select:focus { outline: 2px solid var(--accent); }
 .flash-success { background: rgba(52, 211, 153, 0.12); border-color: var(--green); color: #bbf7d0; }
 .flash-error { background: rgba(248, 113, 113, 0.12); border-color: var(--red); color: #fecaca; }
 
+.usermenu { margin-left: auto; position: relative; }
+.usermenu summary { list-style: none; cursor: pointer; color: var(--text); font-size: 0.9rem; padding: 0.3rem 0.6rem; border: 1px solid var(--border); border-radius: 8px; background: var(--panel-2); }
+.usermenu summary::-webkit-details-marker { display: none; }
+.usermenu-panel { position: absolute; right: 0; margin-top: 0.4rem; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 0.4rem; min-width: 180px; display: flex; flex-direction: column; gap: 0.2rem; z-index: 20; }
+.usermenu-panel a, .usermenu-panel button { text-align: left; background: none; border: none; color: var(--text); padding: 0.5rem 0.6rem; border-radius: 6px; text-decoration: none; font-size: 0.88rem; cursor: pointer; width: 100%; }
+.usermenu-panel a:hover, .usermenu-panel button:hover { background: var(--panel-2); }
+
+.login-wrap { min-height: 100vh; display: flex; align-items: center; justify-content: center; background: var(--bg); }
+.login-card { width: 340px; background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 2rem 1.75rem; }
+.login-card h1 { text-align: center; letter-spacing: 0.14em; color: var(--accent); font-size: 1.25rem; margin: 0 0 1.5rem; }
+.login-card label { margin-bottom: 0.9rem; }
+.login-card button { width: 100%; margin-top: 0.5rem; }
+.access-denied { text-align:center; padding: 4rem 1rem; }
+.access-denied h1 { font-size: 2rem; color: var(--danger); }
+
 .muted { color: var(--muted); }
 .pill-ok { color: var(--green); font-weight: 700; }
 .pill-bad { color: var(--red); font-weight: 700; }

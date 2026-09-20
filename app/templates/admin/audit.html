@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Audit{% endblock %}
+{% block content %}
+{% include "admin/_tabs.html" %}
+
+<div class="card">
+  <div class="section-title">
+    <h2>Audit Events</h2>
+    <form method="get" action="{{ url_for('admin.audit') }}" class="inline-form">
+      <label>Event type<input name="event_type" value="{{ event_type }}" placeholder="LOGIN_SUCCESS…" /></label>
+      <button type="submit">Filter</button>
+    </form>
+  </div>
+  <table>
+    <thead><tr><th>When</th><th>User</th><th>Event</th><th>Module</th><th>Entity</th><th>IP</th><th>Detail</th></tr></thead>
+    <tbody>
+      {% for e in events %}
+        <tr>
+          <td class="muted">{{ e.created_at.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+          <td class="mono">{{ e.username or '—' }}</td>
+          <td>{{ e.event_type }}</td>
+          <td>{{ e.module or '—' }}</td>
+          <td>{{ (e.entity_type ~ ' #' ~ e.entity_id) if e.entity_type else '—' }}</td>
+          <td class="muted">{{ e.ip_address or '—' }}</td>
+          <td class="muted">{{ e.detail or '—' }}</td>
+        </tr>
+      {% else %}
+        <tr><td colspan="7" class="muted">No audit events.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Create User' if mode=='create' else 'Edit User' }}{% endblock %}
+{% block content %}
+{% include "admin/_tabs.html" %}
+
+{% if mode == 'create' %}
+<div class="card">
+  <h2>Create User</h2>
+  <form method="post" action="{{ url_for('admin.create_user') }}">
+    <div class="grid">
+      <label>Username<input name="username" required /></label>
+      <label>Full Name<input name="full_name" /></label>
+      <label>Email<input name="email" type="email" /></label>
+      <label>Temporary Password<input name="password" type="password" required /></label>
+      <label>Role
+        <select name="role" onchange="document.getElementById('permbox').style.display = this.value==='ADMIN' ? 'none':'block';">
+          {% for r in roles %}<option value="{{ r }}" {{ 'selected' if r=='USER' }}>{{ r }}</option>{% endfor %}
+        </select>
+      </label>
+      <label style="flex-direction:row;align-items:center;gap:0.5rem;color:var(--text);"><input type="checkbox" name="active" value="1" checked /> Active</label>
+    </div>
+    <div id="permbox" style="margin-top:1rem;">
+      <h2 style="font-size:1rem;">Permissions</h2>
+      <p class="muted">ADMIN automatically has all permissions. For USER, select rights below.</p>
+      {% include "admin/_permission_matrix.html" %}
+    </div>
+    <div class="btn-row"><button type="submit">Create User</button></div>
+  </form>
+</div>
+{% else %}
+<div class="card">
+  <h2>Edit User — <span class="mono">{{ user.username }}</span> <span class="badge">{{ user.role }}</span></h2>
+  <form method="post" action="{{ url_for('admin.update_user', user_id=user.id) }}">
+    <div class="grid">
+      <label>Username<input value="{{ user.username }}" disabled /></label>
+      <label>Full Name<input name="full_name" value="{{ user.full_name or '' }}" /></label>
+      <label>Email<input name="email" type="email" value="{{ user.email or '' }}" /></label>
+      <label>Role
+        <select name="role">{% for r in roles %}<option value="{{ r }}" {{ 'selected' if r==user.role }}>{{ r }}</option>{% endfor %}</select>
+      </label>
+    </div>
+    <div class="btn-row"><button type="submit">Save changes</button></div>
+  </form>
+</div>
+
+{% if can('USERS_EDIT') %}
+<div class="card">
+  <h2>Reset Password</h2>
+  <form method="post" action="{{ url_for('admin.reset_password', user_id=user.id) }}" class="inline-form">
+    <label>New temporary password<input type="password" name="new_password" required /></label>
+    <button type="submit">Reset Password</button>
+  </form>
+  <p class="muted">The user will be required to change it at next login. Existing passwords are never displayed.</p>
+</div>
+{% endif %}
+
+{% if can('PERMISSIONS_ASSIGN') %}
+<div class="card">
+  <h2>Permissions</h2>
+  {% if user.is_admin() %}
+    <p class="muted">ADMIN users automatically have all permissions.</p>
+  {% else %}
+  <form method="post" action="{{ url_for('admin.assign_permissions', user_id=user.id) }}">
+    {% include "admin/_permission_matrix.html" %}
+    <div class="btn-row"><button type="submit">Save permissions</button></div>
+  </form>
+  {% endif %}
+</div>
+{% endif %}
+{% endif %}
+{% endblock %}

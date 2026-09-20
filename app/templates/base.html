@@ -12,15 +12,24 @@
   </head>
   <body>
     <header class="topbar">
-      <div class="brand">WMS</div>
+      <div class="brand">WMS SYSTEM</div>
+      {% if current_user.is_authenticated %}
       <nav>
-        <a href="{{ url_for('dashboard.index') }}">Dashboard</a>
-        <a href="{{ url_for('inventory.index') }}">Inventory</a>
-        <a href="{{ url_for('orders.index') }}">Orders</a>
-        <a href="{{ url_for('allocation.index') }}">Allocation</a>
-        <a href="{{ url_for('processing.index') }}">Order Processing</a>
-        <a href="{{ url_for('reports.index') }}">Order Reports</a>
+        {% for code, label, endpoint in nav_modules %}
+          {% if can(code) %}<a href="{{ url_for(endpoint) }}">{{ label }}</a>{% endif %}
+        {% endfor %}
       </nav>
+      <div class="usermenu">
+        <details>
+          <summary>{{ current_user.full_name or current_user.username }} &#9662;</summary>
+          <div class="usermenu-panel">
+            <a href="{{ url_for('auth.profile') }}">My Profile</a>
+            <a href="{{ url_for('auth.change_password') }}">Change Password</a>
+            <form method="post" action="{{ url_for('auth.logout') }}"><button type="submit">Logout</button></form>
+          </div>
+        </details>
+      </div>
+      {% endif %}
     </header>
 
     <main class="container">
