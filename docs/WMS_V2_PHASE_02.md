@@ -1,7 +1,7 @@
 # WMS V2 Phase 2 Report
 
 PHASE: 2 — Inventory  
-STATUS: PASS pending test execution evidence
+STATUS: PASS
 
 ## OBJECTIVE
 
@@ -49,7 +49,9 @@ Phase 1 + Phase 2 (`pytest -q tests/test_v2_phase01_foundation.py tests/test_v2_
 
 ## TEST RESULTS
 
-Recorded after execution.
+- passed: 22 (P1-01..P1-12, P2-01..P2-09, HTTP import/IDOR)
+- failed: 0
+- skipped: 0
 
 ## INTEGRITY CHECKS
 
