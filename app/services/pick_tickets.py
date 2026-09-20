@@ -142,14 +142,19 @@ def printed_by_usernames(client_id: int, warehouse_id: int | None = None) -> lis
 def ticket_row(ticket: PickTicket) -> dict:
     order = ticket.order
     progress = allocation_progress(order)
-    last = ticket.last_print
+    events = (
+        PickTicketPrintEvent.query.filter_by(pick_ticket_id=ticket.id)
+        .order_by(PickTicketPrintEvent.printed_at.desc())
+        .all()
+    )
+    last = events[0] if events else None
     return {
         "ticket": ticket,
         "order": order,
         "units": progress["total_ordered"],
         "locations": unique_locations(order),
-        "print_count": ticket.print_count,
+        "print_count": len(events),
         "last_printed": last.printed_at if last else None,
         "last_printed_by": last.username if last else None,
-        "printed": ticket.print_count > 0,
+        "printed": len(events) > 0,
     }

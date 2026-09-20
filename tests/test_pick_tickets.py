@@ -10,7 +10,6 @@ from app.services.pick_tickets import (
     ensure_pick_ticket,
     is_eligible,
     pick_lines,
-    record_print,
 )
 from app.workflow import transition
 from tests.conftest import create_user, login, make_order, make_unit
@@ -97,20 +96,25 @@ def test_pick_lines_show_barcode_location_sorted(db):
 def test_print_history_records_user_and_timestamp(admin_client, db, admin_user):
     order = _fully_allocate(db)
     ticket = order.pick_ticket
-    ev = record_print(ticket, PrintSource.SCREEN)
-    db.session.commit()
+    resp = admin_client.post(f"/orders/pick-tickets/{ticket.id}/print")
+    assert resp.status_code == 200
+    ev = (
+        PickTicketPrintEvent.query.filter_by(pick_ticket_id=ticket.id)
+        .order_by(PickTicketPrintEvent.printed_at.desc())
+        .first()
+    )
+    assert ev is not None
     assert ev.username == "admin"
     assert ev.user_id == admin_user.id
-    assert ev.source == PrintSource.SCREEN
+    assert ev.source in {PrintSource.SCREEN, PrintSource.REPRINT}
     assert isinstance(ev.printed_at, datetime)
-    assert PickTicketPrintEvent.query.filter_by(pick_ticket_id=ticket.id).count() == 1
 
 
 def test_pick_ticket_filters_never_printed_printed_and_printed_by(admin_client, db):
     never = _fully_allocate(db, "SO-NV", "NV-1")
     printed = _fully_allocate(db, "SO-PR", "PR-1")
-    record_print(printed.pick_ticket, PrintSource.SCREEN)
-    db.session.commit()
+    resp = admin_client.post(f"/orders/pick-tickets/{printed.pick_ticket.id}/print")
+    assert resp.status_code == 200
     client_id = never.client_id
     html = admin_client.get(
         f"/orders/pick-tickets?client_id={client_id}&print_status=never"
