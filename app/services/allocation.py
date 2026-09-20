@@ -61,6 +61,37 @@ def find_unit(barcode: str) -> InventoryUnit | None:
     return InventoryUnit.query.filter_by(barcode=barcode).first()
 
 
+def _validate_scope(order, unit, barcode: str) -> None:
+    """Enforce Client + Warehouse + Order Type isolation for a barcode."""
+    if unit.client_id != order.client_id:
+        _record_exception(
+            order.id, barcode, ExceptionType.WRONG_CLIENT,
+            f"Barcode {barcode} belongs to a different client.",
+        )
+        raise BarcodeError(
+            ExceptionType.WRONG_CLIENT,
+            f"Barcode {barcode} belongs to a different client.",
+        )
+    if unit.warehouse_id != order.warehouse_id:
+        _record_exception(
+            order.id, barcode, ExceptionType.WRONG_WAREHOUSE,
+            f"Barcode {barcode} belongs to a different warehouse.",
+        )
+        raise BarcodeError(
+            ExceptionType.WRONG_WAREHOUSE,
+            f"Barcode {barcode} belongs to a different warehouse.",
+        )
+    if unit.order_type_id != order.order_type_id:
+        _record_exception(
+            order.id, barcode, ExceptionType.WRONG_ORDER_TYPE,
+            f"Barcode {barcode} belongs to a different order type.",
+        )
+        raise BarcodeError(
+            ExceptionType.WRONG_ORDER_TYPE,
+            f"Barcode {barcode} belongs to a different order type.",
+        )
+
+
 def active_allocation(unit: InventoryUnit) -> Allocation | None:
     return Allocation.query.filter_by(
         inventory_unit_id=unit.id, status=AllocationStatus.ACTIVE
@@ -101,6 +132,8 @@ def allocate_barcode(order: Order, raw_barcode: str) -> Allocation:
             ExceptionType.UNKNOWN_BARCODE,
             f"Barcode {barcode} is not a known inventory unit.",
         )
+
+    _validate_scope(order, unit, barcode)
 
     existing = active_allocation(unit)
     if existing is not None:
@@ -187,14 +220,14 @@ def release_allocation(allocation: Allocation) -> None:
     unit = allocation.unit
     allocation.status = AllocationStatus.RELEASED
     prev_status = unit.status
-    unit.status = UnitStatus.IN_STOCK
+    unit.status = UnitStatus.AVAILABLE
     unit.order_id = None
     db.session.add(
         InventoryMovement(
             inventory_unit_id=unit.id,
             barcode=unit.barcode,
             from_status=prev_status,
-            to_status=UnitStatus.IN_STOCK,
+            to_status=UnitStatus.AVAILABLE,
             reason="Allocation released",
         )
     )

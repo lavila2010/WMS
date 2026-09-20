@@ -37,6 +37,7 @@ from .allocation import (
     find_unit,
     normalize_barcode,
     _record_exception,
+    _validate_scope,
 )
 
 
@@ -88,14 +89,16 @@ def scan_into_box(box: Box, raw_barcode: str) -> BoxContent:
             f"Barcode {barcode} is not a known inventory unit.",
         )
 
+    _validate_scope(order, unit, barcode)
+
     alloc = active_allocation(unit)
     if alloc is None:
         _record_exception(
-            order.id, barcode, ExceptionType.WRONG_ORDER,
-            f"Barcode {barcode} is not allocated; it does not belong to this order.",
+            order.id, barcode, ExceptionType.UNALLOCATED_BARCODE,
+            f"Barcode {barcode} is not allocated to this order.",
         )
         raise BarcodeError(
-            ExceptionType.WRONG_ORDER,
+            ExceptionType.UNALLOCATED_BARCODE,
             f"Barcode {barcode} is not allocated to this order.",
         )
     if alloc.order_id != order.id:
@@ -237,13 +240,45 @@ def mark_ready_to_close(order: Order) -> Order:
     return transition(order, OrderStatus.READY_TO_CLOSE, "Reconciliation passed.")
 
 
-def close_order(order: Order) -> Order:
-    """Close the order after quantity reconciliation (final step G)."""
+def close_order(order: Order, created_by: str = "system"):
+    """Atomically close an order and create exactly one invoice.
+
+    Steps (final step G): validate quantities -> validate all boxes closed ->
+    close order -> create invoice -> close inventory units -> create
+    transactions. If invoice creation fails the whole close is rolled back by
+    the caller (nothing is committed here).
+
+    Returns (order, invoice).
+    """
+    from .invoices import create_invoice_for_order
+
     rec = reconcile(order)
     if not rec["ok"]:
         raise ValueError("Quantity reconciliation failed; cannot close order.")
-    order_ = transition(order, OrderStatus.CLOSED, "Order closed.")
+
+    transition(order, OrderStatus.CLOSED, "Order closed.")
+
+    # Exactly one invoice per closed order (also guarded by UNIQUE(order_id)).
+    invoice = create_invoice_for_order(order, created_by=created_by)
+
     for alloc in active_allocations(order):
+        prev = alloc.unit.status
         alloc.unit.status = UnitStatus.SHIPPED
+        db.session.add(
+            InventoryMovement(
+                inventory_unit_id=alloc.unit.id,
+                barcode=alloc.unit.barcode,
+                from_status=prev,
+                to_status=UnitStatus.SHIPPED,
+                reason=f"Shipped on close of {order.order_number}",
+            )
+        )
+    db.session.add(
+        Transaction(
+            type="CLOSE_ORDER",
+            order_id=order.id,
+            detail=f"Order closed; invoice {invoice.invoice_number} created.",
+        )
+    )
     db.session.flush()
-    return order_
+    return order, invoice

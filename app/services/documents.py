@@ -87,6 +87,13 @@ def _header(styles, title: str, subtitle: str) -> list:
     ]
 
 
+def _scope_line(order: Order) -> str:
+    client = order.client.code if order.client else "?"
+    wh = order.warehouse.code if order.warehouse else "?"
+    ot = order.order_type.code if order.order_type else "?"
+    return f"Client {client} · Warehouse {wh} · Order Type {ot}"
+
+
 def generate_pick_ticket(order: Order) -> Document:
     styles = _styles()
     elements = _header(
@@ -94,6 +101,15 @@ def generate_pick_ticket(order: Order) -> Document:
         f"Order {order.order_number} — {order.customer or 'N/A'} "
         f"(status {order.status})",
     )
+    elements.append(Paragraph(_scope_line(order), styles["Normal"]))
+    elements.append(
+        Paragraph(
+            f"Carrier: {order.carrier or 'N/A'} · "
+            f"Shipping Service: {order.shipping_service or 'N/A'}",
+            styles["Normal"],
+        )
+    )
+    elements.append(Spacer(1, 5 * mm))
     allocs = (
         Allocation.query.filter_by(order_id=order.id, status=AllocationStatus.ACTIVE)
         .all()
@@ -181,19 +197,29 @@ def generate_box_detail(box: Box) -> Document:
 def generate_order_closure(order: Order) -> Document:
     styles = _styles()
     rec = reconcile(order)
+    invoice = order.invoice
+    total_weight = round(sum(b.weight_kg or 0.0 for b in order.boxes), 3)
     elements = _header(
         styles, "Order Closure Report",
         f"Order {order.order_number} — {order.customer or 'N/A'} "
         f"(status {order.status})",
     )
+    elements.append(Paragraph(_scope_line(order), styles["Normal"]))
+    elements.append(Spacer(1, 4 * mm))
     summary = [
-        ["Metric", "Value"],
-        ["Ordered units", str(rec["ordered"])],
-        ["Allocated units", str(rec["allocated"])],
-        ["Packed units", str(rec["packed"])],
-        ["Open boxes", str(rec["open_boxes"])],
+        ["Field", "Value"],
+        ["Invoice Number", invoice.invoice_number if invoice else "—"],
+        ["Order Number", order.order_number],
+        ["Client", order.client.code if order.client else "—"],
+        ["Warehouse", order.warehouse.code if order.warehouse else "—"],
+        ["Order Type", order.order_type.code if order.order_type else "—"],
+        ["Customer", order.customer or "—"],
+        ["Carrier", order.carrier or "—"],
+        ["Shipping Service", order.shipping_service or "—"],
+        ["Total Units", str(rec["packed"])],
+        ["Total Boxes", str(len(order.boxes))],
+        ["Total Weight (kg)", str(total_weight)],
         ["Reconciliation", "PASS" if rec["ok"] else "FAIL"],
-        ["Boxes", str(len(order.boxes))],
     ]
     elements.append(_table(summary, col_widths=[60 * mm, 40 * mm]))
     elements.append(Spacer(1, 6 * mm))
