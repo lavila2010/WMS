@@ -315,6 +315,7 @@ def data_table(s, headers, rows, col_widths=None, numeric_last=False):
     if not body:
         body.append([Paragraph("—", s["cell"])] + [Paragraph("", s["cell"])] * (len(headers) - 1))
     table = Table([head] + body, colWidths=col_widths, repeatRows=1)
+    table.hAlign = "LEFT"
     cmds = [
         ("BACKGROUND", (0, 0), (-1, 0), SECTION),
         ("TEXTCOLOR", (0, 0), (-1, 0), BLUE),
