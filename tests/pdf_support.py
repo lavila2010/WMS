@@ -8,6 +8,26 @@ from base64 import a85decode
 
 
 def extract_pdf_text(data: bytes) -> str:
+    blob = _pdf_content_blob(data)
+    literals = []
+    for match in re.finditer(rb"\((?:\\.|[^\\)])*\)", blob):
+        raw = match.group(0)[1:-1]
+        raw = (
+            raw.replace(b"\\\\", b"\\")
+            .replace(b"\\(", b"(")
+            .replace(b"\\)", b")")
+            .replace(b"\\n", b"\n")
+        )
+        literals.append(raw.decode("latin-1", "replace"))
+    if literals:
+        return "\n".join(literals)
+    try:
+        return blob.decode("latin-1", "replace")
+    except Exception:
+        return data.decode("latin-1", "replace")
+
+
+def _pdf_content_blob(data: bytes) -> bytes:
     chunks = []
     for match in re.finditer(rb"stream\r?\n(.*?)endstream", data, re.S):
         payload = match.group(1)
@@ -27,23 +47,13 @@ def extract_pdf_text(data: bytes) -> str:
                 except Exception:
                     continue
         chunks.append(decoded if decoded is not None else payload)
-    blob = b"\n".join(chunks) if chunks else data
-    literals = []
-    for match in re.finditer(rb"\((?:\\.|[^\\)])*\)", blob):
-        raw = match.group(0)[1:-1]
-        raw = (
-            raw.replace(b"\\\\", b"\\")
-            .replace(b"\\(", b"(")
-            .replace(b"\\)", b")")
-            .replace(b"\\n", b"\n")
-        )
-        literals.append(raw.decode("latin-1", "replace"))
-    if literals:
-        return "\n".join(literals)
-    try:
-        return blob.decode("latin-1", "replace")
-    except Exception:
-        return data.decode("latin-1", "replace")
+    return b"\n".join(chunks) if chunks else data
+
+
+def pdf_font_sizes(data: bytes) -> list[float]:
+    blob = _pdf_content_blob(data)
+    sizes = [float(match.group(1)) for match in re.finditer(rb"([0-9]+(?:\.[0-9]+)?)\s+Tf", blob)]
+    return [size for size in sizes if 1 <= size <= 72]
 
 
 def pdf_page_count(data: bytes) -> int:

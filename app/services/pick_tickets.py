@@ -31,8 +31,8 @@ from .document_pdf import (
     generated_now,
     header_block,
     kv_table,
+    pick_ticket_styles,
     section_title,
-    styles as pdf_styles,
     summary_row,
 )
 
@@ -239,7 +239,7 @@ def render_pdf(ticket: PickTicket) -> bytes:
     lines = ticket_lines(order, ticket)
     summary = ticket_summary(order, lines)
     derived = desired_ticket_status(order, ticket)
-    s = pdf_styles()
+    s = pick_ticket_styles()
     generated = generated_now()
     story = [
         header_block(
@@ -247,10 +247,11 @@ def render_pdf(ticket: PickTicket) -> bytes:
             title="PICK TICKET",
             ident=f"{ticket.pick_ticket_number}  Rev {ticket.revision_number or 1}",
             status=derived,
+            padding=3,
         ),
-        Spacer(1, 10),
+        Spacer(1, 12),
         section_title(s, "ORDER INFORMATION"),
-        Spacer(1, 4),
+        Spacer(1, 6),
         kv_table(
             s,
             [
@@ -272,10 +273,12 @@ def render_pdf(ticket: PickTicket) -> bytes:
                 ("Printed Date", format_ts(ticket.last_printed_at)),
                 ("Printed By", ticket.last_printed_by),
             ],
+            pad_y_top=5,
+            pad_y_bottom=5,
         ),
-        Spacer(1, 10),
+        Spacer(1, 12),
         section_title(s, "PICKING SUMMARY"),
-        Spacer(1, 4),
+        Spacer(1, 6),
         summary_row(
             s,
             [
@@ -284,10 +287,11 @@ def render_pdf(ticket: PickTicket) -> bytes:
                 ("Locations", summary["locations"]),
                 ("Order Status", summary["order_status"]),
             ],
+            pad_y=6,
         ),
-        Spacer(1, 10),
+        Spacer(1, 12),
         section_title(s, "PICKING DETAIL"),
-        Spacer(1, 4),
+        Spacer(1, 6),
         data_table(
             s,
             ["Location", "UPC", "SKU", "Description", "Style", "Color", "Size", "Qty"],
@@ -305,16 +309,18 @@ def render_pdf(ticket: PickTicket) -> bytes:
                 for line in lines
             ],
             col_widths=[
-                0.9 * 72,
-                1.0 * 72,
-                0.75 * 72,
-                2.05 * 72,
-                0.75 * 72,
-                0.7 * 72,
-                0.55 * 72,
-                0.4 * 72,
+                1.00 * 72,
+                1.35 * 72,
+                0.90 * 72,
+                1.85 * 72,
+                0.70 * 72,
+                0.60 * 72,
+                0.50 * 72,
+                0.40 * 72,
             ],
             numeric_last=True,
+            pad_x=5,
+            pad_y=5,
         ),
     ]
     footer = {
@@ -330,6 +336,7 @@ def render_pdf(ticket: PickTicket) -> bytes:
             "ident": f"{ticket.pick_ticket_number}  Rev {ticket.revision_number or 1}",
             "status": derived,
         },
+        chrome_font_size=8,
     )
 
 

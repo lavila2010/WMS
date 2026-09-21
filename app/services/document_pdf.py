@@ -138,14 +138,125 @@ def styles():
     }
 
 
+def pick_ticket_styles():
+    """Warehouse-readable typography used only by Pick Ticket PDFs."""
+    return {
+        "brand": ParagraphStyle(
+            "pick_brand",
+            fontName="Helvetica-Bold",
+            fontSize=9,
+            textColor=BLUE,
+            leading=11,
+            tracking=0.6,
+        ),
+        "title": ParagraphStyle(
+            "pick_title",
+            fontName="Helvetica-Bold",
+            fontSize=17,
+            textColor=TEXT,
+            leading=21,
+        ),
+        "number": ParagraphStyle(
+            "pick_number",
+            fontName="Helvetica-Bold",
+            fontSize=12,
+            textColor=BLUE,
+            leading=16,
+        ),
+        "label": ParagraphStyle(
+            "pick_label",
+            fontName="Helvetica",
+            fontSize=9,
+            textColor=MUTED,
+            leading=11,
+        ),
+        "value": ParagraphStyle(
+            "pick_value",
+            fontName="Helvetica-Bold",
+            fontSize=10,
+            textColor=TEXT,
+            leading=13,
+        ),
+        "section": ParagraphStyle(
+            "pick_section",
+            fontName="Helvetica-Bold",
+            fontSize=11,
+            textColor=BLUE,
+            leading=14,
+        ),
+        "body": ParagraphStyle(
+            "pick_body",
+            fontName="Helvetica",
+            fontSize=9.5,
+            textColor=TEXT,
+            leading=12,
+        ),
+        "cell": ParagraphStyle(
+            "pick_cell",
+            fontName="Helvetica",
+            fontSize=9.5,
+            textColor=TEXT,
+            leading=12,
+        ),
+        "cell_right": ParagraphStyle(
+            "pick_cell_right",
+            fontName="Helvetica-Bold",
+            fontSize=9.5,
+            textColor=TEXT,
+            leading=12,
+            alignment=TA_RIGHT,
+        ),
+        "head": ParagraphStyle(
+            "pick_head",
+            fontName="Helvetica-Bold",
+            fontSize=9.5,
+            textColor=BLUE,
+            leading=12,
+        ),
+        "head_right": ParagraphStyle(
+            "pick_head_right",
+            fontName="Helvetica-Bold",
+            fontSize=9.5,
+            textColor=BLUE,
+            leading=12,
+            alignment=TA_RIGHT,
+        ),
+        "pass": ParagraphStyle(
+            "pick_pass",
+            fontName="Helvetica-Bold",
+            fontSize=11,
+            textColor=BLUE,
+            leading=14,
+            alignment=TA_LEFT,
+        ),
+        "right": ParagraphStyle(
+            "pick_right",
+            fontName="Helvetica-Bold",
+            fontSize=10,
+            textColor=TEXT,
+            leading=13,
+            alignment=TA_RIGHT,
+        ),
+    }
+
+
 class NumberedCanvas(canvas.Canvas):
-    def __init__(self, *args, footer=None, later_header=None, page_footers=None, **kwargs):
+    def __init__(
+        self,
+        *args,
+        footer=None,
+        later_header=None,
+        page_footers=None,
+        chrome_font_size=7,
+        **kwargs,
+    ):
         kwargs.setdefault("pageCompression", 0)
         super().__init__(*args, **kwargs)
         self._saved_page_states = []
         self._footer = footer or {}
         self._later_header = later_header or {}
         self._page_footers = page_footers or []
+        self._chrome_font_size = float(chrome_font_size or 7)
 
     def showPage(self):
         self._saved_page_states.append(dict(self.__dict__))
@@ -161,31 +272,36 @@ class NumberedCanvas(canvas.Canvas):
 
     def _draw_chrome(self, page_count):
         page = self._pageNumber
+        chrome = self._chrome_font_size
         self.saveState()
         if page > 1 and self._later_header:
+            bar_bottom = 0.52 * inch if chrome >= 8 else 0.48 * inch
+            bar_height = 0.32 * inch if chrome >= 8 else 0.28 * inch
+            text_y = PAGE_H - (0.40 * inch if chrome >= 8 else 0.38 * inch)
+            title_x = LEFT + (86 if chrome >= 8 else 72)
             self.setFillColor(SECTION)
-            self.rect(LEFT, PAGE_H - 0.48 * inch, PAGE_W - LEFT - RIGHT, 0.28 * inch, stroke=0, fill=1)
+            self.rect(LEFT, PAGE_H - bar_bottom, PAGE_W - LEFT - RIGHT, bar_height, stroke=0, fill=1)
             self.setStrokeColor(BORDER)
             self.setLineWidth(0.4)
-            self.line(LEFT, PAGE_H - 0.48 * inch, PAGE_W - RIGHT, PAGE_H - 0.48 * inch)
+            self.line(LEFT, PAGE_H - bar_bottom, PAGE_W - RIGHT, PAGE_H - bar_bottom)
             self.setFillColor(BLUE)
-            self.setFont("Helvetica-Bold", 7)
-            self.drawString(LEFT + 6, PAGE_H - 0.38 * inch, "WMS SYSTEM")
+            self.setFont("Helvetica-Bold", chrome)
+            self.drawString(LEFT + 6, text_y, "WMS SYSTEM")
             self.setFillColor(TEXT)
-            self.setFont("Helvetica", 7)
+            self.setFont("Helvetica", chrome)
             title = self._later_header.get("title", "")
             ident = self._later_header.get("ident", "")
             status = self._later_header.get("status", "")
-            self.drawString(LEFT + 72, PAGE_H - 0.38 * inch, title)
-            self.setFont("Helvetica-Bold", 7)
-            self.drawRightString(PAGE_W - RIGHT - 70, PAGE_H - 0.38 * inch, ident)
+            self.drawString(title_x, text_y, title)
+            self.setFont("Helvetica-Bold", chrome)
+            self.drawRightString(PAGE_W - RIGHT - 78, text_y, ident)
             self.setFillColor(BLUE)
-            self.drawRightString(PAGE_W - RIGHT - 6, PAGE_H - 0.38 * inch, status)
+            self.drawRightString(PAGE_W - RIGHT - 6, text_y, status)
         self.setStrokeColor(BORDER)
         self.setLineWidth(0.4)
         self.line(LEFT, 0.48 * inch, PAGE_W - RIGHT, 0.48 * inch)
         self.setFillColor(MUTED)
-        self.setFont("Helvetica", 7)
+        self.setFont("Helvetica", chrome)
         left = self._footer.get("left", "WMS SYSTEM")
         mid = self._footer.get("mid", "")
         generated = self._footer.get("generated", "")
@@ -203,7 +319,7 @@ class NumberedCanvas(canvas.Canvas):
         self.restoreState()
 
 
-def build_pdf(story, *, footer, later_header=None, page_footers=None) -> bytes:
+def build_pdf(story, *, footer, later_header=None, page_footers=None, chrome_font_size=7) -> bytes:
     buffer = BytesIO()
     doc = SimpleDocTemplate(
         buffer,
@@ -218,14 +334,19 @@ def build_pdf(story, *, footer, later_header=None, page_footers=None) -> bytes:
 
     def canvasmaker(*args, **kwargs):
         return NumberedCanvas(
-            *args, footer=footer, later_header=later_header, page_footers=page_footers, **kwargs
+            *args,
+            footer=footer,
+            later_header=later_header,
+            page_footers=page_footers,
+            chrome_font_size=chrome_font_size,
+            **kwargs,
         )
 
     doc.build(story, canvasmaker=canvasmaker)
     return buffer.getvalue()
 
 
-def header_block(s, *, brand="WMS SYSTEM", title, ident, status):
+def header_block(s, *, brand="WMS SYSTEM", title, ident, status, padding=1):
     status_label = f"STATUS: {status}"
     header = Table(
         [
@@ -246,8 +367,8 @@ def header_block(s, *, brand="WMS SYSTEM", title, ident, status):
                 ("SPAN", (0, 2), (1, 2)),
                 ("LEFTPADDING", (0, 0), (-1, -1), 0),
                 ("RIGHTPADDING", (0, 0), (-1, -1), 0),
-                ("TOPPADDING", (0, 0), (-1, -1), 1),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 1),
+                ("TOPPADDING", (0, 0), (-1, -1), padding),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), padding),
                 ("LINEBELOW", (0, 2), (-1, 2), 1, BLUE),
             ]
         )
@@ -259,7 +380,7 @@ def section_title(s, text):
     return Paragraph(text, s["section"])
 
 
-def kv_table(s, pairs, cols=4):
+def kv_table(s, pairs, cols=4, pad_x=6, pad_y_top=4, pad_y_bottom=3):
     stacked = [
         [Paragraph(str(label).upper(), s["label"]), Paragraph(display(value), s["value"])]
         for label, value in pairs
@@ -280,10 +401,10 @@ def kv_table(s, pairs, cols=4):
             [
                 ("BACKGROUND", (0, 0), (-1, -1), SECTION),
                 ("VALIGN", (0, 0), (-1, -1), "TOP"),
-                ("LEFTPADDING", (0, 0), (-1, -1), 6),
-                ("RIGHTPADDING", (0, 0), (-1, -1), 6),
-                ("TOPPADDING", (0, 0), (-1, -1), 4),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+                ("LEFTPADDING", (0, 0), (-1, -1), pad_x),
+                ("RIGHTPADDING", (0, 0), (-1, -1), pad_x),
+                ("TOPPADDING", (0, 0), (-1, -1), pad_y_top),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), pad_y_bottom),
                 ("BOX", (0, 0), (-1, -1), 0.4, BORDER),
                 ("LINEBELOW", (0, 0), (-1, -2), 0.3, BORDER),
             ]
@@ -292,7 +413,7 @@ def kv_table(s, pairs, cols=4):
     return table
 
 
-def summary_row(s, items):
+def summary_row(s, items, pad_x=6, pad_y=5):
     usable = PAGE_W - LEFT - RIGHT
     col_w = usable / max(len(items), 1)
     labels = [Paragraph(str(k).upper(), s["label"]) for k, _ in items]
@@ -304,10 +425,10 @@ def summary_row(s, items):
                 ("BACKGROUND", (0, 0), (-1, -1), SECTION),
                 ("BOX", (0, 0), (-1, -1), 0.4, BORDER),
                 ("INNERGRID", (0, 0), (-1, -1), 0.4, BORDER),
-                ("LEFTPADDING", (0, 0), (-1, -1), 6),
-                ("RIGHTPADDING", (0, 0), (-1, -1), 6),
-                ("TOPPADDING", (0, 0), (-1, -1), 5),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+                ("LEFTPADDING", (0, 0), (-1, -1), pad_x),
+                ("RIGHTPADDING", (0, 0), (-1, -1), pad_x),
+                ("TOPPADDING", (0, 0), (-1, -1), pad_y),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), pad_y),
                 ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
             ]
         )
@@ -315,14 +436,24 @@ def summary_row(s, items):
     return table
 
 
-def data_table(s, headers, rows, col_widths=None, numeric_last=False):
-    head = [Paragraph(h, s["head"]) for h in headers]
+def data_table(s, headers, rows, col_widths=None, numeric_last=False, pad_x=4, pad_y=3):
+    last = len(headers) - 1
+    head_right = s.get("head_right") or s["head"]
+    cell_right = s.get("cell_right") or s["cell"]
+    head = [
+        Paragraph(h, head_right if numeric_last and i == last else s["head"])
+        for i, h in enumerate(headers)
+    ]
     body = []
     for row in rows:
-        body.append([Paragraph(display(cell), s["cell"]) for cell in row])
+        cells = []
+        for i, cell in enumerate(row):
+            style = cell_right if numeric_last and i == last else s["cell"]
+            cells.append(Paragraph(display(cell), style))
+        body.append(cells)
     if not body:
-        body.append([Paragraph("—", s["cell"])] + [Paragraph("", s["cell"])] * (len(headers) - 1))
-    table = Table([head] + body, colWidths=col_widths, repeatRows=1)
+        body.append([Paragraph("—", s["cell"])] + [Paragraph("", s["cell"])] * last)
+    table = Table([head] + body, colWidths=col_widths, repeatRows=1, splitByRow=1)
     table.hAlign = "LEFT"
     cmds = [
         ("BACKGROUND", (0, 0), (-1, 0), SECTION),
@@ -330,10 +461,10 @@ def data_table(s, headers, rows, col_widths=None, numeric_last=False):
         ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
         ("VALIGN", (0, 0), (-1, -1), "TOP"),
         ("GRID", (0, 0), (-1, -1), 0.4, BORDER),
-        ("LEFTPADDING", (0, 0), (-1, -1), 4),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 4),
-        ("TOPPADDING", (0, 0), (-1, -1), 3),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+        ("LEFTPADDING", (0, 0), (-1, -1), pad_x),
+        ("RIGHTPADDING", (0, 0), (-1, -1), pad_x),
+        ("TOPPADDING", (0, 0), (-1, -1), pad_y),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), pad_y),
         ("BACKGROUND", (0, 1), (-1, -1), white),
     ]
     if numeric_last:
