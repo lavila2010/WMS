@@ -42,6 +42,7 @@ def app(tmp_path):
         yield application
         _db.session.remove()
         _db.drop_all()
+        _db.engine.dispose()
 
 
 @pytest.fixture()
