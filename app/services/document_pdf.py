@@ -139,12 +139,13 @@ def styles():
 
 
 class NumberedCanvas(canvas.Canvas):
-    def __init__(self, *args, footer=None, later_header=None, **kwargs):
+    def __init__(self, *args, footer=None, later_header=None, page_footers=None, **kwargs):
         kwargs.setdefault("pageCompression", 0)
         super().__init__(*args, **kwargs)
         self._saved_page_states = []
         self._footer = footer or {}
         self._later_header = later_header or {}
+        self._page_footers = page_footers or []
 
     def showPage(self):
         self._saved_page_states.append(dict(self.__dict__))
@@ -188,6 +189,11 @@ class NumberedCanvas(canvas.Canvas):
         left = self._footer.get("left", "WMS SYSTEM")
         mid = self._footer.get("mid", "")
         generated = self._footer.get("generated", "")
+        if self._page_footers and 0 <= (page - 1) < len(self._page_footers):
+            extra = self._page_footers[page - 1] or {}
+            left = extra.get("left", left)
+            mid = extra.get("mid", mid)
+            generated = extra.get("generated", generated)
         self.drawString(LEFT, 0.32 * inch, left)
         if mid:
             self.drawCentredString(PAGE_W / 2, 0.32 * inch, mid)
@@ -197,7 +203,7 @@ class NumberedCanvas(canvas.Canvas):
         self.restoreState()
 
 
-def build_pdf(story, *, footer, later_header=None) -> bytes:
+def build_pdf(story, *, footer, later_header=None, page_footers=None) -> bytes:
     buffer = BytesIO()
     doc = SimpleDocTemplate(
         buffer,
@@ -211,7 +217,9 @@ def build_pdf(story, *, footer, later_header=None) -> bytes:
     )
 
     def canvasmaker(*args, **kwargs):
-        return NumberedCanvas(*args, footer=footer, later_header=later_header, **kwargs)
+        return NumberedCanvas(
+            *args, footer=footer, later_header=later_header, page_footers=page_footers, **kwargs
+        )
 
     doc.build(story, canvasmaker=canvasmaker)
     return buffer.getvalue()

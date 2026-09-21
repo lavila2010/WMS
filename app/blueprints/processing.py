@@ -5,7 +5,7 @@ import io
 from flask import Blueprint, abort, flash, redirect, render_template, request, send_file, url_for
 from flask_login import current_user
 
-from ..auth import permission_required
+from ..auth import permission_required, record_audit
 from ..constants import CartonStatus
 from ..extensions import db
 from ..models import Carton, CartonContent, Document, Order, PickTicket
@@ -49,7 +49,12 @@ def _ticket_and_order(order_id):
 @bp.route("/")
 @permission_required("PROCESSING_VIEW")
 def index():
-    return render_template("processing/index.html", pick_ticket_number="", pdf_id=request.args.get("pdf_id", type=int))
+    return render_template(
+        "processing/index.html",
+        pick_ticket_number="",
+        pdf_id=request.args.get("pdf_id", type=int),
+        packing_id=request.args.get("packing_id", type=int),
+    )
 
 
 @bp.route("/find", methods=["POST"])
@@ -256,7 +261,14 @@ def decision(order_id):
     except ProcessingError as exc:
         flash(str(exc), "error")
         return redirect(url_for("processing.detail", order_id=order.id))
-    return redirect(url_for("processing.index", pdf_id=document.id))
+    packing = Document.query.filter_by(order_id=order.id, type="PACKING_LIST").order_by(Document.id.asc()).first()
+    return redirect(
+        url_for(
+            "processing.index",
+            pdf_id=document.id,
+            packing_id=packing.id if packing else None,
+        )
+    )
 
 
 @bp.route("/documents/<int:document_id>")
@@ -268,3 +280,31 @@ def open_pdf(document_id):
     require_entity_client(current_user, document)
     data = get_store().open(document.storage_key)
     return send_file(io.BytesIO(data), mimetype="application/pdf", download_name=document.filename)
+
+
+@bp.route("/documents/<int:document_id>/print", methods=["POST"])
+@permission_required("PROCESSING_VIEW")
+def print_pdf(document_id):
+    document = db.session.get(Document, document_id)
+    if document is None:
+        abort(404)
+    require_entity_client(current_user, document)
+    if document.type == "PACKING_LIST":
+        record_audit(
+            "PACKING_LIST_PRINTED",
+            module="Processing",
+            entity_type="document",
+            entity_id=document.id,
+            client_id=document.client_id,
+            detail=document.filename,
+        )
+    record_audit(
+        "PDF_PRINTED",
+        module="Processing",
+        entity_type="document",
+        entity_id=document.id,
+        client_id=document.client_id,
+        detail=document.filename,
+    )
+    db.session.commit()
+    return redirect(url_for("processing.open_pdf", document_id=document.id))

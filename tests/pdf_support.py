@@ -44,3 +44,10 @@ def extract_pdf_text(data: bytes) -> str:
         return blob.decode("latin-1", "replace")
     except Exception:
         return data.decode("latin-1", "replace")
+
+
+def pdf_page_count(data: bytes) -> int:
+    match = re.search(rb"/Type\s*/Pages.*?/Count\s+(\d+)", data, re.S)
+    if match:
+        return int(match.group(1))
+    return len(re.findall(rb"/Type\s*/Page[^s]", data))

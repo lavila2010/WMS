@@ -18,10 +18,19 @@ from flask import (
 from flask_login import current_user
 from sqlalchemy import func
 
-from ..auth import permission_required
-from ..constants import ImportBatchStatus, OrderStatus
+from ..auth import permission_required, record_audit
+from ..constants import ImportBatchStatus, OrderStatus, ShippingStatus, TrackingCarrier
 from ..extensions import db
-from ..models import Division, ImportBatch, Order, OrderLine, PickTicket, Warehouse
+from ..models import Carton, Division, Document, ImportBatch, Order, OrderLine, PickTicket, Warehouse
+from ..services.documents import get_store
+from ..services.end_of_day import (
+    build_eod_rows,
+    closed_orders_query,
+    eod_kpis,
+    export_eod_excel,
+    operational_today,
+    parse_eod_date,
+)
 from ..services.order_import import (
     OrderImportError,
     analyze,
@@ -190,7 +199,9 @@ def index():
 def detail(order_id):
     order = db.session.get(Order, order_id)
     require_entity_client(current_user, order)
-    return render_template("orders/detail.html", order=order)
+    closure = Document.query.filter_by(order_id=order.id, type="ORDER_CLOSURE").order_by(Document.id.asc()).first()
+    packing = Document.query.filter_by(order_id=order.id, type="PACKING_LIST").order_by(Document.id.asc()).first()
+    return render_template("orders/detail.html", order=order, closure=closure, packing=packing)
 
 
 def _active_order_batch():
@@ -491,3 +502,232 @@ def pick_ticket_pdf(ticket_id):
         download_name=f"{ticket.pick_ticket_number}.pdf",
         mimetype="application/pdf",
     )
+
+
+@bp.route("/shipping")
+@permission_required("SHIPPING_VIEW")
+def shipping():
+    from ..services.shipping import list_closed_shipping_orders
+
+    ctx = _scope()
+    q = request.args.get("q", "").strip()
+    closed_date = request.args.get("closed_date", "").strip()
+    shipping_status = request.args.get("shipping_status", "").strip()
+    carrier = request.args.get("carrier", "").strip()
+    orders = list_closed_shipping_orders(
+        client_id=ctx["scope"]["client_id"],
+        division_id=ctx["scope"]["division_id"],
+        warehouse_id=ctx["scope"]["warehouse_id"],
+        closed_date=closed_date,
+        shipping_status=shipping_status,
+        carrier=carrier,
+        q=q,
+        accessible_client_ids=[c.id for c in ctx["clients"]],
+        admin=current_user.is_admin(),
+    )
+    db.session.commit()
+    rows = []
+    for order in orders:
+        ticket = PickTicket.query.filter_by(order_id=order.id).first()
+        rows.append({"order": order, "ticket": ticket.pick_ticket_number if ticket else "—"})
+    return _page(
+        "orders/shipping.html",
+        "shipping",
+        rows=rows,
+        q=q,
+        closed_date=closed_date,
+        shipping_status=shipping_status,
+        carrier=carrier,
+        shipping_statuses=ShippingStatus.ALL,
+        carriers=TrackingCarrier.ALL,
+    )
+
+
+@bp.route("/shipping/<int:order_id>")
+@permission_required("SHIPPING_VIEW")
+def shipping_detail(order_id):
+    from ..services.shipping import carton_display, sync_shipping_status
+
+    order = db.session.get(Order, order_id)
+    if order is None:
+        abort(404)
+    require_entity_client(current_user, order)
+    ticket = PickTicket.query.filter_by(order_id=order.id).first()
+    cartons = Carton.query.filter_by(order_id=order.id).order_by(Carton.id).all()
+    sync_shipping_status(order, cartons)
+    db.session.commit()
+    closure = Document.query.filter_by(order_id=order.id, type="ORDER_CLOSURE").order_by(Document.id.asc()).first()
+    packing = Document.query.filter_by(order_id=order.id, type="PACKING_LIST").order_by(Document.id.asc()).first()
+    return render_template(
+        "orders/shipping_detail.html",
+        order=order,
+        ticket=ticket,
+        cartons=[carton_display(c) for c in cartons],
+        carriers=TrackingCarrier.ALL,
+        closure=closure,
+        packing=packing,
+    )
+
+
+@bp.route("/shipping/<int:order_id>/tracking", methods=["POST"])
+@permission_required("SHIPPING_EDIT")
+def shipping_save_tracking(order_id):
+    from ..services.shipping import ShippingError, save_carton_tracking
+
+    order = db.session.get(Order, order_id)
+    if order is None:
+        abort(404)
+    require_entity_client(current_user, order)
+    if order.status != OrderStatus.CLOSED:
+        flash("Tracking can be entered only after the order is CLOSED.", "error")
+        return redirect(url_for("orders.shipping_detail", order_id=order.id))
+    try:
+        for carton in Carton.query.filter_by(order_id=order.id).order_by(Carton.id):
+            number = request.form.get(f"tracking_number_{carton.id}", "")
+            carrier = request.form.get(f"tracking_carrier_{carton.id}", "")
+            if not (number or "").strip() and not (carrier or "").strip():
+                continue
+            save_carton_tracking(
+                order,
+                carton,
+                tracking_number=number,
+                carrier=carrier,
+                user=current_user,
+                reason=request.form.get("reason", ""),
+            )
+        db.session.commit()
+        flash("Tracking numbers saved.", "success")
+    except ShippingError as exc:
+        db.session.rollback()
+        flash(str(exc), "error")
+    return redirect(url_for("orders.shipping_detail", order_id=order.id))
+
+
+@bp.route("/shipping/<int:order_id>/confirm", methods=["POST"])
+@permission_required("SHIPPING_CONFIRM")
+def shipping_confirm(order_id):
+    from ..services.shipping import ShippingError, confirm_shipping
+
+    order = db.session.get(Order, order_id)
+    if order is None:
+        abort(404)
+    require_entity_client(current_user, order)
+    try:
+        confirm_shipping(order, current_user)
+        flash("Shipping confirmed. Tracking is complete.", "success")
+    except ShippingError as exc:
+        db.session.rollback()
+        flash(str(exc), "error")
+    return redirect(url_for("orders.shipping_detail", order_id=order.id))
+
+
+@bp.route("/end-of-day")
+@permission_required("END_OF_DAY_VIEW")
+def end_of_day():
+    ctx = _scope()
+    day = parse_eod_date(request.args.get("date"))
+    carrier = request.args.get("carrier", "").strip()
+    closed_by = request.args.get("closed_by", "").strip()
+    shipping_status = request.args.get("shipping_status", "").strip()
+    query = closed_orders_query(
+        day=day,
+        client_id=ctx["scope"]["client_id"],
+        division_id=ctx["scope"]["division_id"],
+        warehouse_id=ctx["scope"]["warehouse_id"],
+        carrier=carrier,
+        closed_by=closed_by,
+        shipping_status=shipping_status,
+        accessible_client_ids=[c.id for c in ctx["clients"]],
+        admin=current_user.is_admin(),
+    )
+    rows = build_eod_rows(query.all())
+    db.session.commit()
+    return _page(
+        "orders/end_of_day.html",
+        "eod",
+        rows=rows,
+        kpis=eod_kpis(rows),
+        day=day.isoformat(),
+        carrier=carrier,
+        closed_by=closed_by,
+        shipping_status=shipping_status,
+        shipping_statuses=ShippingStatus.ALL,
+        default_day=operational_today().isoformat(),
+    )
+
+
+@bp.route("/end-of-day.xlsx")
+@permission_required("END_OF_DAY_EXPORT")
+def end_of_day_export():
+    ctx = _scope()
+    day = parse_eod_date(request.args.get("date"))
+    query = closed_orders_query(
+        day=day,
+        client_id=ctx["scope"]["client_id"],
+        division_id=ctx["scope"]["division_id"],
+        warehouse_id=ctx["scope"]["warehouse_id"],
+        carrier=request.args.get("carrier", "").strip(),
+        closed_by=request.args.get("closed_by", "").strip(),
+        shipping_status=request.args.get("shipping_status", "").strip(),
+        accessible_client_ids=[c.id for c in ctx["clients"]],
+        admin=current_user.is_admin(),
+    )
+    rows = build_eod_rows(query.all())
+    data = export_eod_excel(rows, client_id=ctx["scope"]["client_id"])
+    return send_file(
+        io.BytesIO(data),
+        as_attachment=True,
+        download_name=f"end-of-day-{day.isoformat()}.xlsx",
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+
+
+@bp.route("/documents/<int:document_id>")
+def order_document(document_id):
+    if not current_user.is_authenticated:
+        return redirect(url_for("auth.login", next=request.path))
+    allowed = (
+        current_user.is_admin()
+        or current_user.has_permission("SHIPPING_VIEW")
+        or current_user.has_permission("END_OF_DAY_VIEW")
+        or current_user.has_permission("ORDERS_VIEW")
+        or current_user.has_permission("DOCUMENT_REPRINT")
+        or current_user.has_permission("PROCESSING_VIEW")
+    )
+    if not allowed:
+        abort(403)
+    document = db.session.get(Document, document_id)
+    if document is None:
+        abort(404)
+    require_entity_client(current_user, document)
+    data = get_store().open(document.storage_key)
+    return send_file(io.BytesIO(data), mimetype="application/pdf", download_name=document.filename)
+
+
+@bp.route("/documents/<int:document_id>/print", methods=["POST"])
+@permission_required("DOCUMENT_REPRINT")
+def print_order_document(document_id):
+    document = db.session.get(Document, document_id)
+    if document is None:
+        abort(404)
+    require_entity_client(current_user, document)
+    event = "PACKING_LIST_PRINTED" if document.type == "PACKING_LIST" else "PDF_PRINTED"
+    record_audit(
+        event,
+        module="Orders",
+        entity_type="document",
+        entity_id=document.id,
+        client_id=document.client_id,
+        detail=document.filename,
+    )
+    if document.type == "PACKING_LIST":
+        record_audit(
+            "PDF_PRINTED",
+            module="Orders",
+            entity_type="document",
+            entity_id=document.id,
+            client_id=document.client_id,
+            detail=f"reprint {document.filename}",
+        )
+    db.session.commit()
+    return redirect(url_for("orders.order_document", document_id=document.id))

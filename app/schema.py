@@ -93,11 +93,37 @@ def ensure_v2_schema() -> None:
                     """
                 )
             )
+            conn.execute(
+                text(
+                    "ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipping_status VARCHAR(24) NOT NULL DEFAULT 'NOT_READY'"
+                )
+            )
+            conn.execute(
+                text(
+                    """
+                    UPDATE orders
+                    SET shipping_status = 'PENDING_TRACKING'
+                    WHERE status = 'CLOSED' AND shipping_status = 'NOT_READY'
+                    """
+                )
+            )
         pick_tickets = conn.execute(text("SELECT to_regclass('public.pick_tickets')")).scalar()
         if pick_tickets:
             conn.execute(
                 text("UPDATE pick_tickets SET status = 'OPEN' WHERE status = 'ACTIVE'")
             )
+        cartons = conn.execute(text("SELECT to_regclass('public.cartons')")).scalar()
+        if cartons:
+            for stmt in (
+                "ALTER TABLE cartons ADD COLUMN IF NOT EXISTS tracking_number VARCHAR(64)",
+                "ALTER TABLE cartons ADD COLUMN IF NOT EXISTS tracking_carrier VARCHAR(16)",
+                "ALTER TABLE cartons ADD COLUMN IF NOT EXISTS tracking_entered_at TIMESTAMP",
+                "ALTER TABLE cartons ADD COLUMN IF NOT EXISTS tracking_entered_by_user_id INTEGER REFERENCES users(id)",
+                "ALTER TABLE cartons ADD COLUMN IF NOT EXISTS tracking_validated_at TIMESTAMP",
+                "ALTER TABLE cartons ADD COLUMN IF NOT EXISTS tracking_validated_by_user_id INTEGER REFERENCES users(id)",
+                "ALTER TABLE cartons ADD COLUMN IF NOT EXISTS shipping_label_status VARCHAR(16) NOT NULL DEFAULT 'PENDING'",
+            ):
+                conn.execute(text(stmt))
         txns = conn.execute(text("SELECT to_regclass('public.inventory_transactions')")).scalar()
         if txns:
             conn.execute(
@@ -167,6 +193,11 @@ def ensure_v2_schema() -> None:
             "CREATE INDEX IF NOT EXISTS ix_ord_import_rows_batch_status ON order_import_rows (import_batch_id, validation_status)",
             "CREATE INDEX IF NOT EXISTS ix_orders_import_batch ON orders (import_batch_id)",
             "CREATE INDEX IF NOT EXISTS ix_orders_client_number ON orders (client_id, client_order_number)",
+            "CREATE INDEX IF NOT EXISTS ix_orders_shipping_status ON orders (shipping_status)",
+            "CREATE INDEX IF NOT EXISTS ix_orders_closed_at ON orders (closed_at)",
+            "CREATE INDEX IF NOT EXISTS ix_orders_client_div_closed ON orders (client_id, division_id, closed_at)",
+            "CREATE INDEX IF NOT EXISTS ix_cartons_tracking_number ON cartons (tracking_number)",
+            "CREATE INDEX IF NOT EXISTS ix_cartons_order_label ON cartons (order_id, shipping_label_status)",
         ):
             try:
                 conn.execute(text(idx))
