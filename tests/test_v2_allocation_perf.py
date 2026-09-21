@@ -112,12 +112,10 @@ def _table_counts():
 
 def test_a_b_quantities_and_status_match_order_quantities(app, db, admin_user):
     w = _world(db)
-    _bulk_stock(w["celine"].id, w["cel_ny"].id, "UPC-A", 6)
-    unalloc = _make_order(w, 6101, 2)
+    _bulk_stock(w["celine"].id, w["cel_ny"].id, "UPC-A", 3)
+    unalloc = _make_order(w, 6101, 2, upc="UPC-NONE")
     partial = _make_order(w, 6102, 4)
     allocate_order(partial, user=admin_user)
-    leftover = InventoryUnit.query.filter_by(upc="UPC-A", status=UnitStatus.AVAILABLE).count()
-    assert leftover == 0
     page = allocation_overview_page(admin=True, page=1, per_page=50)
     by_id = {row["order_id"]: row for row in page["rows"]}
     for order in (unalloc, partial):
@@ -132,6 +130,8 @@ def test_a_b_quantities_and_status_match_order_quantities(app, db, admin_user):
     assert by_id[unalloc.id]["status"] == OrderStatus.UNALLOCATED
     assert by_id[partial.id]["status"] == OrderStatus.PARTIALLY_ALLOCATED
     assert by_id[partial.id]["partial_approval"] == "PENDING"
+    assert by_id[partial.id]["currently_allocated"] == 3
+    assert by_id[partial.id]["remaining"] == 1
 
 
 def test_c_d_partial_and_full_states_unchanged(app, db, admin_user):
@@ -348,6 +348,8 @@ def test_m_scale_50x500_and_50x5000(app, db, admin_user):
 
 def test_after_metrics_and_indexes(app, db, admin_user, admin_client):
     pre = _table_counts()
+    db.session.commit()
+    db.session.remove()
     ensure_v2_schema()
     post = _table_counts()
     for key, value in pre.items():

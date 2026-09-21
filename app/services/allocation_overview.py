@@ -167,7 +167,14 @@ def allocation_overview_page(
         for row in query.with_entities(Order.id).order_by(Order.created_at.desc()).limit(CANDIDATE_WINDOW).all()
     ]
     if not candidate_ids:
-        return {"rows": [], "page": page, "per_page": per_page, "total": 0, "pages": 1}
+        return {
+            "rows": [],
+            "page": page,
+            "per_page": per_page,
+            "total": 0,
+            "pages": 1,
+            "per_page_options": PER_PAGE_OPTIONS,
+        }
     sql = _overview_sql(f"SELECT id FROM orders WHERE id IN ({_id_sql(candidate_ids)})")
     sql += """
         WHERE COALESCE(l.ordered, 0) - COALESCE(l.shipped, 0) - COALESCE(lv.currently, 0) > 0
