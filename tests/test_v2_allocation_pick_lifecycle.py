@@ -241,9 +241,11 @@ def test_repair_does_not_touch_positive_current_wave(app, db, admin_user):
 
 def test_ensure_v2_schema_runs_repair(app, db, admin_user):
     _w, order = _partial_seven_of_ten(admin_user, db, 9114)
+    order_id = order.id
     _legacy_zero_wave(order)
     db.session.commit()
     db.session.remove()
     ensure_v2_schema()
-    db.session.expire_all()
-    assert Order.query.filter_by(id=order.id).one().current_wave_number == 1
+    restored = db.session.get(Order, order_id)
+    assert restored is not None
+    assert restored.current_wave_number == 1
