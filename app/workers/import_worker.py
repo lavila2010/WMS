@@ -99,13 +99,19 @@ def _process_due_batches(*, limit: int = 1) -> list[int]:
         orders_before = int(batch.orders_created or 0)
         status_before = batch.status
         _safe_log_batch(batch, "claim")
-        beat_import_worker(current_batch_id=batch_id)
+        try:
+            beat_import_worker(current_batch_id=batch_id)
+        except Exception:
+            logger.exception("heartbeat failed batch_id=%s", batch_id)
         try:
             result = dispatch_import_batch(batch_id, executor=EXECUTOR_WORKER)
         except Exception:
             logger.exception("import failed batch_id=%s type=%s executor=worker", batch_id, batch_type)
             result = db.session.get(ImportBatch, batch_id)
-        beat_import_worker(current_batch_id=None)
+        try:
+            beat_import_worker(current_batch_id=None)
+        except Exception:
+            logger.exception("heartbeat failed batch_id=%s", batch_id)
         if result is None:
             continue
         advanced = (
