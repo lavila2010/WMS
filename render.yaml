@@ -42,7 +42,7 @@ services:
     runtime: python
     plan: free
     buildCommand: pip install -r requirements.txt
-    startCommand: python -m app.workers.inventory_import_worker
+    startCommand: python -m app.workers.import_worker
     envVars:
       - key: PYTHON_VERSION
         value: "3.12.6"

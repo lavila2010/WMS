@@ -26,17 +26,21 @@ Header consistency is required only inside that group.
 
 ## Destination sequence
 
-For each Client + raw Order Number, sort groups by:
+For each Client + raw Order Number, sort unique fulfillment destinations by:
 
-1. `warehouse_code`
-2. `customer`
-3. `customer_address`
+1. `warehouse_code` ASC
+2. Customer normalized ASC (casefold, collapsed whitespace)
+3. Customer Address normalized ASC (casefold, collapsed whitespace)
 
-using ordinary ascending text order, then assign `01`, `02`, `03`….
+then assign `01`, `02`, `03`….
+
+Normalization is identity-only: `Ada  Smith` and `ada smith` are the same destination.
 
 `wms_order_id = {client_code}-{client_order_number}-{destination_sequence:02d}`
 
 Example: raw `24` with three destinations becomes `01-CEL-24-01`, `01-CEL-24-02`, `01-CEL-24-03`. All three keep `client_order_number = 24`.
+
+CustomerPhone, Carrier, and ShippingService may be blank. Two nonblank conflicting values inside the same fulfillment group are a HEADER reject. Different Customer/Address under one raw Order Number is not a header error — it creates additional WMS orders.
 
 Pick ticket: `{wms_order_id}-01` → `01-CEL-24-02-01`.
 
@@ -49,7 +53,7 @@ Re-upload of the same destinations produces the same IDs and is rejected.
 3. Preload authorized warehouses, existing WMS IDs / destination keys, and bulk UPC descriptions.
 4. Compact preview (counts + first 100 WMS orders). Preview JSON is not the source of truth.
 5. Confirm CAS `VALIDATED → PROCESSING` and returns. No Gunicorn thread.
-6. `python -m app.workers.inventory_import_worker` claims PROCESSING inventory **and** order batches.
+6. `python -m app.workers.import_worker` claims PROCESSING inventory **and** order batches (`inventory_import_worker` remains a compatibility alias).
 7. Bulk insert order headers with `INSERT … RETURNING`, then order lines in bounded chunks.
 8. Orders are allocatable / visible only when `ImportBatch.status = COMPLETED`.
 

@@ -73,7 +73,7 @@ def test_g12a_render_yaml_keeps_separate_v2_service():
     assert "  - type: web\n    name: wms\n" in text
     assert "  - type: web\n    name: wms-v2\n" in text
     assert "  - type: worker\n    name: wms-v2-import-worker\n" in text
-    assert "python -m app.workers.inventory_import_worker" in text
+    assert "python -m app.workers.import_worker" in text
     assert "WMS_V2_DATABASE_URL" in text
     assert "SESSION_COOKIE_SECURE" in text
     assert 'value: "3.12.6"' in text

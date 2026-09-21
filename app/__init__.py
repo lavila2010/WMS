@@ -193,9 +193,16 @@ def _register_cli(app):
             f"orders={batch.orders_created} lines={batch.order_lines_created}"
         )
 
+    @app.cli.command("import-worker")
+    def import_worker_cmd():
+        """Run the durable import worker loop (inventory + orders)."""
+        from .workers.import_worker import run_forever
+
+        run_forever()
+
     @app.cli.command("inventory-import-worker")
     def inventory_import_worker_cmd():
-        """Run the durable import worker loop (inventory + orders)."""
-        from .workers.inventory_import_worker import run_forever
+        """Compatibility alias for the unified import worker."""
+        from .workers.import_worker import run_forever
 
         run_forever()

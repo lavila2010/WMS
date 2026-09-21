@@ -20,7 +20,7 @@ An 18,436-row / 50,336-unit file therefore issued 100,000+ statements inside one
 2. Persist source rows in `inventory_import_rows`.
 3. Store a compact preview only (batch id, counts, first 100 rows, capped errors).
 4. Confirm marks the batch `PROCESSING` and returns. It does not start a thread.
-5. The Render worker `wms-v2-import-worker` (`python -m app.workers.inventory_import_worker`) claims `PROCESSING` batches from PostgreSQL and bulk-inserts `inventory_units` with `INSERT … RETURNING`, then matching `IMPORT` ledger rows.
+5. The Render worker `wms-v2-import-worker` (`python -m app.workers.import_worker`) claims `PROCESSING` batches from PostgreSQL. Inventory batches bulk-insert `inventory_units` with `INSERT … RETURNING`, then matching `IMPORT` ledger rows.
 6. Allocation and operational availability require `InventoryUnit.status = AVAILABLE` **and** (`import_batch_id IS NULL` or `ImportBatch.status = COMPLETED`).
 
 Unit architecture is unchanged: Quantity 5,105 creates 5,105 unit rows and 5,105 IMPORT transactions.
@@ -30,10 +30,10 @@ Unit architecture is unchanged: Quantity 5,105 creates 5,105 unit rows and 5,105
 Durable executor: Render Background Worker `wms-v2-import-worker`.
 
 ```text
-python -m app.workers.inventory_import_worker
+python -m app.workers.import_worker
 ```
 
-Equivalent Flask CLI: `flask inventory-import-worker`.
+Equivalent Flask CLI: `flask import-worker` (`flask inventory-import-worker` remains an alias).
 
 Confirm Import:
 

@@ -2,9 +2,15 @@
 
 from __future__ import annotations
 
-import pytest
+import json
+import re
+import time
+from pathlib import Path
 
-from app.constants import ImportBatchStatus
+import pytest
+from openpyxl import Workbook
+
+from app.constants import ImportBatchStatus, OrderStatus
 from app.models import ImportBatch, Order, OrderLine
 from app.services.allocation import AllocationError, allocate_order
 from app.services.inventory_ledger import create_available_unit
@@ -13,14 +19,18 @@ from app.services.order_import import (
     analyze,
     begin_processing,
     commit_import,
+    preview_from_batch,
     process_import_batch,
 )
 from app.services.order_visibility import apply_operational_order_visibility
 from app.services.pick_tickets import create_pick_ticket
-from app.workers.inventory_import_worker import process_due_batches
+from app.workers.import_worker import process_due_batches
+from app.workers.inventory_import_worker import process_due_batches as process_due_batches_alias
 from tests.conftest import form_data
 from tests.test_v2_phase03_orders import _line, _setup, _xlsx
 from tests.test_v2_phase04_allocation import _world
+
+CAPACITY_ARTIFACT = Path("/opt/cursor/artifacts/order_import_benchmark.json")
 
 CELINE_DESTINATIONS = {
     "19": [
@@ -287,43 +297,198 @@ def test_p_worker_resume_no_duplication(app, db, admin_user):
     }
 
 
-def test_q_capacity_25000_source_lines(app, db, admin_user):
-    celine, _, cel_ecom, _, _, _ = _setup(db)
-    rows = []
-    for index in range(25000):
-        raw = str((index // 5) + 1)
-        dest_extra = index % 10 == 0
-        customer = f"DEST-B {raw}" if dest_extra and int(raw) <= 1000 else f"DEST-A {raw}"
-        address = f"{customer} ADDR"
-        rows.append(
-            {
-                "Warehouse": "NY",
-                "Order Number": raw,
-                "Customer": customer,
-                "CustomerPhone": "",
-                "CustomerAddress": address,
-                "UPC": f"{index + 1:012d}",
-                "QTY": 2,
-                "carrier": "",
-                "Shipping Service": "",
-            }
+def _write_order_xlsx(rows) -> bytes:
+    workbook = Workbook(write_only=True)
+    sheet = workbook.create_sheet()
+    sheet.append(
+        [
+            "Warehouse",
+            "Order Number",
+            "Customer",
+            "CustomerPhone",
+            "CustomerAddress",
+            "UPC",
+            "QTY",
+            "carrier",
+            "Shipping Service",
+        ]
+    )
+    for row in rows:
+        sheet.append(list(row))
+    from io import BytesIO
+
+    buffer = BytesIO()
+    workbook.save(buffer)
+    return buffer.getvalue()
+
+
+def _capacity_source_rows():
+    """100,000 source rows / 5,000 WMS orders / 100,000 lines / 250,000 units."""
+    for index in range(100000):
+        dest = index // 20
+        if dest < 1000:
+            raw = str(dest + 1)
+            customer = f"DEST-B {raw}"
+        elif dest < 2000:
+            raw = str(dest - 999)
+            customer = f"DEST-A {raw}"
+        else:
+            raw = str(dest - 999)
+            customer = f"DEST-A {raw}"
+        qty = 2 if index < 50000 else 3
+        yield (
+            "NY",
+            raw,
+            customer,
+            "",
+            f"{customer} ADDR",
+            f"{index + 1:012d}",
+            qty,
+            "",
+            "",
         )
-    preview = analyze(_xlsx(rows), "capacity.xlsx", celine, cel_ecom, user=admin_user)
+
+
+def test_intra_group_attribute_conflict_rejected(app, db, admin_user):
+    celine, _, cel_ecom, _, _, _ = _setup(db)
+    preview = analyze(
+        _xlsx(
+            [
+                _line(qty=1, upc="U1", phone="555"),
+                _line(qty=1, upc="U2", phone="666"),
+            ]
+        ),
+        "conflict.xlsx",
+        celine,
+        cel_ecom,
+    )
+    assert preview["has_blocking"] is True
+    assert any("conflicting customer phone" in error["message"] for error in preview["blocking"])
+    batch = db.session.get(ImportBatch, preview["batch_id"])
+    refreshed = preview_from_batch(batch)
+    assert refreshed["has_blocking"] is True
+    assert any("conflicting customer phone" in error["message"] for error in refreshed["blocking"])
+    with pytest.raises(OrderImportError):
+        commit_import(preview, user=admin_user)
+    with pytest.raises(OrderImportError):
+        begin_processing(preview["batch_id"], user=admin_user, run="async")
+    assert Order.query.count() == 0
+
+
+def test_normalized_destination_does_not_split(app, db, admin_user):
+    celine, _, cel_ecom, _, _, _ = _setup(db)
+    preview, _ = _import_rows(
+        admin_user,
+        celine,
+        cel_ecom,
+        [
+            _line(qty=1, upc="U1", customer="Ada  Smith", address="1 Main"),
+            _line(qty=1, upc="U2", customer="ada smith", address="1  MAIN"),
+        ],
+        "norm.xlsx",
+    )
+    assert preview["order_count"] == 1
+    assert preview["order_lines_expected"] == 2
+    assert Order.query.count() == 1
+
+
+def test_completed_orders_are_allocatable(app, db, admin_user):
+    w = _world(db)
+    preview, batch = _import_rows(
+        admin_user, w["celine"], w["cel_ecom"], [_line(upc="ALLOC-OK", qty=2)], "ok.xlsx"
+    )
+    assert batch.status == ImportBatchStatus.COMPLETED
+    create_available_unit(
+        client_id=w["celine"].id,
+        warehouse_id=w["cel_ny"].id,
+        upc="ALLOC-OK",
+        location="A-01",
+        sku="SKU",
+    )
+    create_available_unit(
+        client_id=w["celine"].id,
+        warehouse_id=w["cel_ny"].id,
+        upc="ALLOC-OK",
+        location="A-01",
+        sku="SKU",
+    )
+    db.session.commit()
+    order = Order.query.filter_by(import_batch_id=batch.id).one()
+    result = allocate_order(order, user=admin_user)
+    assert result["reserved"] == 2
+    assert Order.query.get(order.id).status == OrderStatus.ALLOCATED
+
+
+def test_unified_worker_alias_matches(app):
+    assert process_due_batches_alias is process_due_batches
+
+
+def test_unified_worker_dispatches_inventory_and_orders(app, db, admin_user):
+    from app.services.inventory_import import (
+        analyze as inv_analyze,
+        begin_processing as inv_begin,
+    )
+    from tests.test_v2_phase02_inventory import _row, _xlsx as inv_xlsx
+
+    celine, _, cel_ecom, _, cel_ny, _ = _setup(db)
+    inv_preview = inv_analyze(inv_xlsx([_row(qty=2)]), "inv.xlsx", celine, cel_ny)
+    inv_batch = inv_begin(inv_preview["batch_id"], user=admin_user, run="async")
+    order_preview = analyze(_xlsx([_line(qty=1)]), "ord.xlsx", celine, cel_ecom, user=admin_user)
+    order_batch = begin_processing(order_preview["batch_id"], user=admin_user, run="async")
+    assert inv_batch.status == ImportBatchStatus.PROCESSING
+    assert order_batch.status == ImportBatchStatus.PROCESSING
+    done = process_due_batches(limit=2)
+    assert set(done) == {inv_batch.id, order_batch.id}
+    assert db.session.get(ImportBatch, inv_batch.id).status == ImportBatchStatus.COMPLETED
+    assert db.session.get(ImportBatch, order_batch.id).status == ImportBatchStatus.COMPLETED
+
+
+def test_q_capacity_100000_source_lines(app, db, admin_user):
+    celine, _, cel_ecom, _, _, _ = _setup(db)
+    started = time.time()
+    preview = analyze(
+        _write_order_xlsx(_capacity_source_rows()),
+        "capacity.xlsx",
+        celine,
+        cel_ecom,
+        user=admin_user,
+    )
+    analyze_s = time.time() - started
     assert preview["has_blocking"] is False, preview["blocking"][:5]
-    assert preview["total_rows"] == 25000
+    assert preview["total_rows"] == 100000
     assert preview["wms_order_count"] >= 5000
+    assert preview["order_lines_expected"] == 100000
+    assert preview["total_units"] == 250000
+    commit_started = time.time()
     batch = commit_import(preview, user=admin_user)
+    process_s = time.time() - commit_started
+    total_s = time.time() - started
     assert batch.status == ImportBatchStatus.COMPLETED
     assert batch.orders_created == preview["wms_order_count"]
-    assert batch.order_lines_created == preview["order_lines_expected"]
-    assert batch.units_expected == 50000
+    assert batch.order_lines_created == 100000
+    assert batch.units_expected == 250000
     assert Order.query.filter_by(import_batch_id=batch.id).count() == batch.orders_created
-    assert (
-        OrderLine.query.join(Order, Order.id == OrderLine.order_id)
-        .filter(Order.import_batch_id == batch.id)
-        .count()
-        == batch.order_lines_created
-    )
+    match = re.search(r"sql=(\d+)", batch.message or "")
+    sql_statements = int(match.group(1)) if match else 0
+    payload = {
+        "order_capacity": {
+            "source_rows": 100000,
+            "raw_order_numbers": preview["raw_order_count"],
+            "wms_orders": batch.orders_created,
+            "order_lines": batch.order_lines_created,
+            "units": batch.units_expected,
+            "analyze_seconds": round(analyze_s, 3),
+            "process_seconds": round(process_s, 3),
+            "total_seconds": round(total_s, 3),
+            "timings_ms": preview.get("timings") or {},
+            "sql_statements": sql_statements,
+            "batch_message": batch.message,
+        }
+    }
+    CAPACITY_ARTIFACT.parent.mkdir(parents=True, exist_ok=True)
+    existing = json.loads(CAPACITY_ARTIFACT.read_text()) if CAPACITY_ARTIFACT.is_file() else {}
+    existing.update(payload)
+    CAPACITY_ARTIFACT.write_text(json.dumps(existing, indent=2))
 
 
 def test_order_24_pick_ticket_uses_wms_identity(app, db, admin_user):

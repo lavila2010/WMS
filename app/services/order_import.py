@@ -10,12 +10,13 @@ WMS Order ID:
     <ClientCode>-<ClientOrderNumber>-<DestinationSequence:02d>
 
 Destination sequence is assigned by sorting groups for a raw order number by
-warehouse_code, customer, customer_address (ascending, Python default string
-order). Re-upload of the same destinations produces the same IDs and is
+warehouse_code ASC, then customer and address after casefold + whitespace
+collapse. Re-upload of the same destinations produces the same IDs and is
 rejected as a duplicate.
 
 CustomerPhone, Carrier, and ShippingService are optional attributes and may
-be blank. UPC is the merchandise key and is stored as text.
+be blank. Two nonblank conflicting values inside the same fulfillment group
+are a HEADER error. UPC is the merchandise key and is stored as text.
 """
 
 from __future__ import annotations
@@ -250,6 +251,11 @@ class _WarehouseCache:
         return match, None
 
 
+def _normalize_dest_text(value: str) -> str:
+    """Casefold, strip, and collapse whitespace for destination identity/sort."""
+    return " ".join((value or "").casefold().split())
+
+
 def _existing_order_keys(client_id: int) -> tuple[set[str], set[tuple]]:
     rows = (
         db.session.query(
@@ -263,24 +269,29 @@ def _existing_order_keys(client_id: int) -> tuple[set[str], set[tuple]]:
         .all()
     )
     ids = {row[0] for row in rows if row[0]}
-    dests = {(row[1], row[2], row[3] or "", row[4] or "") for row in rows}
+    dests = {
+        (row[1], row[2], _normalize_dest_text(row[3] or ""), _normalize_dest_text(row[4] or ""))
+        for row in rows
+    }
     return ids, dests
 
 
 def _group_fulfillment_orders(rows: list[dict], client_code: str, warehouse_by_id: dict) -> list[dict]:
     """Group source rows into WMS fulfillment orders and assign sequences.
 
-    Destination sequence is deterministic: for each raw client_order_number,
-    sort groups by warehouse_code, customer, customer_address and number
-    01, 02, 03… within that Client + raw Order Number.
+    Destination sequence is deterministic: for each Client + raw Order Number,
+    sort groups by warehouse_code ASC, normalized customer ASC, normalized
+    address ASC, then number 01, 02, 03….
     """
     groups: dict[tuple, dict] = {}
     for row in rows:
+        customer = row["customer"] or ""
+        address = row["customer_address"] or ""
         key = (
             int(row["warehouse_id"]),
             row["raw_order_number"],
-            row["customer"] or "",
-            row["customer_address"] or "",
+            _normalize_dest_text(customer),
+            _normalize_dest_text(address),
         )
         if key not in groups:
             warehouse = warehouse_by_id[key[0]]
@@ -288,18 +299,29 @@ def _group_fulfillment_orders(rows: list[dict], client_code: str, warehouse_by_i
                 "warehouse_id": key[0],
                 "warehouse_code": warehouse.warehouse_code,
                 "client_order_number": row["raw_order_number"],
-                "customer": row["customer"] or "",
-                "customer_address": row["customer_address"] or "",
+                "customer": customer,
+                "customer_address": address,
                 "customer_phone": row.get("customer_phone") or "",
                 "carrier": row.get("carrier") or "",
                 "shipping_service": row.get("shipping_service") or "",
+                "attribute_conflicts": [],
                 "lines": {},
             }
         else:
             header = groups[key]
             for field in ("customer_phone", "carrier", "shipping_service"):
-                if not header[field] and row.get(field):
-                    header[field] = row[field]
+                incoming = row.get(field) or ""
+                current = header[field]
+                if current and incoming and _normalize_dest_text(current) != _normalize_dest_text(incoming):
+                    label = field.replace("_", " ")
+                    message = (
+                        f"Order {header['client_order_number']} destination "
+                        f"{header['customer']} has conflicting {label}."
+                    )
+                    if message not in header["attribute_conflicts"]:
+                        header["attribute_conflicts"].append(message)
+                elif not current and incoming:
+                    header[field] = incoming
         upc = row["upc"]
         line = groups[key]["lines"].setdefault(upc, {"qty": 0, "sku": "", "description": ""})
         line["qty"] += int(row["qty"] or 0)
@@ -318,8 +340,8 @@ def _group_fulfillment_orders(rows: list[dict], client_code: str, warehouse_by_i
             by_raw[raw_number],
             key=lambda group: (
                 group["warehouse_code"],
-                group["customer"],
-                group["customer_address"],
+                _normalize_dest_text(group["customer"]),
+                _normalize_dest_text(group["customer_address"]),
             ),
         )
         for sequence, group in enumerate(dests, start=1):
@@ -327,6 +349,14 @@ def _group_fulfillment_orders(rows: list[dict], client_code: str, warehouse_by_i
             group["wms_order_id"] = f"{client_code}-{group['client_order_number']}-{sequence:02d}"
             assigned.append(group)
     return assigned
+
+
+def _group_level_blocking(groups: list[dict], existing_ids: set, existing_dests: set, client_code: str) -> list[dict]:
+    blocking: list[dict] = []
+    blocking.extend(
+        _group_level_blocking(groups, existing_ids, existing_dests, client.client_code)
+    )
+    return blocking
 
 
 def _compact_order(group: dict) -> dict:
@@ -482,11 +512,14 @@ def analyze(source, filename: str, client: Client, division: Division, user=None
     timings["grouping_ms"] = int((datetime.utcnow() - group_started).total_seconds() * 1000)
 
     for group in groups:
+        for message in group.get("attribute_conflicts") or []:
+            if len(blocking) < ERROR_LIMIT:
+                blocking.append({"type": "HEADER", "message": message})
         dest = (
             group["client_order_number"],
             group["warehouse_id"],
-            group["customer"],
-            group["customer_address"],
+            _normalize_dest_text(group["customer"]),
+            _normalize_dest_text(group["customer_address"]),
         )
         if group["wms_order_id"] in existing_ids or dest in existing_dests:
             if len(blocking) < ERROR_LIMIT:
@@ -539,9 +572,9 @@ def analyze(source, filename: str, client: Client, division: Division, user=None
         "total_rows": int(len(frame)),
         "valid_rows": len(valid_rows),
         "raw_order_count": len(raw_order_numbers),
-        "order_count": len(groups),
-        "wms_order_count": len(groups),
-        "order_lines_expected": order_lines_expected,
+        "order_count": 0 if has_blocking else len(groups),
+        "wms_order_count": 0 if has_blocking else len(groups),
+        "order_lines_expected": 0 if has_blocking else order_lines_expected,
         "total_units": units_expected,
         "unique_upcs": len(unique_upcs),
         "warehouses": warehouse_codes,
@@ -577,20 +610,24 @@ def preview_from_batch(batch: ImportBatch) -> dict:
         for row in errors
         if row.validation_error
     ]
+    existing_ids, existing_dests = _existing_order_keys(batch.client_id)
+    client_code = batch.client.client_code if batch.client else ""
+    blocking.extend(_group_level_blocking(groups, existing_ids, existing_dests, client_code))
     compact = [_compact_order(group) for group in groups]
+    has_blocking = bool(blocking) or batch.rows_rejected > 0 or batch.rows_validated == 0
     return {
         "batch_id": batch.id,
         "filename": batch.filename,
         "client_id": batch.client_id,
         "division_id": batch.division_id,
-        "client_code": batch.client.client_code if batch.client else "",
+        "client_code": client_code,
         "division_code": batch.division.code if batch.division else "",
         "total_rows": batch.rows_submitted,
         "valid_rows": batch.rows_validated,
         "raw_order_count": len({group["client_order_number"] for group in groups}),
-        "order_count": batch.orders_expected or len(groups),
-        "wms_order_count": batch.orders_expected or len(groups),
-        "order_lines_expected": batch.order_lines_expected,
+        "order_count": 0 if has_blocking else (batch.orders_expected or len(groups)),
+        "wms_order_count": 0 if has_blocking else (batch.orders_expected or len(groups)),
+        "order_lines_expected": 0 if has_blocking else batch.order_lines_expected,
         "total_units": batch.units_expected,
         "unique_upcs": batch.unique_upc_count,
         "warehouses": sorted({group["warehouse_code"] for group in groups}),
@@ -598,7 +635,7 @@ def preview_from_batch(batch: ImportBatch) -> dict:
         "preview_order_limit": PREVIEW_ORDER_LIMIT,
         "blocking": blocking,
         "warnings": [],
-        "has_blocking": batch.rows_rejected > 0 or batch.rows_validated == 0,
+        "has_blocking": has_blocking,
         "status": batch.status,
     }
 
@@ -789,6 +826,8 @@ def process_import_batch(
             client.client_code,
             warehouses.by_id,
         )
+        if any(group.get("attribute_conflicts") for group in groups):
+            raise OrderImportError("Import is blocked. Fix validation errors and retry.")
         already_ids = {
             row[0]
             for row in db.session.query(Order.wms_order_id)
@@ -865,10 +904,11 @@ def process_import_batch(
         batch.status = ImportBatchStatus.COMPLETED
         batch.completed_at = datetime.utcnow()
         batch.error_message = None
+        process_ms = int(metrics["header_insert_ms"] + metrics["line_insert_ms"])
         batch.message = (
             f"{created} orders / {created_lines} lines from {batch.filename} "
             f"(header_ms={metrics['header_insert_ms']} line_ms={metrics['line_insert_ms']} "
-            f"chunks={metrics['chunks']} sql={metrics['sql_statements']})"
+            f"process_ms={process_ms} chunks={metrics['chunks']} sql={metrics['sql_statements']})"
         )
         record_audit(
             "ORDER_IMPORT",
