@@ -314,13 +314,13 @@ def test_bb_53_54_concurrent_replacement(app, db, admin_user):
     t2.start()
     t1.join()
     t2.join()
-    assert len(successes) == 1
-    assert errors
+    assert len(successes) == 1, (successes, errors)
+    assert errors, (successes, errors)
     assert any(
         REPLACEMENT_UNAVAILABLE_MESSAGE in message
         or "no longer reserved" in message.lower()
         for message in errors
-    )
+    ), errors
     assert InventoryUnit.query.filter_by(status=UnitStatus.RESERVED, upc="UPC-A").count() == 1
     assert InventoryIssue.query.count() == 1
 

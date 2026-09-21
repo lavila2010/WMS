@@ -101,16 +101,23 @@ def substitute_unit(ticket: PickTicket, original: InventoryUnit, replacement: In
     if original.warehouse_id != replacement.warehouse_id or original.warehouse_id != order.warehouse_id:
         raise PickTicketUpdateError("Replacement must be the same Warehouse.")
     locked_ticket = db.session.execute(
-        select(PickTicket).where(PickTicket.id == ticket.id).with_for_update()
+        select(PickTicket)
+        .where(PickTicket.id == ticket.id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
     ).scalar_one()
     require_open_ticket(locked_ticket)
     orig = db.session.execute(
-        select(InventoryUnit).where(InventoryUnit.id == original.id).with_for_update()
+        select(InventoryUnit)
+        .where(InventoryUnit.id == original.id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
     ).scalar_one_or_none()
     repl = db.session.execute(
         select(InventoryUnit)
         .where(InventoryUnit.id == replacement.id)
         .with_for_update(skip_locked=True)
+        .execution_options(populate_existing=True)
     ).scalar_one_or_none()
     if orig is None:
         raise PickTicketUpdateError("Original unit is no longer reserved on this ticket.")
