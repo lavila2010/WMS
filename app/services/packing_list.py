@@ -20,7 +20,6 @@ from .document_pdf import (
     kv_table,
     section_title,
     styles as pdf_styles,
-    summary_row,
 )
 from .documents import _stored_pdf_exists, get_store
 
@@ -117,7 +116,7 @@ def render_packing_list_pdf(order: Order) -> bytes:
             Spacer(1, 8),
             section_title(s, "CARTON INFORMATION"),
             Spacer(1, 3),
-            summary_row(
+            kv_table(
                 s,
                 [
                     ("Carton Number", carton.carton_number),
