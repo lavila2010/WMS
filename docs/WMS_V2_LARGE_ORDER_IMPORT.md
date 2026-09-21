@@ -60,3 +60,13 @@ Re-upload of the same destinations produces the same IDs and is rejected.
 ## Background execution
 
 Same durable PostgreSQL queue as inventory. Advisory lock class for orders is `87421002`. Resume skips `wms_order_id` values already created for the batch.
+
+## Certification (local, not deployed)
+
+- CELINE-equivalent: 1,075 source rows, 31 raw order numbers, **36 WMS orders**, 1,074 lines, 1,268 units, 472 UPCs
+- Order 19 → 2 WMS orders; Order 24 → 3; Order 25 → 3
+- Capacity: 100,000 source rows, 5,000 WMS orders, 100,000 lines, 250,000 units in 27.62s (analyze 20.502s, process 7.118s, 60 SQL statements)
+- Inventory durable worker, CELINE-scale, and 150k-unit capacity remain PASS
+- Full V2 suite: 143 passed / 0 failed
+- Status: `DURABLE_ORDER_IMPORT_READY`
+- Do not deploy from this branch.
