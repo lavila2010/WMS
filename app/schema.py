@@ -79,22 +79,32 @@ def ensure_v2_schema() -> None:
                     "ALTER TABLE orders ADD COLUMN IF NOT EXISTS destination_sequence INTEGER NOT NULL DEFAULT 1"
                 )
             )
-            conn.execute(
+            has_client_order_number = conn.execute(
                 text(
                     """
-                    DO $$
-                    BEGIN
-                      IF NOT EXISTS (
-                        SELECT 1 FROM pg_constraint WHERE conname = 'uq_order_client_number_dest'
-                      ) THEN
-                        ALTER TABLE orders
-                          ADD CONSTRAINT uq_order_client_number_dest
-                          UNIQUE (client_id, client_order_number, destination_sequence);
-                      END IF;
-                    END $$
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_schema = 'public' AND table_name = 'orders'
+                      AND column_name = 'client_order_number'
                     """
                 )
-            )
+            ).scalar()
+            if has_client_order_number:
+                conn.execute(
+                    text(
+                        """
+                        DO $$
+                        BEGIN
+                          IF NOT EXISTS (
+                            SELECT 1 FROM pg_constraint WHERE conname = 'uq_order_client_number_dest'
+                          ) THEN
+                            ALTER TABLE orders
+                              ADD CONSTRAINT uq_order_client_number_dest
+                              UNIQUE (client_id, client_order_number, destination_sequence);
+                          END IF;
+                        END $$
+                        """
+                    )
+                )
             conn.execute(
                 text(
                     "ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipping_status VARCHAR(24) NOT NULL DEFAULT 'NOT_READY'"
@@ -124,8 +134,131 @@ def ensure_v2_schema() -> None:
                 "ALTER TABLE cartons ADD COLUMN IF NOT EXISTS tracking_validated_at TIMESTAMP",
                 "ALTER TABLE cartons ADD COLUMN IF NOT EXISTS tracking_validated_by_user_id INTEGER REFERENCES users(id)",
                 "ALTER TABLE cartons ADD COLUMN IF NOT EXISTS shipping_label_status VARCHAR(16) NOT NULL DEFAULT 'PENDING'",
+                "ALTER TABLE cartons ADD COLUMN IF NOT EXISTS pick_ticket_id INTEGER REFERENCES pick_tickets(id)",
             ):
                 conn.execute(text(stmt))
+        if orders:
+            for stmt in (
+                "ALTER TABLE orders ADD COLUMN IF NOT EXISTS current_wave_number INTEGER NOT NULL DEFAULT 0",
+                "ALTER TABLE orders ADD COLUMN IF NOT EXISTS partial_approved_wave INTEGER",
+                "ALTER TABLE orders ADD COLUMN IF NOT EXISTS partial_allocation_approved_at TIMESTAMP",
+                "ALTER TABLE orders ADD COLUMN IF NOT EXISTS partial_allocation_approved_by_user_id INTEGER REFERENCES users(id)",
+                "ALTER TABLE orders ADD COLUMN IF NOT EXISTS last_allocation_attempt_at TIMESTAMP",
+            ):
+                conn.execute(text(stmt))
+        allocs = conn.execute(text("SELECT to_regclass('public.allocations')")).scalar()
+        if allocs:
+            for stmt in (
+                "ALTER TABLE allocations ADD COLUMN IF NOT EXISTS wave_number INTEGER NOT NULL DEFAULT 1",
+                "ALTER TABLE allocations ADD COLUMN IF NOT EXISTS pick_ticket_id INTEGER REFERENCES pick_tickets(id)",
+            ):
+                conn.execute(text(stmt))
+        if pick_tickets:
+            conn.execute(text("ALTER TABLE pick_tickets DROP CONSTRAINT IF EXISTS pick_tickets_order_id_key"))
+            conn.execute(text("ALTER TABLE pick_tickets DROP CONSTRAINT IF EXISTS uq_pick_tickets_order_id"))
+            conn.execute(text("ALTER TABLE pick_tickets ADD COLUMN IF NOT EXISTS revision_number INTEGER NOT NULL DEFAULT 1"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_pick_tickets_order ON pick_tickets (order_id)"))
+            has_ticket_sequence = conn.execute(
+                text(
+                    """
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_schema = 'public' AND table_name = 'pick_tickets'
+                      AND column_name = 'ticket_sequence'
+                    """
+                )
+            ).scalar()
+            if has_ticket_sequence and allocs:
+                conn.execute(
+                    text(
+                        """
+                        UPDATE allocations a
+                        SET pick_ticket_id = pt.id
+                        FROM pick_tickets pt
+                        WHERE a.order_id = pt.order_id
+                          AND a.pick_ticket_id IS NULL
+                          AND pt.ticket_sequence = (
+                            SELECT MIN(pt2.ticket_sequence) FROM pick_tickets pt2 WHERE pt2.order_id = a.order_id
+                          )
+                        """
+                    )
+                )
+            if has_ticket_sequence and cartons:
+                conn.execute(
+                    text(
+                        """
+                        UPDATE cartons c
+                        SET pick_ticket_id = pt.id
+                        FROM pick_tickets pt
+                        WHERE c.order_id = pt.order_id
+                          AND c.pick_ticket_id IS NULL
+                          AND pt.ticket_sequence = (
+                            SELECT MIN(pt2.ticket_sequence) FROM pick_tickets pt2 WHERE pt2.order_id = c.order_id
+                          )
+                        """
+                    )
+                )
+        docs = conn.execute(text("SELECT to_regclass('public.documents')")).scalar()
+        if docs:
+            conn.execute(text("ALTER TABLE documents ADD COLUMN IF NOT EXISTS pick_ticket_id INTEGER REFERENCES pick_tickets(id)"))
+        clients = conn.execute(text("SELECT to_regclass('public.clients')")).scalar()
+        units = conn.execute(text("SELECT to_regclass('public.inventory_units')")).scalar()
+        if clients and units:
+            conn.execute(
+                text(
+                    """
+                    CREATE TABLE IF NOT EXISTS inventory_issues (
+                        id SERIAL PRIMARY KEY,
+                        client_id INTEGER NOT NULL REFERENCES clients(id),
+                        warehouse_id INTEGER NOT NULL REFERENCES warehouses(id),
+                        inventory_unit_id INTEGER NOT NULL REFERENCES inventory_units(id),
+                        upc VARCHAR(64) NOT NULL,
+                        original_location VARCHAR(64) NOT NULL,
+                        current_location VARCHAR(64),
+                        source_order_id INTEGER REFERENCES orders(id),
+                        source_order_line_id INTEGER REFERENCES order_lines(id),
+                        source_pick_ticket_id INTEGER REFERENCES pick_tickets(id),
+                        replacement_inventory_unit_id INTEGER REFERENCES inventory_units(id),
+                        issue_type VARCHAR(32) NOT NULL DEFAULT 'PICK_UNIT_NOT_FOUND',
+                        status VARCHAR(16) NOT NULL DEFAULT 'OPEN',
+                        reported_by_user_id INTEGER REFERENCES users(id),
+                        reported_at TIMESTAMP NOT NULL,
+                        resolved_by_user_id INTEGER REFERENCES users(id),
+                        resolved_at TIMESTAMP,
+                        resolution_note TEXT,
+                        created_at TIMESTAMP NOT NULL,
+                        updated_at TIMESTAMP NOT NULL
+                    )
+                    """
+                )
+            )
+            conn.execute(
+                text(
+                    """
+                    CREATE TABLE IF NOT EXISTS pick_ticket_print_batches (
+                        id SERIAL PRIMARY KEY,
+                        created_by_user_id INTEGER REFERENCES users(id),
+                        created_at TIMESTAMP NOT NULL,
+                        ticket_count INTEGER NOT NULL DEFAULT 0,
+                        total_units INTEGER NOT NULL DEFAULT 0,
+                        sort_order VARCHAR(64),
+                        filter_context VARCHAR(512),
+                        document_id INTEGER REFERENCES documents(id)
+                    )
+                    """
+                )
+            )
+            conn.execute(
+                text(
+                    """
+                    CREATE TABLE IF NOT EXISTS pick_ticket_print_batch_items (
+                        id SERIAL PRIMARY KEY,
+                        batch_id INTEGER NOT NULL REFERENCES pick_ticket_print_batches(id),
+                        pick_ticket_id INTEGER NOT NULL REFERENCES pick_tickets(id),
+                        sequence_in_batch INTEGER NOT NULL DEFAULT 1
+                    )
+                    """
+                )
+            )
         txns = conn.execute(text("SELECT to_regclass('public.inventory_transactions')")).scalar()
         if txns:
             conn.execute(
@@ -220,9 +353,17 @@ def ensure_v2_schema() -> None:
             "CREATE INDEX IF NOT EXISTS ix_cartons_tracking_number ON cartons (tracking_number)",
             "CREATE INDEX IF NOT EXISTS ix_cartons_order_label ON cartons (order_id, shipping_label_status)",
             "CREATE INDEX IF NOT EXISTS ix_worker_heartbeats_seen ON worker_heartbeats (worker_type, last_seen_at)",
+            "CREATE INDEX IF NOT EXISTS ix_alloc_ticket ON allocations (pick_ticket_id)",
+            "CREATE INDEX IF NOT EXISTS ix_alloc_wave ON allocations (order_id, wave_number)",
+            "CREATE INDEX IF NOT EXISTS ix_issues_status ON inventory_issues (status)",
+            "CREATE INDEX IF NOT EXISTS ix_issues_client_wh ON inventory_issues (client_id, warehouse_id)",
+            "CREATE INDEX IF NOT EXISTS ix_issues_upc ON inventory_issues (upc)",
+            "CREATE INDEX IF NOT EXISTS ix_pt_batch_items_batch ON pick_ticket_print_batch_items (batch_id)",
+            "CREATE INDEX IF NOT EXISTS ix_cartons_pick_ticket ON cartons (pick_ticket_id)",
         ):
             try:
-                conn.execute(text(idx))
+                with conn.begin_nested():
+                    conn.execute(text(idx))
             except Exception:
                 pass
         if tables:

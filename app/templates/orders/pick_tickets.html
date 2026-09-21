@@ -75,11 +75,23 @@
   {% set next_dir = 'asc' if not (sort == key and direction == 'asc') else 'desc' %}
   <a class="sort-link" href="{{ url_for('orders.pick_tickets', client_id=scope.client_id, division_id=scope.division_id or None, warehouse_id=scope.warehouse_id or None, status=status, date=date_str or None, q=q or None, sort=key, dir=next_dir) }}">{{ label }}{% if sort == key %}{% if direction == 'asc' %} ↑{% else %} ↓{% endif %}{% endif %}</a>
 {%- endmacro %}
+<form method="post" action="{{ url_for('orders.bulk_pick_ticket_pdf') }}" id="bulk-ticket-form">
+  {% include "_csrf.html" %}
+  <input type="hidden" name="client_id" value="{{ scope.client_id or '' }}" />
+  <input type="hidden" name="sort" value="{{ sort }}" />
+  <input type="hidden" name="dir" value="{{ direction }}" />
 <div class="card">
   <h2>Pick Tickets</h2>
+  <div class="btn-row">
+    <label><input type="checkbox" id="select-all-visible" /> Select All Visible</label>
+    {% if can('PICK_TICKET_BULK_PRINT') %}
+    <button type="submit">Generate Selected Pick Tickets</button>
+    {% endif %}
+  </div>
   <table class="pick-tickets-table">
     <thead>
       <tr>
+        <th></th>
         <th>{{ sort_link('ticket', 'Pick Ticket #') }}</th>
         <th>{{ sort_link('wms_order', 'WMS Order ID') }}</th>
         <th>Client Order #</th>
@@ -102,6 +114,7 @@
         {% set t = row.ticket %}
         {% set o = row.order %}
         <tr>
+          <td><input type="checkbox" name="ticket_ids" value="{{ t.id }}" class="ticket-check" /></td>
           <td class="mono">{{ t.pick_ticket_number }}</td>
           <td class="mono">{{ o.wms_order_id }}</td>
           <td class="mono">{{ o.client_order_number }}</td>
@@ -129,10 +142,20 @@
           </td>
         </tr>
       {% else %}
-        <tr><td colspan="15" class="muted">No pick tickets match the selected filters.</td></tr>
+        <tr><td colspan="16" class="muted">No pick tickets match the selected filters.</td></tr>
       {% endfor %}
     </tbody>
   </table>
 </div>
+</form>
+<script>
+(function () {
+  var all = document.getElementById('select-all-visible');
+  if (!all) return;
+  all.addEventListener('change', function () {
+    document.querySelectorAll('.ticket-check').forEach(function (box) { box.checked = all.checked; });
+  });
+})();
+</script>
 {% endif %}
 {% endblock %}

@@ -6,7 +6,7 @@ from collections import defaultdict
 from datetime import datetime, timedelta
 
 from flask import request
-from sqlalchemy import case, func, or_
+from sqlalchemy import case, func, or_, select
 
 from ..auth import current_actor, record_audit
 from ..constants import (
@@ -16,6 +16,13 @@ from ..constants import (
 )
 from ..extensions import db
 from ..models import Allocation, InventoryUnit, Order, OrderLine, PickTicket, PickTicketPrintEvent
+from ..services.fulfillment import (
+    current_wave_approved,
+    order_quantities,
+    pick_ticket_eligible,
+    refresh_order_status,
+    unticketed_allocations,
+)
 from ..services.order_visibility import apply_operational_order_visibility
 from .document_pdf import (
     build_pdf,
@@ -34,30 +41,41 @@ class PickTicketError(ValueError):
     pass
 
 
-def pick_ticket_number(order: Order) -> str:
-    return f"{order.wms_order_id}-01"
+def pick_ticket_number(order: Order, sequence: int = 1) -> str:
+    return f"{order.wms_order_id}-{int(sequence):02d}"
 
 
-def desired_ticket_status(order: Order | None) -> str:
-    if order is None:
-        return PickTicketStatus.OPEN
-    if order.status == OrderStatus.CLOSED:
-        return PickTicketStatus.CLOSED
-    if order.status == OrderStatus.CANCELLED:
+def next_ticket_sequence(order: Order) -> int:
+    current = (
+        db.session.query(db.func.max(PickTicket.ticket_sequence))
+        .filter(PickTicket.order_id == order.id)
+        .scalar()
+    )
+    return int(current or 0) + 1
+
+
+def desired_ticket_status(order: Order | None, ticket: PickTicket | None = None) -> str:
+    if order is not None and order.status == OrderStatus.CANCELLED:
         return PickTicketStatus.CANCELLED
+    if order is not None and order.status == OrderStatus.CLOSED:
+        return PickTicketStatus.CLOSED
+    if ticket is not None:
+        return PickTicketStatus.OPEN if ticket.status == "ACTIVE" else ticket.status
     return PickTicketStatus.OPEN
 
 
 def sync_ticket_status(ticket: PickTicket, order: Order | None = None) -> str:
     order = order or ticket.order or db.session.get(Order, ticket.order_id)
-    desired = desired_ticket_status(order)
-    if ticket.status != desired:
-        ticket.status = desired
-    return desired
+    if order is not None and order.status == OrderStatus.CANCELLED:
+        ticket.status = PickTicketStatus.CANCELLED
+        return ticket.status
+    if ticket.status == "ACTIVE":
+        ticket.status = PickTicketStatus.OPEN
+    return ticket.status
 
 
-def ticket_lines(order: Order) -> list[dict]:
-    rows = (
+def ticket_lines(order: Order, ticket: PickTicket | None = None) -> list[dict]:
+    query = (
         db.session.query(Allocation, InventoryUnit, OrderLine)
         .join(InventoryUnit, InventoryUnit.id == Allocation.inventory_unit_id)
         .join(OrderLine, OrderLine.id == Allocation.order_line_id)
@@ -65,8 +83,10 @@ def ticket_lines(order: Order) -> list[dict]:
             Allocation.order_id == order.id,
             Allocation.status == AllocationStatus.ACTIVE,
         )
-        .all()
     )
+    if ticket is not None:
+        query = query.filter(Allocation.pick_ticket_id == ticket.id)
+    rows = query.all()
     grouped = defaultdict(
         lambda: {
             "qty": 0,
@@ -101,31 +121,52 @@ def ticket_lines(order: Order) -> list[dict]:
 
 
 def create_pick_ticket(order: Order) -> PickTicket:
-    existing = PickTicket.query.filter_by(order_id=order.id).first()
-    if existing:
-        return existing
-    if order.status != OrderStatus.ALLOCATED:
-        raise PickTicketError("Pick ticket is allowed only for a fully ALLOCATED order.")
+    locked = db.session.execute(
+        select(Order).where(Order.id == order.id).with_for_update()
+    ).scalar_one_or_none()
+    if locked is None:
+        raise PickTicketError("Order not found.")
+    pending = unticketed_allocations(locked)
+    if not pending:
+        existing = (
+            PickTicket.query.filter_by(order_id=locked.id)
+            .order_by(PickTicket.ticket_sequence.desc())
+            .first()
+        )
+        if existing:
+            return existing
+        raise PickTicketError("No allocated units are available for a pick ticket.")
+    if not pick_ticket_eligible(locked):
+        qty = order_quantities(locked)
+        if qty["remaining"] > 0 and not current_wave_approved(locked):
+            raise PickTicketError("Partial allocation must be approved before a pick ticket can be created.")
+        raise PickTicketError("Pick ticket is allowed only for a fully allocated or approved partial wave.")
     uid, _ = current_actor()
+    sequence = next_ticket_sequence(locked)
     ticket = PickTicket(
-        client_id=order.client_id,
-        warehouse_id=order.warehouse_id,
-        order_id=order.id,
-        pick_ticket_number=pick_ticket_number(order),
-        ticket_sequence=1,
+        client_id=locked.client_id,
+        warehouse_id=locked.warehouse_id,
+        order_id=locked.id,
+        pick_ticket_number=pick_ticket_number(locked, sequence),
+        ticket_sequence=sequence,
+        revision_number=1,
         status=PickTicketStatus.OPEN,
         assigned_by_user_id=uid,
     )
     db.session.add(ticket)
     db.session.flush()
-    order.status = OrderStatus.PICK_TICKET_READY
+    for allocation in pending:
+        allocation.pick_ticket_id = ticket.id
+    qty = order_quantities(locked)
+    event = "PARTIAL_PICK_TICKET_CREATED" if qty["remaining"] > 0 else "PICK_TICKET_CREATED"
+    locked.status = OrderStatus.PICK_TICKET_READY
     record_audit(
-        "PICK_TICKET_CREATED",
+        event,
         module="Orders",
         entity_type="pick_ticket",
         entity_id=ticket.id,
-        client_id=order.client_id,
-        detail=f"{ticket.pick_ticket_number} {order.wms_order_id}",
+        client_id=locked.client_id,
+        detail=f"{ticket.pick_ticket_number} {locked.wms_order_id} qty={len(pending)}",
     )
     db.session.commit()
     return ticket
@@ -150,7 +191,7 @@ def record_print(ticket: PickTicket, *, source="UI") -> PickTicketPrintEvent:
         ip_address=ip,
     )
     db.session.add(event)
-    event_type = "PICK_TICKET_PRINTED"
+    event_type = "PICK_TICKET_PRINTED" if ticket.print_count == 1 else "PICK_TICKET_REPRINTED"
     record_audit(
         event_type,
         module="Orders",
@@ -195,16 +236,16 @@ def render_pdf(ticket: PickTicket) -> bytes:
     from reportlab.platypus import Spacer
 
     order = db.session.get(Order, ticket.order_id)
-    lines = ticket_lines(order)
+    lines = ticket_lines(order, ticket)
     summary = ticket_summary(order, lines)
-    derived = desired_ticket_status(order)
+    derived = desired_ticket_status(order, ticket)
     s = pdf_styles()
     generated = generated_now()
     story = [
         header_block(
             s,
             title="PICK TICKET",
-            ident=ticket.pick_ticket_number,
+            ident=f"{ticket.pick_ticket_number}  Rev {ticket.revision_number or 1}",
             status=derived,
         ),
         Spacer(1, 10),
@@ -219,6 +260,7 @@ def render_pdf(ticket: PickTicket) -> bytes:
                 ("WMS Order ID", order.wms_order_id),
                 ("Client Order Number", order.client_order_number),
                 ("Pick Ticket Number", ticket.pick_ticket_number),
+                ("Revision", str(ticket.revision_number or 1)),
                 ("Customer", order.customer),
                 ("Customer Address", order.customer_address),
                 ("Customer Phone", order.customer_phone),
@@ -285,7 +327,7 @@ def render_pdf(ticket: PickTicket) -> bytes:
         footer=footer,
         later_header={
             "title": "PICK TICKET",
-            "ident": ticket.pick_ticket_number,
+            "ident": f"{ticket.pick_ticket_number}  Rev {ticket.revision_number or 1}",
             "status": derived,
         },
     )
@@ -299,14 +341,17 @@ SORT_KEYS = {
     "created": PickTicket.created_at,
     "printed": PickTicket.last_printed_at,
     "units": "units",
+    "client": "client",
+    "division": "division",
+    "warehouse": "warehouse",
 }
 
 
 def status_expression():
     return case(
-        (Order.status == OrderStatus.CLOSED, PickTicketStatus.CLOSED),
         (Order.status == OrderStatus.CANCELLED, PickTicketStatus.CANCELLED),
-        else_=PickTicketStatus.OPEN,
+        (PickTicket.status == "ACTIVE", PickTicketStatus.OPEN),
+        else_=PickTicket.status,
     )
 
 
@@ -321,21 +366,26 @@ def list_pick_tickets(
     sort="created",
     direction="desc",
 ):
+    from ..models import Client, Division, Warehouse
+
     units_sq = (
         db.session.query(
-            Allocation.order_id.label("order_id"),
+            Allocation.pick_ticket_id.label("pick_ticket_id"),
             func.count(Allocation.id).label("units"),
             func.count(func.distinct(Allocation.location)).label("locations"),
         )
-        .filter(Allocation.status == AllocationStatus.ACTIVE)
-        .group_by(Allocation.order_id)
+        .filter(Allocation.status == AllocationStatus.ACTIVE, Allocation.pick_ticket_id.isnot(None))
+        .group_by(Allocation.pick_ticket_id)
         .subquery()
     )
     derived = status_expression()
     query = (
         db.session.query(PickTicket, Order, units_sq.c.units, units_sq.c.locations, derived.label("derived_status"))
         .join(Order, Order.id == PickTicket.order_id)
-        .outerjoin(units_sq, units_sq.c.order_id == Order.id)
+        .outerjoin(Client, Client.id == Order.client_id)
+        .outerjoin(Division, Division.id == Order.division_id)
+        .outerjoin(Warehouse, Warehouse.id == Order.warehouse_id)
+        .outerjoin(units_sq, units_sq.c.pick_ticket_id == PickTicket.id)
     )
     query = apply_operational_order_visibility(query).filter(PickTicket.client_id == client_id)
     if division_id:
@@ -361,12 +411,19 @@ def list_pick_tickets(
     sort_key = SORT_KEYS.get(sort, PickTicket.created_at)
     descending = (direction or "desc").lower() != "asc"
     if sort_key == "units":
-        order_col = units_sq.c.units
+        order_cols = [units_sq.c.units]
     elif sort_key == "status":
-        order_col = derived
+        order_cols = [derived]
+    elif sort == "client":
+        order_cols = [Client.client_code, Division.code, Warehouse.warehouse_code, PickTicket.pick_ticket_number]
+    elif sort == "division":
+        order_cols = [Division.code, Warehouse.warehouse_code, PickTicket.pick_ticket_number]
+    elif sort == "warehouse":
+        order_cols = [Warehouse.warehouse_code, PickTicket.pick_ticket_number]
     else:
-        order_col = sort_key
-    query = query.order_by(order_col.desc() if descending else order_col.asc(), PickTicket.id.desc())
+        order_cols = [sort_key]
+    ordered = [col.desc() if descending else col.asc() for col in order_cols]
+    query = query.order_by(*ordered, PickTicket.id.desc())
     rows = []
     for ticket, order, units, locations, derived_status in query.all():
         rows.append(

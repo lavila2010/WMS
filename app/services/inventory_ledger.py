@@ -25,6 +25,11 @@ ALLOWED = {
     (UnitStatus.PACKED, UnitStatus.SHIPPED): {LedgerType.SHIP},
     (UnitStatus.SHIPPED, UnitStatus.AVAILABLE): {LedgerType.RETURN},
     (UnitStatus.AVAILABLE, UnitStatus.AVAILABLE): {LedgerType.ADJUSTMENT, LedgerType.TRANSFER_OUT},
+    (UnitStatus.RESERVED, UnitStatus.ISSUE_HOLD): {LedgerType.ISSUE_HOLD},
+    (UnitStatus.ISSUE_HOLD, UnitStatus.AVAILABLE): {LedgerType.ISSUE_RESOLVED},
+    (UnitStatus.ISSUE_HOLD, UnitStatus.MISSING): {LedgerType.MISSING_CONFIRMED},
+    (UnitStatus.ISSUE_HOLD, UnitStatus.DECOMMISSIONED): {LedgerType.UNIT_DECOMMISSIONED},
+    (UnitStatus.MISSING, UnitStatus.DECOMMISSIONED): {LedgerType.UNIT_DECOMMISSIONED},
 }
 
 

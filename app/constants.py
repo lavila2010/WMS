@@ -26,8 +26,12 @@ class UnitStatus:
     RESERVED = "RESERVED"
     PACKED = "PACKED"
     SHIPPED = "SHIPPED"
-    ALL = [AVAILABLE, RESERVED, PACKED, SHIPPED]
+    ISSUE_HOLD = "ISSUE_HOLD"
+    MISSING = "MISSING"
+    DECOMMISSIONED = "DECOMMISSIONED"
+    ALL = [AVAILABLE, RESERVED, PACKED, SHIPPED, ISSUE_HOLD, MISSING, DECOMMISSIONED]
     ON_HAND = [AVAILABLE, RESERVED, PACKED]
+    NOT_ALLOCATABLE = [RESERVED, PACKED, SHIPPED, ISSUE_HOLD, MISSING, DECOMMISSIONED]
 
 
 class OrderStatus:
@@ -36,6 +40,7 @@ class OrderStatus:
     ALLOCATED = "ALLOCATED"
     PICK_TICKET_READY = "PICK_TICKET_READY"
     PROCESSING = "PROCESSING"
+    PARTIALLY_FULFILLED = "PARTIALLY_FULFILLED"
     CLOSED = "CLOSED"
     CANCELLED = "CANCELLED"
     ALL = [
@@ -44,9 +49,11 @@ class OrderStatus:
         ALLOCATED,
         PICK_TICKET_READY,
         PROCESSING,
+        PARTIALLY_FULFILLED,
         CLOSED,
         CANCELLED,
     ]
+    ALLOCATION_ELIGIBLE = [UNALLOCATED, PARTIALLY_ALLOCATED, PARTIALLY_FULFILLED]
 
 
 class PickTicketStatus:
@@ -59,6 +66,10 @@ class PickTicketStatus:
 
 CLOSED_PICK_TICKET_MESSAGE = (
     "Pick Ticket is closed because the associated order is complete."
+)
+CLOSED_PICK_TICKET_UPDATE_MESSAGE = "Pick Ticket is closed and cannot be updated."
+REPLACEMENT_UNAVAILABLE_MESSAGE = (
+    "Selected replacement unit is no longer available. Select another location."
 )
 
 
@@ -85,6 +96,23 @@ class LedgerType:
     RETURN = "RETURN"
     TRANSFER_IN = "TRANSFER_IN"
     TRANSFER_OUT = "TRANSFER_OUT"
+    ISSUE_HOLD = "ISSUE_HOLD"
+    ISSUE_RESOLVED = "ISSUE_RESOLVED"
+    MISSING_CONFIRMED = "MISSING_CONFIRMED"
+    UNIT_DECOMMISSIONED = "UNIT_DECOMMISSIONED"
+
+
+class InventoryIssueType:
+    PICK_UNIT_NOT_FOUND = "PICK_UNIT_NOT_FOUND"
+    ALL = [PICK_UNIT_NOT_FOUND]
+
+
+class InventoryIssueStatus:
+    OPEN = "OPEN"
+    RESOLVED = "RESOLVED"
+    MISSING = "MISSING"
+    TO_DELETE = "TO_DELETE"
+    ALL = [OPEN, RESOLVED, MISSING, TO_DELETE]
 
 
 class ImportType:

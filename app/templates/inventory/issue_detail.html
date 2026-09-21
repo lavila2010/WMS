@@ -1,0 +1,26 @@
+{% extends "inventory/_layout.html" %}
+{% block inv_content %}
+<div class="card">
+  <h2>Issue {{ issue.id }}</h2>
+  <p class="sub">{{ issue.upc }} · {{ issue.original_location }} · {{ issue.status }}</p>
+  {% if can('INVENTORY_ISSUES_RESOLVE') and issue.status == 'OPEN' %}
+    <form method="post" action="{{ url_for('inventory.issue_resolve', issue_id=issue.id) }}">
+      {% include "_csrf.html" %}
+      <input type="hidden" name="action" value="resolved" />
+      <label>Resolved Location <input name="location" required /></label>
+      <label>Note <input name="note" /></label>
+      <button type="submit">Issue Resolved</button>
+    </form>
+    <form method="post" action="{{ url_for('inventory.issue_resolve', issue_id=issue.id) }}">
+      {% include "_csrf.html" %}
+      <input type="hidden" name="action" value="missing" />
+      <button type="submit">Unit Missing</button>
+    </form>
+    <form method="post" action="{{ url_for('inventory.issue_resolve', issue_id=issue.id) }}">
+      {% include "_csrf.html" %}
+      <input type="hidden" name="action" value="decommission" />
+      <button type="submit">Unit To Be Deleted</button>
+    </form>
+  {% endif %}
+</div>
+{% endblock %}

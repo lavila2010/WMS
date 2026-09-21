@@ -395,6 +395,11 @@ class Order(db.Model):
     closed_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"))
     closed_by_username = db.Column(db.String(64))
     shipping_status = db.Column(db.String(24), nullable=False, default=ShippingStatus.NOT_READY)
+    current_wave_number = db.Column(db.Integer, nullable=False, default=0)
+    partial_approved_wave = db.Column(db.Integer)
+    partial_allocation_approved_at = db.Column(db.DateTime)
+    partial_allocation_approved_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+    last_allocation_attempt_at = db.Column(db.DateTime)
 
     lines = db.relationship("OrderLine", backref="order", cascade="all, delete-orphan")
     client = db.relationship("Client")
@@ -422,7 +427,11 @@ class OrderLine(db.Model):
 
 class Allocation(db.Model):
     __tablename__ = "allocations"
-    __table_args__ = (db.Index("ix_alloc_unit_status", "inventory_unit_id", "status"),)
+    __table_args__ = (
+        db.Index("ix_alloc_unit_status", "inventory_unit_id", "status"),
+        db.Index("ix_alloc_ticket", "pick_ticket_id"),
+        db.Index("ix_alloc_wave", "order_id", "wave_number"),
+    )
 
     id = db.Column(db.Integer, primary_key=True)
     client_id = db.Column(db.Integer, db.ForeignKey("clients.id"), nullable=False, index=True)
@@ -433,6 +442,8 @@ class Allocation(db.Model):
     upc = db.Column(db.String(64), nullable=False)
     location = db.Column(db.String(64), nullable=False)
     status = db.Column(db.String(16), nullable=False, default=AllocationStatus.ACTIVE)
+    wave_number = db.Column(db.Integer, nullable=False, default=1)
+    pick_ticket_id = db.Column(db.Integer, index=True)
     created_at = db.Column(db.DateTime, default=_utcnow, nullable=False)
     created_by = db.Column(db.Integer, db.ForeignKey("users.id"))
 
@@ -471,13 +482,15 @@ class InventoryTransaction(db.Model):
 
 class PickTicket(db.Model):
     __tablename__ = "pick_tickets"
+    __table_args__ = (db.Index("ix_pick_tickets_order", "order_id"),)
 
     id = db.Column(db.Integer, primary_key=True)
     client_id = db.Column(db.Integer, db.ForeignKey("clients.id"), nullable=False)
     warehouse_id = db.Column(db.Integer, db.ForeignKey("warehouses.id"), nullable=False)
-    order_id = db.Column(db.Integer, db.ForeignKey("orders.id"), unique=True, nullable=False)
+    order_id = db.Column(db.Integer, db.ForeignKey("orders.id"), nullable=False)
     pick_ticket_number = db.Column(db.String(96), unique=True, nullable=False, index=True)
     ticket_sequence = db.Column(db.Integer, nullable=False, default=1)
+    revision_number = db.Column(db.Integer, nullable=False, default=1)
     status = db.Column(db.String(16), nullable=False, default=PickTicketStatus.OPEN)
     print_count = db.Column(db.Integer, nullable=False, default=0)
     last_printed_at = db.Column(db.DateTime)
@@ -514,6 +527,7 @@ class Carton(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     client_id = db.Column(db.Integer, db.ForeignKey("clients.id"), nullable=False)
     order_id = db.Column(db.Integer, db.ForeignKey("orders.id"), nullable=False)
+    pick_ticket_id = db.Column(db.Integer, index=True)
     carton_number = db.Column(db.String(64), nullable=False)
     length = db.Column(db.Float)
     width = db.Column(db.Float)
@@ -560,6 +574,7 @@ class Document(db.Model):
     client_id = db.Column(db.Integer, db.ForeignKey("clients.id"), nullable=False)
     order_id = db.Column(db.Integer, db.ForeignKey("orders.id"))
     carton_id = db.Column(db.Integer, db.ForeignKey("cartons.id"))
+    pick_ticket_id = db.Column(db.Integer, index=True)
     type = db.Column(db.String(48), nullable=False)
     filename = db.Column(db.String(255), nullable=False)
     storage_key = db.Column(db.String(512), nullable=False)
@@ -606,3 +621,63 @@ class Invoice(db.Model):
     created_at = db.Column(db.DateTime, default=_utcnow, nullable=False)
     created_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"))
     created_by_username = db.Column(db.String(64))
+
+
+class InventoryIssue(db.Model):
+    __tablename__ = "inventory_issues"
+    __table_args__ = (
+        db.Index("ix_issues_status", "status"),
+        db.Index("ix_issues_client_wh", "client_id", "warehouse_id"),
+        db.Index("ix_issues_upc", "upc"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    client_id = db.Column(db.Integer, db.ForeignKey("clients.id"), nullable=False)
+    warehouse_id = db.Column(db.Integer, db.ForeignKey("warehouses.id"), nullable=False)
+    inventory_unit_id = db.Column(db.Integer, db.ForeignKey("inventory_units.id"), nullable=False)
+    upc = db.Column(db.String(64), nullable=False)
+    original_location = db.Column(db.String(64), nullable=False)
+    current_location = db.Column(db.String(64))
+    source_order_id = db.Column(db.Integer, db.ForeignKey("orders.id"))
+    source_order_line_id = db.Column(db.Integer, db.ForeignKey("order_lines.id"))
+    source_pick_ticket_id = db.Column(db.Integer, db.ForeignKey("pick_tickets.id"))
+    replacement_inventory_unit_id = db.Column(db.Integer, db.ForeignKey("inventory_units.id"))
+    issue_type = db.Column(db.String(32), nullable=False, default="PICK_UNIT_NOT_FOUND")
+    status = db.Column(db.String(16), nullable=False, default="OPEN")
+    reported_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+    reported_at = db.Column(db.DateTime, default=_utcnow, nullable=False)
+    resolved_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+    resolved_at = db.Column(db.DateTime)
+    resolution_note = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=_utcnow, nullable=False)
+    updated_at = db.Column(db.DateTime, default=_utcnow, onupdate=_utcnow, nullable=False)
+
+    client = db.relationship("Client")
+    warehouse = db.relationship("Warehouse")
+    unit = db.relationship("InventoryUnit", foreign_keys=[inventory_unit_id])
+    order = db.relationship("Order", foreign_keys=[source_order_id])
+    pick_ticket = db.relationship("PickTicket", foreign_keys=[source_pick_ticket_id])
+
+
+class PickTicketPrintBatch(db.Model):
+    __tablename__ = "pick_ticket_print_batches"
+
+    id = db.Column(db.Integer, primary_key=True)
+    created_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+    created_at = db.Column(db.DateTime, default=_utcnow, nullable=False)
+    ticket_count = db.Column(db.Integer, nullable=False, default=0)
+    total_units = db.Column(db.Integer, nullable=False, default=0)
+    sort_order = db.Column(db.String(64))
+    filter_context = db.Column(db.String(512))
+    document_id = db.Column(db.Integer, db.ForeignKey("documents.id"))
+
+
+class PickTicketPrintBatchItem(db.Model):
+    __tablename__ = "pick_ticket_print_batch_items"
+    __table_args__ = (db.Index("ix_pt_batch_items_batch", "batch_id"),)
+
+    id = db.Column(db.Integer, primary_key=True)
+    batch_id = db.Column(db.Integer, db.ForeignKey("pick_ticket_print_batches.id"), nullable=False)
+    pick_ticket_id = db.Column(db.Integer, db.ForeignKey("pick_tickets.id"), nullable=False)
+    sequence_in_batch = db.Column(db.Integer, nullable=False, default=1)
+

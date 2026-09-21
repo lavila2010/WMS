@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+{% block title %}Daily Allocation Exceptions{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Daily Allocation Exceptions</h1>
+  <p class="sub">Live orders for the selected America/New_York day that still have remaining units to allocate.</p>
+</div>
+<div class="card">
+  <form method="get" class="inline-form">
+    <label>Date <input type="date" name="date" value="{{ date_str }}" /></label>
+    <label>Client
+      <select name="client_id" onchange="this.form.submit()">
+        <option value="">All accessible</option>
+        {% for c in clients %}
+          <option value="{{ c.id }}" {{ 'selected' if client_id==c.id }}>{{ c.client_code }} — {{ c.name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Division
+      <select name="division_id">
+        <option value="">All</option>
+        {% for d in divisions %}
+          <option value="{{ d.id }}" {{ 'selected' if division_id==d.id }}>{{ d.code }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Warehouse
+      <select name="warehouse_id">
+        <option value="">All</option>
+        {% for w in warehouses %}
+          <option value="{{ w.id }}" {{ 'selected' if warehouse_id==w.id }}>{{ w.warehouse_code }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Status
+      <select name="allocation_status">
+        <option value="" {{ 'selected' if not allocation_status }}>All Exceptions</option>
+        <option value="UNALLOCATED" {{ 'selected' if allocation_status=='UNALLOCATED' }}>Unallocated</option>
+        <option value="PARTIALLY_ALLOCATED" {{ 'selected' if allocation_status=='PARTIALLY_ALLOCATED' }}>Partially Allocated</option>
+      </select>
+    </label>
+    <label>Search <input name="q" value="{{ q }}" placeholder="WMS ID, client order, customer" /></label>
+    <button type="submit">Apply</button>
+    {% if can('ALLOCATION_REPORT_EXPORT') %}
+      <a class="btn btn-secondary" href="{{ url_for('allocation.exceptions_export', date=date_str, client_id=client_id or None, division_id=division_id or None, warehouse_id=warehouse_id or None, allocation_status=allocation_status or None, q=q or None) }}">Export Daily Allocation Exceptions</a>
+    {% endif %}
+    <a class="btn btn-secondary" href="{{ url_for('allocation.index', client_id=client_id or None) }}">Back to Allocation</a>
+  </form>
+</div>
+<div class="card kpis">
+  <div><strong>{{ payload.kpis.orders_not_fully_allocated }}</strong><span>Orders Not Fully Allocated</span></div>
+  <div><strong>{{ payload.kpis.unallocated_orders }}</strong><span>Unallocated Orders</span></div>
+  <div><strong>{{ payload.kpis.partially_allocated_orders }}</strong><span>Partially Allocated Orders</span></div>
+  <div><strong>{{ payload.kpis.outstanding_units }}</strong><span>Outstanding Units</span></div>
+</div>
+<form method="post" action="{{ url_for('allocation.bulk') }}">
+  {% include "_csrf.html" %}
+  <input type="hidden" name="client_id" value="{{ client_id or '' }}" />
+  <div class="card">
+    <div class="btn-row">
+      <label><input type="checkbox" id="select-all-visible" /> Select All Visible</label>
+      {% if can('ALLOCATION_BULK_RUN') %}
+      <button type="submit">Allocate Selected</button>
+      {% endif %}
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th></th>
+          <th>Client</th><th>Division</th><th>Warehouse</th>
+          <th>WMS Order ID</th><th>Client Order Number</th><th>Customer</th>
+          <th>Order Created Time</th>
+          <th class="right">Ordered</th><th class="right">Shipped</th>
+          <th class="right">Allocated</th><th class="right">Remaining</th>
+          <th>Allocation Status</th><th>Partial Approval</th>
+          <th>Last Allocation Attempt</th><th>Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in payload.rows %}
+          {% set o = row.order %}
+          <tr>
+            <td><input type="checkbox" name="order_ids" value="{{ o.id }}" class="order-check" /></td>
+            <td>{{ o.client.client_code }}</td>
+            <td>{{ o.division.code }}</td>
+            <td>{{ o.warehouse.warehouse_code }}</td>
+            <td class="mono">{{ o.wms_order_id }}</td>
+            <td class="mono">{{ o.client_order_number }}</td>
+            <td>{{ o.customer or '—' }}</td>
+            <td class="muted">{{ row.created_ny.strftime('%Y-%m-%d %H:%M') if row.created_ny else '—' }}</td>
+            <td class="right num-cell">{{ row.ordered }}</td>
+            <td class="right num-cell">{{ row.shipped }}</td>
+            <td class="right num-cell">{{ row.currently_allocated }}</td>
+            <td class="right num-cell">{{ row.remaining }}</td>
+            <td><span class="badge badge-{{ row.allocation_status }}">{{ row.allocation_status }}</span></td>
+            <td>{{ row.partial_approval }}</td>
+            <td class="muted">{{ row.last_attempt_ny.strftime('%Y-%m-%d %H:%M') if row.last_attempt_ny else '—' }}</td>
+            <td>
+              <a class="btn" href="{{ url_for('allocation.detail', order_id=o.id) }}">Allocate</a>
+              <details>
+                <summary>UPC</summary>
+                <table>
+                  <thead><tr><th>UPC</th><th>SKU</th><th>Description</th><th>Style</th><th>Color</th><th>Size</th><th class="right">Ordered</th><th class="right">Shipped</th><th class="right">Allocated</th><th class="right">Remaining</th></tr></thead>
+                  <tbody>
+                    {% for u in row.upc_rows %}
+                      <tr>
+                        <td class="mono">{{ u.upc }}</td><td>{{ u.sku or '—' }}</td><td>{{ u.description or '—' }}</td>
+                        <td>{{ u.style or '—' }}</td><td>{{ u.color or '—' }}</td><td>{{ u.size or '—' }}</td>
+                        <td class="right">{{ u.ordered_qty }}</td><td class="right">{{ u.shipped_qty }}</td>
+                        <td class="right">{{ u.allocated_qty }}</td><td class="right">{{ u.remaining_qty }}</td>
+                      </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </details>
+            </td>
+          </tr>
+        {% else %}
+          <tr><td colspan="16" class="muted">No allocation exceptions for this day.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</form>
+<script>
+(function () {
+  var all = document.getElementById('select-all-visible');
+  if (!all) return;
+  all.addEventListener('change', function () {
+    document.querySelectorAll('.order-check').forEach(function (box) { box.checked = all.checked; });
+  });
+})();
+</script>
+{% endblock %}

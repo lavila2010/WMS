@@ -3,7 +3,7 @@
 {% block content %}
 <div class="page-header">
   <h1>Allocation</h1>
-  <p class="sub">UPC allocation reserves AVAILABLE units for the same Client + Warehouse + UPC. Matching never uses SKU.</p>
+  <p class="sub">Reserve AVAILABLE units for the same Client + Warehouse + UPC. Bulk allocation runs one transaction per order.</p>
 </div>
 <div class="card">
   <form method="get" class="inline-form">
@@ -15,25 +15,75 @@
         {% endfor %}
       </select>
     </label>
+    {% if can('ALLOCATION_REPORT_VIEW') %}
+      <a class="btn btn-secondary" href="{{ url_for('allocation.exceptions', client_id=client_id or None) }}">Daily Allocation Exceptions</a>
+    {% endif %}
   </form>
 </div>
-<div class="card">
-  <table>
-    <thead><tr><th>WMS Order</th><th>Client Order</th><th>Customer</th><th class="right">Units</th><th>Status</th><th></th></tr></thead>
-    <tbody>
-      {% for o in orders %}
+<form method="post" action="{{ url_for('allocation.bulk') }}" id="bulk-alloc-form">
+  {% include "_csrf.html" %}
+  <input type="hidden" name="client_id" value="{{ client_id or '' }}" />
+  <div class="card">
+    <div class="btn-row">
+      <label><input type="checkbox" id="select-all-visible" /> Select All Visible</label>
+      {% if can('ALLOCATION_BULK_RUN') %}
+      <button type="submit">Allocate Selected</button>
+      {% endif %}
+    </div>
+    <table>
+      <thead>
         <tr>
-          <td class="mono">{{ o.wms_order_id }}</td>
-          <td class="mono">{{ o.client_order_number }}</td>
-          <td>{{ o.customer or '—' }}</td>
-          <td class="right num-cell">{{ o.lines|sum(attribute='qty_ordered') }}</td>
-          <td><span class="badge badge-{{ o.status }}">{{ o.status }}</span></td>
-          <td class="right"><a class="btn" href="{{ url_for('allocation.detail', order_id=o.id) }}">Allocate</a></td>
+          <th></th>
+          <th>WMS Order ID</th>
+          <th>Client Order #</th>
+          <th>Client</th>
+          <th>Division</th>
+          <th>Warehouse</th>
+          <th>Customer</th>
+          <th class="right">Ordered Units</th>
+          <th class="right">Already Shipped</th>
+          <th class="right">Currently Allocated</th>
+          <th class="right">Remaining To Allocate</th>
+          <th>Allocation Status</th>
+          <th>Partial Approval</th>
+          <th>Created</th>
+          <th>Action</th>
         </tr>
-      {% else %}
-        <tr><td colspan="6" class="muted">No unallocated or partially allocated orders.</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
-</div>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+          {% set o = row.order %}
+          <tr>
+            <td>{% if row.eligible %}<input type="checkbox" name="order_ids" value="{{ o.id }}" class="order-check" />{% endif %}</td>
+            <td class="mono">{{ o.wms_order_id }}</td>
+            <td class="mono">{{ o.client_order_number }}</td>
+            <td>{{ o.client.client_code if o.client else '—' }}</td>
+            <td>{{ o.division.code if o.division else '—' }}</td>
+            <td>{{ o.warehouse.warehouse_code if o.warehouse else '—' }}</td>
+            <td>{{ o.customer or '—' }}</td>
+            <td class="right num-cell">{{ row.ordered }}</td>
+            <td class="right num-cell">{{ row.shipped }}</td>
+            <td class="right num-cell">{{ row.currently_allocated }}</td>
+            <td class="right num-cell">{{ row.remaining }}</td>
+            <td><span class="badge badge-{{ o.status }}">{{ o.status }}</span></td>
+            <td>{{ row.partial_approval }}</td>
+            <td class="muted">{{ o.created_at.strftime('%Y-%m-%d %H:%M') if o.created_at else '—' }}</td>
+            <td class="right"><a class="btn" href="{{ url_for('allocation.detail', order_id=o.id) }}">Allocate</a></td>
+          </tr>
+        {% else %}
+          <tr><td colspan="15" class="muted">No unallocated or partially allocated orders.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</form>
+<script>
+(function () {
+  var all = document.getElementById('select-all-visible');
+  if (!all) return;
+  all.addEventListener('change', function () {
+    document.querySelectorAll('.order-check').forEach(function (box) { box.checked = all.checked; });
+  });
+})();
+</script>
 {% endblock %}

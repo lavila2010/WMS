@@ -555,3 +555,77 @@ def import_detail(batch_id):
     if not user_can_access_client(current_user, batch.client_id):
         abort(404)
     return _page("inventory/import_detail.html", "import_history", batch=batch)
+
+
+@bp.route("/issues")
+@permission_required("INVENTORY_ISSUES_VIEW")
+def issues():
+    from ..constants import InventoryIssueStatus
+    from ..services.inventory_issues import list_issues
+
+    ctx = _scope()
+    status = request.args.get("status") or InventoryIssueStatus.OPEN
+    rows = list_issues(
+        client_id=ctx["scope"]["client_id"],
+        warehouse_id=ctx["scope"]["warehouse_id"],
+        status=status,
+        upc=request.args.get("upc", ""),
+        location=request.args.get("location", ""),
+        date_str=request.args.get("date", ""),
+        q=request.args.get("q", ""),
+        accessible_client_ids=ctx["client_ids"],
+        admin=current_user.is_admin(),
+    )
+    return _page(
+        "inventory/issues.html",
+        "issues",
+        issues=rows,
+        status=status,
+        upc=request.args.get("upc", ""),
+        location=request.args.get("location", ""),
+        date_str=request.args.get("date", ""),
+        q=request.args.get("q", ""),
+    )
+
+
+@bp.route("/issues/<int:issue_id>")
+@permission_required("INVENTORY_ISSUES_VIEW")
+def issue_detail(issue_id):
+    from ..models import InventoryIssue
+    from ..services.tenant import require_entity_client
+
+    issue = db.session.get(InventoryIssue, issue_id)
+    if issue is None:
+        abort(404)
+    require_entity_client(current_user, issue)
+    return _page("inventory/issue_detail.html", "issues", issue=issue)
+
+
+@bp.route("/issues/<int:issue_id>/resolve", methods=["POST"])
+@permission_required("INVENTORY_ISSUES_RESOLVE")
+def issue_resolve(issue_id):
+    from ..models import InventoryIssue
+    from ..services.inventory_issues import confirm_missing, decommission_unit, InventoryIssueError, resolve_found
+    from ..services.tenant import require_entity_client
+
+    issue = db.session.get(InventoryIssue, issue_id)
+    if issue is None:
+        abort(404)
+    require_entity_client(current_user, issue)
+    action = request.form.get("action")
+    try:
+        if action == "resolved":
+            resolve_found(issue, location=request.form.get("location", ""), note=request.form.get("note", ""))
+            flash("Issue resolved. Unit returned to AVAILABLE.", "success")
+        elif action == "missing":
+            confirm_missing(issue, note=request.form.get("note", ""))
+            flash("Unit marked missing.", "success")
+        elif action == "decommission":
+            decommission_unit(issue, note=request.form.get("note", ""))
+            flash("Unit decommissioned. Row was not deleted.", "success")
+        else:
+            flash("Unknown resolution.", "error")
+    except InventoryIssueError as exc:
+        flash(str(exc), "error")
+    return redirect(url_for("inventory.issue_detail", issue_id=issue_id))
+

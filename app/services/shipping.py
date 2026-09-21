@@ -119,7 +119,7 @@ def confirm_shipping(order: Order, user: User):
     if order.status != OrderStatus.CLOSED:
         raise ShippingError("Shipping can be confirmed only for a CLOSED order.")
     ticket = PickTicket.query.filter_by(order_id=order.id).first()
-    if ticket and desired_ticket_status(order) != PickTicketStatus.CLOSED:
+    if ticket and desired_ticket_status(order, ticket) != PickTicketStatus.CLOSED:
         raise ShippingError("Pick Ticket must remain closed for a closed order.")
     cartons = Carton.query.filter_by(order_id=order.id).order_by(Carton.id).all()
     if not cartons:

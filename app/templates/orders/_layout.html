@@ -4,6 +4,7 @@
   ('management', 'Order Management', 'orders.index'),
   ('upload', 'Upload Orders', 'orders.import_view'),
   ('pick_tickets', 'Pick Tickets', 'orders.pick_tickets'),
+  ('update_pick_ticket', 'Update Pick Ticket', 'orders.update_pick_ticket'),
   ('shipping', 'Shipping & Tracking', 'orders.shipping'),
   ('eod', 'End of Day', 'orders.end_of_day'),
   ('allocation', 'Allocation Report', 'orders.allocation_report'),
@@ -19,6 +20,7 @@
   {% for key, label, endpoint in tabs %}
     {% if key == 'upload' and not can('ORDERS_UPLOAD') %}
     {% elif key == 'pick_tickets' and not can('PICK_TICKET_VIEW') %}
+    {% elif key == 'update_pick_ticket' and not can('PICK_TICKET_UPDATE') %}
     {% elif key == 'shipping' and not can('SHIPPING_VIEW') %}
     {% elif key == 'eod' and not can('END_OF_DAY_VIEW') %}
     {% elif key == 'allocation' and not can('ALLOCATION_VIEW') %}

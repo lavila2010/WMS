@@ -24,12 +24,11 @@ from .document_pdf import (
 from .documents import _stored_pdf_exists, get_store
 
 
-def existing_packing_list_document(order: Order) -> Document | None:
-    return (
-        Document.query.filter_by(order_id=order.id, type="PACKING_LIST")
-        .order_by(Document.id.asc())
-        .first()
-    )
+def existing_packing_list_document(order: Order, ticket: PickTicket | None = None) -> Document | None:
+    query = Document.query.filter_by(order_id=order.id, type="PACKING_LIST")
+    if ticket is not None:
+        query = query.filter(Document.pick_ticket_id == ticket.id)
+    return query.order_by(Document.id.asc()).first()
 
 
 def carton_product_lines(carton: Carton) -> list[dict]:
@@ -65,11 +64,14 @@ def carton_product_lines(carton: Carton) -> list[dict]:
     ]
 
 
-def render_packing_list_pdf(order: Order) -> bytes:
-    if order.status != OrderStatus.CLOSED:
-        raise ValueError("Packing List is generated only after successful order close.")
-    ticket = PickTicket.query.filter_by(order_id=order.id).first()
-    cartons = Carton.query.filter_by(order_id=order.id).order_by(Carton.id).all()
+def render_packing_list_pdf(order: Order, ticket: PickTicket | None = None) -> bytes:
+    ticket = ticket or PickTicket.query.filter_by(order_id=order.id).order_by(PickTicket.ticket_sequence.desc()).first()
+    if order.status != OrderStatus.CLOSED and not (ticket and ticket.status == "CLOSED"):
+        raise ValueError("Packing List is generated only after a fulfillment wave is closed.")
+    cartons_q = Carton.query.filter_by(order_id=order.id)
+    if ticket:
+        cartons_q = cartons_q.filter((Carton.pick_ticket_id == ticket.id) | (Carton.pick_ticket_id.is_(None)))
+    cartons = cartons_q.order_by(Carton.id).all()
     if not cartons:
         raise ValueError("Packing List requires at least one carton.")
     s = pdf_styles()
@@ -90,7 +92,7 @@ def render_packing_list_pdf(order: Order) -> bytes:
                 s,
                 title="PACKING LIST",
                 ident=order.wms_order_id,
-                status=OrderStatus.CLOSED,
+                status=OrderStatus.CLOSED if order.status == OrderStatus.CLOSED else "SHIPPED",
             ),
             Spacer(1, 8),
             section_title(s, "ORDER INFORMATION"),
@@ -179,11 +181,11 @@ def render_packing_list_pdf(order: Order) -> bytes:
     )
 
 
-def persist_packing_list_pdf(order: Order, *, reuse: bool = True) -> Document:
-    existing = existing_packing_list_document(order) if reuse else None
+def persist_packing_list_pdf(order: Order, *, reuse: bool = True, ticket: PickTicket | None = None) -> Document:
+    existing = existing_packing_list_document(order, ticket) if reuse else None
     if existing and _stored_pdf_exists(existing):
         return existing
-    data = render_packing_list_pdf(order)
+    data = render_packing_list_pdf(order, ticket=ticket)
     store = get_store()
     filename = f"{order.wms_order_id}-packing-list.pdf"
     key = store.save(filename, data, "application/pdf")

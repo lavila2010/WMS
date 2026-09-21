@@ -401,13 +401,19 @@ def pick_tickets():
     sort = request.args.get("sort", "created").strip() or "created"
     direction = request.args.get("dir", "desc").strip() or "desc"
     if ctx["scope"]["client_id"]:
-        eligible = (
+        from ..services.fulfillment import pick_ticket_eligible
+
+        candidates = (
             apply_operational_order_visibility(
-                Order.query.filter_by(client_id=ctx["scope"]["client_id"], status=OrderStatus.ALLOCATED)
+                Order.query.filter(
+                    Order.client_id == ctx["scope"]["client_id"],
+                    Order.status.notin_([OrderStatus.CLOSED, OrderStatus.CANCELLED]),
+                )
             )
             .order_by(Order.created_at.desc())
             .all()
         )
+        eligible = [order for order in candidates if pick_ticket_eligible(order)]
         tickets = list_pick_tickets(
             client_id=ctx["scope"]["client_id"],
             division_id=ctx["scope"]["division_id"],
@@ -468,8 +474,8 @@ def pick_ticket_preview(ticket_id):
         "orders/pick_ticket_preview.html",
         ticket=ticket,
         order=order,
-        lines=ticket_lines(order),
-        ticket_status=desired_ticket_status(order),
+        lines=ticket_lines(order, ticket),
+        ticket_status=desired_ticket_status(order, ticket),
     )
 
 
@@ -731,3 +737,111 @@ def print_order_document(document_id):
         )
     db.session.commit()
     return redirect(url_for("orders.order_document", document_id=document.id))
+
+
+@bp.route("/pick-tickets/bulk-pdf", methods=["POST"])
+@permission_required("PICK_TICKET_BULK_PRINT")
+def bulk_pick_ticket_pdf():
+    from ..services.bulk_pick_pdf import BulkPickPdfError, publish_bulk_pdf
+    from ..services.tenant import require_entity_client
+
+    ids = request.form.getlist("ticket_ids", type=int)
+    if not ids:
+        flash("Select at least one pick ticket.", "error")
+        return redirect(url_for("orders.pick_tickets", client_id=request.form.get("client_id") or None))
+    tickets = []
+    for tid in ids:
+        ticket = db.session.get(PickTicket, tid)
+        if ticket is None:
+            abort(404)
+        require_entity_client(current_user, ticket)
+        tickets.append(ticket)
+    try:
+        result = publish_bulk_pdf(
+            tickets,
+            sort=request.form.get("sort") or "client",
+            direction=request.form.get("dir") or "asc",
+            filter_context=request.query_string.decode()[:512],
+        )
+    except BulkPickPdfError as exc:
+        flash(str(exc), "error")
+        return redirect(url_for("orders.pick_tickets", client_id=request.form.get("client_id") or None))
+    return send_file(
+        io.BytesIO(result["pdf"]),
+        as_attachment=True,
+        download_name=result["filename"],
+        mimetype="application/pdf",
+    )
+
+
+@bp.route("/update-pick-ticket", methods=["GET", "POST"])
+@permission_required("PICK_TICKET_UPDATE")
+def update_pick_ticket():
+    from ..services.pick_ticket_update import (
+        PickTicketUpdateError,
+        replacement_candidates,
+        require_open_ticket,
+        substitute_unit,
+        ticket_units,
+        units_for_upc,
+    )
+    from ..services.tenant import require_entity_client
+
+    ctx = _scope()
+    number = (request.values.get("pick_ticket_number") or "").strip()
+    ticket = PickTicket.query.filter_by(pick_ticket_number=number).first() if number else None
+    error = None
+    units = []
+    candidates = []
+    selected_upc = (request.values.get("upc") or "").strip()
+    selected_unit_id = request.values.get("unit_id", type=int)
+    if ticket:
+        try:
+            require_entity_client(current_user, ticket)
+            require_open_ticket(ticket)
+        except Exception as exc:  # noqa: BLE001
+            error = str(exc)
+            ticket = None
+        else:
+            units = ticket_units(ticket)
+            if selected_upc:
+                matches = units_for_upc(ticket, selected_upc)
+                if not matches:
+                    error = "UPC is not on this pick ticket."
+                elif len(matches) == 1:
+                    selected_unit_id = matches[0].id
+    if ticket and request.method == "POST" and request.form.get("action") == "replace":
+        from ..models import InventoryUnit
+
+        original = db.session.get(InventoryUnit, request.form.get("unit_id", type=int))
+        replacement = db.session.get(InventoryUnit, request.form.get("replacement_id", type=int))
+        try:
+            if original is None or replacement is None:
+                raise PickTicketUpdateError("Select the original unit and a replacement.")
+            result = substitute_unit(ticket, original, replacement, user=current_user)
+        except PickTicketUpdateError as exc:
+            flash(str(exc), "error")
+        else:
+            flash(
+                f"Unit replaced. {result['ticket'].pick_ticket_number} is now revision {result['revision']}.",
+                "success",
+            )
+            return redirect(url_for("orders.update_pick_ticket", pick_ticket_number=ticket.pick_ticket_number))
+    if ticket and selected_upc and selected_unit_id:
+        from ..models import InventoryUnit, Order
+
+        original = db.session.get(InventoryUnit, selected_unit_id)
+        order = db.session.get(Order, ticket.order_id)
+        if original:
+            candidates = replacement_candidates(order, original.upc, exclude_id=original.id)
+    return _page(
+        "orders/update_pick_ticket.html",
+        "update_pick_ticket",
+        ticket=ticket,
+        number=number,
+        error=error,
+        units=units,
+        selected_upc=selected_upc,
+        selected_unit_id=selected_unit_id,
+        candidates=candidates,
+    )

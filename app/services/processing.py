@@ -35,6 +35,7 @@ from ..models import (
 from .documents import persist_closure_pdf
 from .inventory_ledger import LedgerError, transition_unit
 from .order_visibility import order_is_operational
+from .fulfillment import open_ticket_for_order, order_quantities, refresh_order_status
 from .packing_list import persist_packing_list_pdf
 from .pick_tickets import desired_ticket_status, sync_ticket_status
 
@@ -51,13 +52,11 @@ def assert_ticket_processable(ticket: PickTicket, order: Order | None = None) ->
     order = order or db.session.get(Order, ticket.order_id)
     if ticket is None or order is None:
         raise ProcessingError("Pick ticket not found.")
-    derived = desired_ticket_status(order)
     stored = ticket.status if ticket.status != "ACTIVE" else PickTicketStatus.OPEN
-    if (
-        derived == PickTicketStatus.CLOSED
-        or stored == PickTicketStatus.CLOSED
-        or order.status == OrderStatus.CLOSED
-    ):
+    derived = desired_ticket_status(order, ticket)
+    if stored == PickTicketStatus.CLOSED or derived == PickTicketStatus.CLOSED:
+        if order.status == OrderStatus.CLOSED:
+            raise ProcessingError(CLOSED_PICK_TICKET_MESSAGE)
         raise ProcessingError(CLOSED_PICK_TICKET_MESSAGE)
     if (
         derived == PickTicketStatus.CANCELLED
@@ -66,6 +65,8 @@ def assert_ticket_processable(ticket: PickTicket, order: Order | None = None) ->
     ):
         raise ProcessingError(CANCELLED_TICKET_MESSAGE)
     if stored != PickTicketStatus.OPEN:
+        raise ProcessingError(CLOSED_PICK_TICKET_MESSAGE)
+    if order.status == OrderStatus.CLOSED:
         raise ProcessingError(CLOSED_PICK_TICKET_MESSAGE)
     if order.status not in PROCESSABLE_ORDER_STATUSES:
         raise ProcessingError("Order is not eligible for processing.")
@@ -84,7 +85,7 @@ def find_ticket(number: str) -> PickTicket:
 
 
 def acquire_lock(order: Order, user: User) -> str:
-    ticket = PickTicket.query.filter_by(order_id=order.id).first()
+    ticket = open_ticket_for_order(order) or PickTicket.query.filter_by(order_id=order.id).first()
     if ticket is None:
         raise ProcessingError("Pick ticket not found.")
     assert_ticket_processable(ticket, order)
@@ -149,7 +150,7 @@ def next_carton_number(order: Order) -> str:
 
 
 def ensure_open_carton(order: Order, user: User) -> Carton:
-    ticket = PickTicket.query.filter_by(order_id=order.id).first()
+    ticket = open_ticket_for_order(order) or PickTicket.query.filter_by(order_id=order.id).first()
     if ticket:
         assert_ticket_processable(ticket, order)
     current = (
@@ -159,11 +160,14 @@ def ensure_open_carton(order: Order, user: User) -> Carton:
         .first()
     )
     if current:
+        if ticket and not current.pick_ticket_id:
+            current.pick_ticket_id = ticket.id
         return current
     uid, uname = current_actor()
     carton = Carton(
         client_id=order.client_id,
         order_id=order.id,
+        pick_ticket_id=ticket.id if ticket else None,
         carton_number=next_carton_number(order),
         status=CartonStatus.OPEN,
         created_by_user_id=uid,
@@ -200,9 +204,15 @@ def set_dimensions(carton: Carton, length, width, height, unit="in"):
 
 
 def remaining_rows(order: Order) -> list[dict]:
-    units = InventoryUnit.query.filter_by(
+    ticket = open_ticket_for_order(order)
+    query = InventoryUnit.query.filter_by(
         allocated_order_id=order.id, status=UnitStatus.RESERVED
-    ).all()
+    )
+    if ticket:
+        query = query.join(Allocation, Allocation.inventory_unit_id == InventoryUnit.id).filter(
+            Allocation.pick_ticket_id == ticket.id, Allocation.status == "ACTIVE"
+        )
+    units = query.all()
     grouped = defaultdict(lambda: {"qty": 0, "sku": None, "description": None})
     for unit in units:
         line = OrderLine.query.filter_by(order_id=order.id, upc=unit.upc).first()
@@ -247,7 +257,7 @@ def carton_contents(carton: Carton) -> list[dict]:
 
 def scan_upc(order: Order, carton: Carton, upc: str, user: User) -> InventoryUnit:
     require_owner(order, user)
-    ticket = PickTicket.query.filter_by(order_id=order.id).first()
+    ticket = open_ticket_for_order(order) or PickTicket.query.filter_by(order_id=order.id).first()
     if ticket:
         assert_ticket_processable(ticket, order)
     upc = (upc or "").strip()
@@ -270,6 +280,23 @@ def scan_upc(order: Order, carton: Carton, upc: str, user: User) -> InventoryUni
         .with_for_update()
         .limit(1)
     )
+    if ticket:
+        stmt = (
+            select(InventoryUnit)
+            .join(Allocation, Allocation.inventory_unit_id == InventoryUnit.id)
+            .where(
+                InventoryUnit.client_id == order.client_id,
+                InventoryUnit.warehouse_id == order.warehouse_id,
+                InventoryUnit.allocated_order_id == order.id,
+                InventoryUnit.upc == upc,
+                InventoryUnit.status == UnitStatus.RESERVED,
+                Allocation.pick_ticket_id == ticket.id,
+                Allocation.status == "ACTIVE",
+            )
+            .order_by(InventoryUnit.location.asc(), InventoryUnit.id.asc())
+            .with_for_update(of=InventoryUnit)
+            .limit(1)
+        )
     unit = db.session.execute(stmt).scalar_one_or_none()
     if unit is None:
         raise ProcessingError("No reserved unit available for this UPC on the order.")
@@ -466,15 +493,37 @@ def kpis(order: Order, current: Carton | None) -> dict:
 def can_close(order: Order) -> tuple[bool, str]:
     if order.status == OrderStatus.CLOSED:
         return False, CLOSED_PICK_TICKET_MESSAGE
-    lines = OrderLine.query.filter_by(order_id=order.id).all()
-    if not lines:
-        return False, "Order has no lines."
-    for line in lines:
-        if not (line.qty_ordered == line.qty_allocated == line.qty_packed):
-            return False, "Ordered, allocated, and packed quantities must match."
-    if InventoryUnit.query.filter_by(allocated_order_id=order.id, status=UnitStatus.RESERVED).count():
+    ticket = open_ticket_for_order(order)
+    if ticket is None:
+        return False, "No open pick ticket."
+    reserved = (
+        db.session.query(InventoryUnit)
+        .join(Allocation, Allocation.inventory_unit_id == InventoryUnit.id)
+        .filter(
+            Allocation.pick_ticket_id == ticket.id,
+            Allocation.status == "ACTIVE",
+            InventoryUnit.status == UnitStatus.RESERVED,
+        )
+        .count()
+    )
+    if reserved:
         return False, "Remaining reserved units must be zero."
-    cartons = Carton.query.filter_by(order_id=order.id).all()
+    packed = (
+        db.session.query(InventoryUnit)
+        .join(Allocation, Allocation.inventory_unit_id == InventoryUnit.id)
+        .filter(
+            Allocation.pick_ticket_id == ticket.id,
+            Allocation.status == "ACTIVE",
+            InventoryUnit.status == UnitStatus.PACKED,
+        )
+        .count()
+    )
+    if packed <= 0:
+        return False, "No packed units on this pick ticket."
+    cartons = Carton.query.filter(
+        Carton.order_id == order.id,
+        (Carton.pick_ticket_id == ticket.id) | (Carton.pick_ticket_id.is_(None)),
+    ).all()
     if not cartons:
         return False, "No cartons."
     for carton in cartons:
@@ -508,36 +557,11 @@ def close_order(order: Order, user: User):
             carton_id=unit.carton_id,
             reference=f"close:{order.wms_order_id}",
         )
+    ticket = open_ticket_for_order(order)
     for line in order.lines:
         line.qty_shipped = line.qty_packed
-    order.status = OrderStatus.CLOSED
-    order.closed_at = datetime.utcnow()
-    order.closed_by_user_id = user.id
-    order.closed_by_username = user.username
-    order.shipping_status = ShippingStatus.PENDING_TRACKING
-    for carton in Carton.query.filter_by(order_id=order.id):
-        if not carton.shipping_label_status:
-            carton.shipping_label_status = ShippingLabelStatus.PENDING
-    release_lock(order, user, force=True)
-    invoice = Invoice(
-        invoice_number=f"INV-{order.wms_order_id}",
-        order_id=order.id,
-        client_id=order.client_id,
-        warehouse_id=order.warehouse_id,
-        division_id=order.division_id,
-        customer=order.customer,
-        carrier=order.carrier,
-        shipping_service=order.shipping_service,
-        total_units=sum(l.qty_ordered for l in order.lines),
-        total_cartons=Carton.query.filter_by(order_id=order.id).count(),
-        total_weight=sum((c.weight or 0) for c in Carton.query.filter_by(order_id=order.id)),
-        created_by_user_id=user.id,
-        created_by_username=user.username,
-    )
-    db.session.add(invoice)
-    ticket = PickTicket.query.filter_by(order_id=order.id).first()
     if ticket:
-        sync_ticket_status(ticket, order)
+        ticket.status = PickTicketStatus.CLOSED
         record_audit(
             "PICK_TICKET_CLOSED",
             module="Processing",
@@ -546,44 +570,97 @@ def close_order(order: Order, user: User):
             client_id=order.client_id,
             detail=f"{ticket.pick_ticket_number} {order.wms_order_id}",
         )
-    record_audit(
-        "ORDER_RECONCILED",
-        module="Processing",
-        entity_type="order",
-        entity_id=order.id,
-        client_id=order.client_id,
-        detail=f"{order.wms_order_id} {ticket.pick_ticket_number if ticket else ''}".strip(),
-    )
-    record_audit(
-        "ORDER_CLOSED",
-        module="Processing",
-        entity_type="order",
-        entity_id=order.id,
-        client_id=order.client_id,
-        detail=f"{order.wms_order_id} {ticket.pick_ticket_number if ticket else ''}".strip(),
-    )
-    document = Document(
-        client_id=order.client_id,
-        order_id=order.id,
-        type="ORDER_CLOSURE",
-        filename=f"{order.wms_order_id}-closure.pdf",
-        storage_key=f"pending-closure-{order.id}",
-        created_by_user_id=user.id,
-        created_by_username=user.username,
-    )
-    db.session.add(document)
+    qty = order_quantities(order)
+    fully = qty["ordered"] > 0 and qty["shipped"] >= qty["ordered"] and qty["remaining"] == 0
+    release_lock(order, user, force=True)
+    if fully:
+        order.status = OrderStatus.CLOSED
+        order.closed_at = datetime.utcnow()
+        order.closed_by_user_id = user.id
+        order.closed_by_username = user.username
+        order.shipping_status = ShippingStatus.PENDING_TRACKING
+        for carton in Carton.query.filter_by(order_id=order.id):
+            if not carton.shipping_label_status:
+                carton.shipping_label_status = ShippingLabelStatus.PENDING
+        if Invoice.query.filter_by(order_id=order.id).first() is None:
+            invoice = Invoice(
+                invoice_number=f"INV-{order.wms_order_id}",
+                order_id=order.id,
+                client_id=order.client_id,
+                warehouse_id=order.warehouse_id,
+                division_id=order.division_id,
+                customer=order.customer,
+                carrier=order.carrier,
+                shipping_service=order.shipping_service,
+                total_units=sum(l.qty_ordered for l in order.lines),
+                total_cartons=Carton.query.filter_by(order_id=order.id).count(),
+                total_weight=sum((c.weight or 0) for c in Carton.query.filter_by(order_id=order.id)),
+                created_by_user_id=user.id,
+                created_by_username=user.username,
+            )
+            db.session.add(invoice)
+        record_audit(
+            "ORDER_RECONCILED",
+            module="Processing",
+            entity_type="order",
+            entity_id=order.id,
+            client_id=order.client_id,
+            detail=f"{order.wms_order_id} {ticket.pick_ticket_number if ticket else ''}".strip(),
+        )
+        record_audit(
+            "ORDER_FULLY_FULFILLED",
+            module="Processing",
+            entity_type="order",
+            entity_id=order.id,
+            client_id=order.client_id,
+            detail=order.wms_order_id,
+        )
+        record_audit(
+            "ORDER_CLOSED",
+            module="Processing",
+            entity_type="order",
+            entity_id=order.id,
+            client_id=order.client_id,
+            detail=f"{order.wms_order_id} {ticket.pick_ticket_number if ticket else ''}".strip(),
+        )
+        document = Document(
+            client_id=order.client_id,
+            order_id=order.id,
+            type="ORDER_CLOSURE",
+            filename=f"{order.wms_order_id}-closure.pdf",
+            storage_key=f"pending-closure-{order.id}",
+            created_by_user_id=user.id,
+            created_by_username=user.username,
+        )
+        db.session.add(document)
+    else:
+        order.status = OrderStatus.PARTIALLY_FULFILLED
+        refresh_order_status(order)
+        record_audit(
+            "PARTIAL_FULFILLMENT_COMPLETED",
+            module="Processing",
+            entity_type="order",
+            entity_id=order.id,
+            client_id=order.client_id,
+            detail=f"{order.wms_order_id} shipped={qty['shipped']} remaining={qty['remaining']}",
+        )
+        document = None
     packing_doc = Document(
         client_id=order.client_id,
         order_id=order.id,
+        pick_ticket_id=ticket.id if ticket else None,
         type="PACKING_LIST",
-        filename=f"{order.wms_order_id}-packing-list.pdf",
-        storage_key=f"pending-packing-{order.id}",
+        filename=f"{order.wms_order_id}-{(ticket.pick_ticket_number if ticket else 'packing')}-packing-list.pdf",
+        storage_key=f"pending-packing-{order.id}-{ticket.id if ticket else 0}",
         created_by_user_id=user.id,
         created_by_username=user.username,
     )
     db.session.add(packing_doc)
     db.session.commit()
-    document = persist_closure_pdf(order)
-    persist_packing_list_pdf(order)
+    if fully:
+        document = persist_closure_pdf(order)
+        persist_packing_list_pdf(order, ticket=ticket)
+    else:
+        persist_packing_list_pdf(order, ticket=ticket, reuse=False)
     db.session.commit()
     return document

@@ -16,7 +16,7 @@
 
 <div class="card">
   <h2>Run allocation</h2>
-  {% if order.status in ['UNALLOCATED', 'PARTIALLY_ALLOCATED'] and can('ALLOCATION_EXECUTE') %}
+  {% if qty.remaining > 0 and can('ALLOCATION_EXECUTE') %}
     <form method="post" action="{{ url_for('allocation.run', order_id=order.id) }}">
       {% include "_csrf.html" %}
       <button type="submit">Reserve available units</button>
@@ -24,28 +24,33 @@
   {% else %}
     <p class="muted">Order is {{ order.status }}; allocation is closed.</p>
   {% endif %}
+  {% if can_approve and can('PARTIAL_ALLOCATION_APPROVE') %}
+    <a class="btn" href="{{ url_for('allocation.approve_partial', order_id=order.id) }}">Approve Partial Allocation</a>
+  {% endif %}
+  <p class="muted">Ordered {{ qty.ordered }} · Shipped {{ qty.shipped }} · Allocated {{ qty.currently_allocated }} · Remaining {{ qty.remaining }}</p>
 </div>
 
 <div class="card">
   <h2>Lines</h2>
   <table>
-    <thead><tr><th>UPC</th><th>SKU</th><th>Description</th><th class="right">Ordered</th><th class="right">Allocated</th><th class="right">Short</th></tr></thead>
+    <thead><tr><th>UPC</th><th>SKU</th><th>Description</th><th class="right">Ordered</th><th class="right">Shipped</th><th class="right">Allocated</th><th class="right">Remaining</th></tr></thead>
     <tbody>
-      {% for line in lines %}
+      {% for line in qty.upc_rows %}
         <tr>
           <td class="mono">{{ line.upc }}</td>
           <td>{{ line.sku or '—' }}</td>
           <td>{{ line.description or '—' }}</td>
-          <td class="right num-cell">{{ line.qty_ordered }}</td>
-          <td class="right num-cell">{{ line.qty_allocated }}</td>
-          <td class="right num-cell">{{ line.qty_ordered - line.qty_allocated }}</td>
+          <td class="right num-cell">{{ line.ordered_qty }}</td>
+          <td class="right num-cell">{{ line.shipped_qty }}</td>
+          <td class="right num-cell">{{ line.allocated_qty }}</td>
+          <td class="right num-cell">{{ line.remaining_qty }}</td>
         </tr>
       {% endfor %}
     </tbody>
   </table>
   {% if shortages %}
     <p class="muted">Shortages by UPC:
-      {% for s in shortages %}<span class="mono">{{ s.upc }}×{{ s.needed }}</span>{% if not loop.last %}, {% endif %}{% endfor %}
+      {% for s in shortages %}<span class="mono">{{ s.upc }}×{{ s.remaining_qty }}</span>{% if not loop.last %}, {% endif %}{% endfor %}
     </p>
   {% endif %}
 </div>

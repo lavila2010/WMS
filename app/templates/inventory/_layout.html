@@ -9,6 +9,7 @@
   ('search', 'Inventory Search', 'inventory.search'),
   ('transactions', 'Transactions', 'inventory.transactions'),
   ('import_history', 'Import History', 'inventory.import_history'),
+  ('issues', 'Inventory Issues', 'inventory.issues'),
 ] %}
 
 {% block content %}
@@ -47,7 +48,7 @@
 
   <div class="tabs">
     {% for key, label, endpoint in tabs %}
-      {% if key != 'upload' or can('INVENTORY_UPLOAD') %}
+      {% if (key != 'upload' or can('INVENTORY_UPLOAD')) and (key != 'issues' or can('INVENTORY_ISSUES_VIEW')) %}
       <a class="{{ 'active' if active_tab == key }}"
          href="{{ url_for(endpoint, client_id=scope.client_id or None, warehouse_id=scope.warehouse_id or None, show_zero='1' if show_zero else None) }}">{{ label }}</a>
       {% endif %}

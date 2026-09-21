@@ -203,6 +203,10 @@ input:disabled, select:disabled { background: var(--header-bg); color: var(--mut
 .badge-PARTIALLY_ALLOCATED, .badge-PICK_TICKET_READY, .badge-CANCELLED { background: var(--amber-light); color: var(--amber); }
 .badge-VALIDATED, .badge-ALLOCATING, .badge-PARTIAL, .badge-NEVER_PRINTED { background: var(--amber-light); color: var(--amber); }
 .badge-ALLOCATED, .badge-READY_TO_PICK, .badge-PRINTED, .badge-FULL { background: var(--green-light); color: var(--green); }
+.badge-PARTIALLY_FULFILLED, .badge-ISSUE_HOLD, .badge-MISSING, .badge-TO_DELETE, .badge-DECOMMISSIONED { background: var(--amber-light); color: var(--amber); }
+.kpis { display:flex; gap:1.5rem; flex-wrap:wrap; }
+.kpis div { display:flex; flex-direction:column; }
+.kpis span { color: var(--muted); font-size:0.8rem; }
 .badge-PROCESSING, .badge-PROCESSED, .badge-READY_TO_CLOSE, .badge-OPEN { background: var(--blue-light); color: var(--blue); }
 .badge-PENDING_TRACKING, .badge-PENDING { background: var(--amber-light); color: var(--amber); }
 .badge-TRACKING_COMPLETE { background: var(--green-light); color: var(--green); }
