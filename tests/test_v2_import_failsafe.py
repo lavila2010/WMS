@@ -6,6 +6,7 @@ import threading
 from datetime import datetime, timedelta
 
 import pytest
+from sqlalchemy import text
 
 from app.constants import ImportBatchStatus, LedgerType, OrderStatus
 from app.models import ImportBatch, InventoryTransaction, InventoryUnit, Order
@@ -14,6 +15,7 @@ from app.services.import_execution import (
     EXECUTOR_RECOVERY,
     beat_import_worker,
     clear_import_worker_heartbeats,
+    deactivate_worker_instance,
     inspect_orphaned_import_batches,
     is_batch_recovery_eligible,
     is_import_worker_healthy,
@@ -40,6 +42,17 @@ from tests.conftest import create_user, form_data, login
 from tests.test_v2_phase02_inventory import _masters, _row, _xlsx
 from tests.test_v2_phase03_orders import _line, _setup, _xlsx as ord_xlsx
 from tests.test_v2_phase04_allocation import _world
+
+
+@pytest.fixture(autouse=True)
+def _reset_import_execution(db):
+    clear_import_worker_heartbeats()
+    deactivate_worker_instance()
+    db.session.execute(text("SELECT pg_advisory_unlock_all()"))
+    db.session.commit()
+    yield
+    deactivate_worker_instance()
+    clear_import_worker_heartbeats()
 
 
 def _enqueue_inv(user, client, warehouse, rows, filename="job.xlsx"):
