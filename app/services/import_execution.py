@@ -62,28 +62,37 @@ def beat_import_worker(
 ) -> WorkerHeartbeat:
     ident = instance_id or _active_instance_id or worker_instance_id()
     now = datetime.utcnow()
-    row = WorkerHeartbeat.query.filter_by(
-        worker_name=IMPORT_WORKER_NAME, instance_id=ident
-    ).one_or_none()
-    if row is None:
-        row = WorkerHeartbeat(
-            worker_name=IMPORT_WORKER_NAME,
-            worker_type=IMPORT_WORKER_TYPE,
-            instance_id=ident,
-            last_seen_at=now,
-            status=status,
-            current_batch_id=current_batch_id,
-            created_at=now,
-            updated_at=now,
-        )
-        db.session.add(row)
-    else:
-        row.last_seen_at = now
-        row.status = status
-        row.current_batch_id = current_batch_id
-        row.updated_at = now
+    db.session.execute(
+        text(
+            """
+            INSERT INTO worker_heartbeats (
+                worker_name, worker_type, instance_id, last_seen_at, status,
+                current_batch_id, created_at, updated_at
+            )
+            VALUES (
+                :worker_name, :worker_type, :instance_id, :now, :status,
+                :current_batch_id, :now, :now
+            )
+            ON CONFLICT (worker_name, instance_id) DO UPDATE SET
+                last_seen_at = EXCLUDED.last_seen_at,
+                status = EXCLUDED.status,
+                current_batch_id = EXCLUDED.current_batch_id,
+                updated_at = EXCLUDED.updated_at
+            """
+        ),
+        {
+            "worker_name": IMPORT_WORKER_NAME,
+            "worker_type": IMPORT_WORKER_TYPE,
+            "instance_id": ident,
+            "now": now,
+            "status": status,
+            "current_batch_id": current_batch_id,
+        },
+    )
     db.session.commit()
-    return row
+    return WorkerHeartbeat.query.filter_by(
+        worker_name=IMPORT_WORKER_NAME, instance_id=ident
+    ).one()
 
 
 def notify_progress(batch: ImportBatch) -> None:
