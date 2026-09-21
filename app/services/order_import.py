@@ -353,9 +353,27 @@ def _group_fulfillment_orders(rows: list[dict], client_code: str, warehouse_by_i
 
 def _group_level_blocking(groups: list[dict], existing_ids: set, existing_dests: set, client_code: str) -> list[dict]:
     blocking: list[dict] = []
-    blocking.extend(
-        _group_level_blocking(groups, existing_ids, existing_dests, client.client_code)
-    )
+    for group in groups:
+        for message in group.get("attribute_conflicts") or []:
+            if len(blocking) < ERROR_LIMIT:
+                blocking.append({"type": "HEADER", "message": message})
+        dest = (
+            group["client_order_number"],
+            group["warehouse_id"],
+            _normalize_dest_text(group["customer"]),
+            _normalize_dest_text(group["customer_address"]),
+        )
+        if group["wms_order_id"] in existing_ids or dest in existing_dests:
+            if len(blocking) < ERROR_LIMIT:
+                blocking.append(
+                    {
+                        "type": "DUPLICATE",
+                        "message": (
+                            f"WMS order {group['wms_order_id']} already exists for "
+                            f"{client_code} destination {group['customer']}."
+                        ),
+                    }
+                )
     return blocking
 
 
@@ -511,27 +529,9 @@ def analyze(source, filename: str, client: Client, division: Division, user=None
     groups = _group_fulfillment_orders(valid_rows, client.client_code, warehouses.by_id) if valid_rows else []
     timings["grouping_ms"] = int((datetime.utcnow() - group_started).total_seconds() * 1000)
 
-    for group in groups:
-        for message in group.get("attribute_conflicts") or []:
-            if len(blocking) < ERROR_LIMIT:
-                blocking.append({"type": "HEADER", "message": message})
-        dest = (
-            group["client_order_number"],
-            group["warehouse_id"],
-            _normalize_dest_text(group["customer"]),
-            _normalize_dest_text(group["customer_address"]),
-        )
-        if group["wms_order_id"] in existing_ids or dest in existing_dests:
-            if len(blocking) < ERROR_LIMIT:
-                blocking.append(
-                    {
-                        "type": "DUPLICATE",
-                        "message": (
-                            f"WMS order {group['wms_order_id']} already exists for "
-                            f"{client.client_code} destination {group['customer']}."
-                        ),
-                    }
-                )
+    blocking.extend(
+        _group_level_blocking(groups, existing_ids, existing_dests, client.client_code)
+    )
 
     invalid_rows = len(staged) - len(valid_rows)
     extra_errors = max(0, invalid_rows - len([error for error in blocking if error["type"] == "ROW"]))
