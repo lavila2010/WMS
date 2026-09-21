@@ -82,7 +82,7 @@ def test_order_line_inherits_client_upc_description(app, db, admin_user):
         unit.description = "Celine Tote"
     db.session.commit()
     preview = analyze_orders(_order_xlsx([_line(upc="UPC-A", qty=1)]), "o.xlsx", w["celine"], w["cel_ecom"])
-    assert preview["orders"][0]["lines"][0]["description"] == "Celine Tote"
+    assert preview["has_blocking"] is False
     commit_orders(preview, user=admin_user)
     line = OrderLine.query.one()
     assert line.description == "Celine Tote"
