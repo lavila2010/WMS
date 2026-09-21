@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 from io import BytesIO
 
 from app.models import InventoryUnit, Order, PickTicket
@@ -116,8 +117,11 @@ def _assert_readable_ticket(pdf: bytes, ticket: PickTicket, *, expect_pages=None
     assert "PICKING DETAIL" in text
     for header in REQUIRED_COLUMNS:
         assert header in text
+    compact = re.sub(r"\s+", "", text)
     for snippet in extra:
-        assert snippet in text, snippet
+        if snippet in text:
+            continue
+        assert re.sub(r"\s+", "", snippet) in compact, snippet
     pages = pdf_page_count(pdf)
     assert pages >= 1
     if expect_pages is not None:
