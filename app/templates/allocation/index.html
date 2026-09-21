@@ -15,6 +15,13 @@
         {% endfor %}
       </select>
     </label>
+    <label>Per page
+      <select name="per_page" onchange="this.form.submit()">
+        {% for opt in per_page_options %}
+          <option value="{{ opt }}" {{ 'selected' if per_page==opt }}>{{ opt }}</option>
+        {% endfor %}
+      </select>
+    </label>
     {% if can('ALLOCATION_REPORT_VIEW') %}
       <a class="btn btn-secondary" href="{{ url_for('allocation.exceptions', client_id=client_id or None) }}">Daily Allocation Exceptions</a>
     {% endif %}
@@ -23,6 +30,8 @@
 <form method="post" action="{{ url_for('allocation.bulk') }}" id="bulk-alloc-form">
   {% include "_csrf.html" %}
   <input type="hidden" name="client_id" value="{{ client_id or '' }}" />
+  <input type="hidden" name="page" value="{{ page }}" />
+  <input type="hidden" name="per_page" value="{{ per_page }}" />
   <div class="card">
     <div class="btn-row">
       <label><input type="checkbox" id="select-all-visible" /> Select All Visible</label>
@@ -52,29 +61,37 @@
       </thead>
       <tbody>
         {% for row in rows %}
-          {% set o = row.order %}
           <tr>
-            <td>{% if row.eligible %}<input type="checkbox" name="order_ids" value="{{ o.id }}" class="order-check" />{% endif %}</td>
-            <td class="mono">{{ o.wms_order_id }}</td>
-            <td class="mono">{{ o.client_order_number }}</td>
-            <td>{{ o.client.client_code if o.client else '—' }}</td>
-            <td>{{ o.division.code if o.division else '—' }}</td>
-            <td>{{ o.warehouse.warehouse_code if o.warehouse else '—' }}</td>
-            <td>{{ o.customer or '—' }}</td>
+            <td>{% if row.eligible %}<input type="checkbox" name="order_ids" value="{{ row.order_id }}" class="order-check" />{% endif %}</td>
+            <td class="mono">{{ row.wms_order_id }}</td>
+            <td class="mono">{{ row.client_order_number }}</td>
+            <td>{{ row.client_code or '—' }}</td>
+            <td>{{ row.division_code or '—' }}</td>
+            <td>{{ row.warehouse_code or '—' }}</td>
+            <td>{{ row.customer or '—' }}</td>
             <td class="right num-cell">{{ row.ordered }}</td>
             <td class="right num-cell">{{ row.shipped }}</td>
             <td class="right num-cell">{{ row.currently_allocated }}</td>
             <td class="right num-cell">{{ row.remaining }}</td>
-            <td><span class="badge badge-{{ o.status }}">{{ o.status }}</span></td>
+            <td><span class="badge badge-{{ row.status }}">{{ row.status }}</span></td>
             <td>{{ row.partial_approval }}</td>
-            <td class="muted">{{ o.created_at.strftime('%Y-%m-%d %H:%M') if o.created_at else '—' }}</td>
-            <td class="right"><a class="btn" href="{{ url_for('allocation.detail', order_id=o.id) }}">Allocate</a></td>
+            <td class="muted">{{ row.created_at.strftime('%Y-%m-%d %H:%M') if row.created_at else '—' }}</td>
+            <td class="right"><a class="btn" href="{{ url_for('allocation.detail', order_id=row.order_id) }}">Allocate</a></td>
           </tr>
         {% else %}
           <tr><td colspan="15" class="muted">No unallocated or partially allocated orders.</td></tr>
         {% endfor %}
       </tbody>
     </table>
+    <div class="pager">
+      <span class="muted">{{ total }} orders · page {{ page }} of {{ pages }}</span>
+      {% if page > 1 %}
+        <a class="btn btn-secondary" href="{{ url_for('allocation.index', client_id=client_id or None, page=page-1, per_page=per_page) }}">Previous</a>
+      {% endif %}
+      {% if page < pages %}
+        <a class="btn btn-secondary" href="{{ url_for('allocation.index', client_id=client_id or None, page=page+1, per_page=per_page) }}">Next</a>
+      {% endif %}
+    </div>
   </div>
 </form>
 <script>
