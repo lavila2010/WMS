@@ -19,7 +19,7 @@ class PickTicketError(ValueError):
 
 
 def pick_ticket_number(order: Order) -> str:
-    return f"{order.client.client_code}-{order.client_order_number}-01"
+    return f"{order.wms_order_id}-01"
 
 
 def ticket_lines(order: Order) -> list[dict]:

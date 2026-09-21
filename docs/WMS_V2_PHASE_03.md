@@ -31,10 +31,12 @@ None new. Uses `orders`, `order_lines`, `import_batches`.
 ## IMPLEMENTATION SUMMARY
 
 - Context: Client + Division, re-validated server-side.
-- Rows with the same OrderNumber consolidate to one header and UPC lines.
-- Header fields must match; mapping and UPC are mandatory.
-- `wms_order_id = {client_code}-{client_order_number}`; unique per client order number only.
-- Entire file rolls back on any blocking error or injected failure.
+- Rows group by Warehouse + raw Order Number + Customer + Address.
+- Different customers under one raw Order Number become separate WMS orders.
+- `wms_order_id = {client_code}-{client_order_number}-{destination_sequence:02d}`.
+- Optional phone / carrier / shipping service may be blank.
+- Confirm enqueues PROCESSING; the durable worker bulk-inserts headers and lines.
+- FAILED/PROCESSING batch orders are not operational.
 
 ## TESTS RUN
 

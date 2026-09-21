@@ -234,6 +234,10 @@ class ImportBatch(db.Model):
     unique_upc_count = db.Column(db.Integer, nullable=False, default=0)
     unique_style_count = db.Column(db.Integer, nullable=False, default=0)
     unique_location_count = db.Column(db.Integer, nullable=False, default=0)
+    orders_expected = db.Column(db.Integer, nullable=False, default=0)
+    order_lines_expected = db.Column(db.Integer, nullable=False, default=0)
+    orders_created = db.Column(db.Integer, nullable=False, default=0)
+    order_lines_created = db.Column(db.Integer, nullable=False, default=0)
     started_at = db.Column(db.DateTime)
     completed_at = db.Column(db.DateTime)
     failed_at = db.Column(db.DateTime)
@@ -247,6 +251,9 @@ class ImportBatch(db.Model):
     warehouse = db.relationship("Warehouse")
     division = db.relationship("Division")
     import_rows = db.relationship("InventoryImportRow", backref="import_batch", cascade="all, delete-orphan")
+    order_import_rows = db.relationship(
+        "OrderImportRow", backref="import_batch", cascade="all, delete-orphan"
+    )
 
 
 class InventoryImportRow(db.Model):
@@ -267,6 +274,32 @@ class InventoryImportRow(db.Model):
     size = db.Column(db.String(32))
     quantity = db.Column(db.Integer, nullable=False, default=0)
     location = db.Column(db.String(64))
+    validation_status = db.Column(db.String(16), nullable=False, default="INVALID")
+    validation_error = db.Column(db.Text)
+
+
+class OrderImportRow(db.Model):
+    __tablename__ = "order_import_rows"
+    __table_args__ = (
+        db.Index("ix_ord_import_rows_batch", "import_batch_id"),
+        db.Index("ix_ord_import_rows_batch_status", "import_batch_id", "validation_status"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    import_batch_id = db.Column(db.Integer, db.ForeignKey("import_batches.id"), nullable=False)
+    source_row_number = db.Column(db.Integer, nullable=False)
+    warehouse = db.Column(db.String(64))
+    warehouse_id = db.Column(db.Integer, db.ForeignKey("warehouses.id"))
+    raw_order_number = db.Column(db.String(64))
+    customer = db.Column(db.String(255))
+    customer_address = db.Column(db.String(512))
+    customer_phone = db.Column(db.String(64))
+    upc = db.Column(db.String(64))
+    qty = db.Column(db.Integer, nullable=False, default=0)
+    carrier = db.Column(db.String(128))
+    shipping_service = db.Column(db.String(128))
+    sku = db.Column(db.String(64))
+    description = db.Column(db.String(255))
     validation_status = db.Column(db.String(16), nullable=False, default="INVALID")
     validation_error = db.Column(db.Text)
 
@@ -313,7 +346,14 @@ class InventoryUnit(db.Model):
 class Order(db.Model):
     __tablename__ = "orders"
     __table_args__ = (
-        db.UniqueConstraint("client_id", "client_order_number", name="uq_order_client_number"),
+        db.UniqueConstraint(
+            "client_id",
+            "client_order_number",
+            "destination_sequence",
+            name="uq_order_client_number_dest",
+        ),
+        db.Index("ix_orders_import_batch", "import_batch_id"),
+        db.Index("ix_orders_client_number", "client_id", "client_order_number"),
     )
 
     id = db.Column(db.Integer, primary_key=True)
@@ -321,6 +361,7 @@ class Order(db.Model):
     division_id = db.Column(db.Integer, db.ForeignKey("divisions.id"), nullable=False, index=True)
     warehouse_id = db.Column(db.Integer, db.ForeignKey("warehouses.id"), nullable=False, index=True)
     client_order_number = db.Column(db.String(64), nullable=False, index=True)
+    destination_sequence = db.Column(db.Integer, nullable=False, default=1)
     wms_order_id = db.Column(db.String(96), unique=True, nullable=False)
     customer = db.Column(db.String(255))
     customer_address = db.Column(db.String(512))
@@ -345,10 +386,12 @@ class Order(db.Model):
     warehouse = db.relationship("Warehouse")
     division = db.relationship("Division")
     invoice = db.relationship("Invoice", uselist=False)
+    import_batch = db.relationship("ImportBatch")
 
 
 class OrderLine(db.Model):
     __tablename__ = "order_lines"
+    __table_args__ = (db.UniqueConstraint("order_id", "upc", name="uq_order_line_upc"),)
 
     id = db.Column(db.Integer, primary_key=True)
     order_id = db.Column(db.Integer, db.ForeignKey("orders.id"), nullable=False, index=True)
@@ -429,6 +472,7 @@ class PickTicket(db.Model):
     assigned_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"))
     created_at = db.Column(db.DateTime, default=_utcnow, nullable=False)
     updated_at = db.Column(db.DateTime, default=_utcnow, onupdate=_utcnow, nullable=False)
+    order = db.relationship("Order")
 
 
 class PickTicketPrintEvent(db.Model):

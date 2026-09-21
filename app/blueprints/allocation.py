@@ -8,6 +8,7 @@ from ..constants import AllocationStatus, OrderStatus
 from ..extensions import db
 from ..models import Allocation, Order, OrderLine
 from ..services.allocation import AllocationError, allocate_order, release_allocation
+from ..services.order_visibility import apply_operational_order_visibility
 from ..services.tenant import accessible_clients, require_entity_client, user_can_access_client
 
 bp = Blueprint("allocation", __name__, url_prefix="/allocation")
@@ -20,9 +21,11 @@ def index():
     client_id = request.args.get("client_id", type=int)
     if client_id and not user_can_access_client(current_user, client_id):
         abort(404)
-    query = Order.query.filter(Order.status.in_([OrderStatus.UNALLOCATED, OrderStatus.PARTIALLY_ALLOCATED]))
+    query = apply_operational_order_visibility(
+        Order.query.filter(Order.status.in_([OrderStatus.UNALLOCATED, OrderStatus.PARTIALLY_ALLOCATED]))
+    )
     if client_id:
-        query = query.filter_by(client_id=client_id)
+        query = query.filter(Order.client_id == client_id)
     elif not current_user.is_admin():
         query = query.filter(Order.client_id.in_([c.id for c in clients] or [-1]))
     orders = query.order_by(Order.created_at.desc()).limit(200).all()

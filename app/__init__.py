@@ -181,9 +181,21 @@ def _register_cli(app):
         batch = process_import_batch(batch_id)
         click.echo(f"Batch {batch.id} status={batch.status} units={batch.units_created}")
 
+    @app.cli.command("process-order-import")
+    @click.option("--batch-id", required=True, type=int)
+    def process_order_import_cmd(batch_id):
+        """Admin fallback: process one order import batch in this process."""
+        from .services.order_import import process_import_batch
+
+        batch = process_import_batch(batch_id)
+        click.echo(
+            f"Batch {batch.id} status={batch.status} "
+            f"orders={batch.orders_created} lines={batch.order_lines_created}"
+        )
+
     @app.cli.command("inventory-import-worker")
     def inventory_import_worker_cmd():
-        """Run the durable inventory import worker loop (same as the Render worker)."""
+        """Run the durable import worker loop (inventory + orders)."""
         from .workers.inventory_import_worker import run_forever
 
         run_forever()

@@ -43,15 +43,15 @@ Pass criterion for a phase: all required cases PASS, zero P0/P1 defects, integri
 
 | ID | Case |
 |---|---|
-| P3-01 | Three UPC rows same OrderNumber → 1 header, 3 lines |
-| P3-02 | Conflicting Customer/Address/Phone/Carrier/Service/Warehouse → reject |
+| P3-01 | Three UPC rows same destination → 1 WMS order `01-CEL-1251-01`, 3 lines |
+| P3-02 | Same raw Order Number + different Customer/Address → split WMS orders, not reject |
 | P3-03 | Division not belonging to Client → reject |
 | P3-04 | Warehouse not mapped to Division → reject |
 | P3-05 | Missing UPC → reject |
-| P3-06 | Duplicate client_order_number for same client → reject |
-| P3-07 | Same order number two clients → two wms ids (`01-CEL-1251`, `02-DIO-1251`) |
-| P3-08 | Blocking row rolls back entire file |
-| P3-09 | `wms_order_id` unique and derived |
+| P3-06 | Duplicate same destination / WMS order ID for same client → reject |
+| P3-07 | Same order number two clients → `01-CEL-1251-01`, `02-DIO-1251-01` |
+| P3-08 | Injected failure leaves FAILED batch non-operational |
+| P3-09 | `wms_order_id = {client_code}-{client_order_number}-{seq:02d}` unique |
 
 ## Phase 4 — Allocation
 

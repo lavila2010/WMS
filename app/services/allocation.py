@@ -10,6 +10,7 @@ from ..extensions import db
 from ..models import Allocation, ImportBatch, InventoryUnit, Order, OrderLine
 from .inventory_ledger import LedgerError, transition_unit
 from .inventory_visibility import operational_batch_clause
+from .order_visibility import order_is_operational
 
 
 class AllocationError(ValueError):
@@ -63,6 +64,10 @@ def _refresh_order_status(order: Order) -> str:
 
 
 def allocate_order(order: Order, *, user=None, _fail_after: int | None = None) -> dict:
+    if not order_is_operational(order):
+        raise AllocationError(
+            f"Order {order.wms_order_id} is not operational until its import batch is COMPLETED."
+        )
     if order.status not in ELIGIBLE:
         raise AllocationError(f"Order {order.wms_order_id} is not eligible for allocation.")
     uid, _ = current_actor()

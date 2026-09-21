@@ -20,11 +20,12 @@
 <div class="card">
   <h2>Eligible allocated orders</h2>
   <table>
-    <thead><tr><th>WMS Order</th><th>Customer</th><th></th></tr></thead>
+    <thead><tr><th>WMS Order</th><th>Client Order</th><th>Customer</th><th></th></tr></thead>
     <tbody>
       {% for o in eligible %}
         <tr>
           <td class="mono">{{ o.wms_order_id }}</td>
+          <td class="mono">{{ o.client_order_number }}</td>
           <td>{{ o.customer or '—' }}</td>
           <td class="right">
             {% if can('PICK_TICKET_GENERATE') %}
@@ -33,7 +34,7 @@
           </td>
         </tr>
       {% else %}
-        <tr><td colspan="3" class="muted">No fully allocated orders waiting for a ticket.</td></tr>
+        <tr><td colspan="4" class="muted">No fully allocated orders waiting for a ticket.</td></tr>
       {% endfor %}
     </tbody>
   </table>
@@ -41,12 +42,12 @@
 <div class="card">
   <h2>Pick Tickets</h2>
   <table>
-    <thead><tr><th>Ticket</th><th>Order</th><th>Prints</th><th></th></tr></thead>
+    <thead><tr><th>Ticket</th><th>WMS Order</th><th>Prints</th><th></th></tr></thead>
     <tbody>
       {% for t in tickets %}
         <tr>
           <td class="mono">{{ t.pick_ticket_number }}</td>
-          <td class="mono">{{ t.order_id }}</td>
+          <td class="mono">{{ t.order.wms_order_id if t.order else t.order_id }}</td>
           <td>{{ t.print_count }}</td>
           <td class="right"><a class="btn-secondary btn" href="{{ url_for('orders.pick_ticket_preview', ticket_id=t.id) }}">Open</a></td>
         </tr>

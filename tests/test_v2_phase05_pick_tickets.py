@@ -52,7 +52,7 @@ def test_p5_02_reprint_keeps_number(app, db, admin_user):
 def test_p5_03_format_sequence_01(app, db, admin_user):
     _, order = _ready_order(db, admin_user)
     ticket = create_pick_ticket(order)
-    assert ticket.pick_ticket_number == "01-CEL-1251-01"
+    assert ticket.pick_ticket_number == "01-CEL-1251-01-01"
     assert ticket.ticket_sequence == 1
     assert Order.query.get(order.id).status == OrderStatus.PICK_TICKET_READY
 

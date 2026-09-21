@@ -61,15 +61,15 @@ All mutations fail closed. Tenant and permission checks run on the server before
 ## 6. Order import
 
 1. User selects Client + Division (division belongs to client; user may access client).  
-2. Excel: Warehouse, OrderNumber, Customer, CustomerAddress, CustomerPhone, UPC, Qty, Carrier, ShippingService.  
-3. Warehouse symbol/code must belong to Client, be active, and be mapped to the Division.  
-4. Rows with the same OrderNumber form one header. Header fields must be identical across those rows.  
-5. Each row is one line (`upc`, `qty_ordered`). Qty integer > 0. UPC required. Optional Description is kept when present. If Description is blank and the UPC resolves uniquely to inventory for the same Client, the line inherits that Description. Another client's description is never used.  
-6. Duplicate `(client_id, client_order_number)` rejects that order (file fails if any blocking error — fail closed, no partial file).  
-7. Commit atomically: headers status `UNALLOCATED`, `wms_order_id = client_code || '-' || client_order_number`, lines with qty counters 0.  
-8. Audit `ORDER_IMPORT`.
+2. Excel: Warehouse, Order Number, Customer, CustomerAddress, UPC, QTY required. CustomerPhone, Carrier, Shipping Service, SKU, Description optional and may be blank.  
+3. Warehouse symbol/code must belong to Client, be active, and be mapped to the Division. Warehouses are preloaded once per file.  
+4. Rows group into fulfillment orders by Client + Division + Warehouse + raw Order Number + Customer + Customer Address. Header consistency is required only inside that group. Different customers under one raw Order Number become separate WMS orders.  
+5. Destination sequence is deterministic: for each Client + raw Order Number, sort groups by warehouse_code, customer, customer_address and assign 01, 02, 03…. `wms_order_id = {client_code}-{client_order_number}-{seq:02d}`.  
+6. UPC is stored as text (leading zeros preserved). Same fulfillment group + UPC aggregates into one OrderLine. Qty integer > 0. Blank Description may inherit the unique Client+UPC inventory description (bulk lookup).  
+7. Duplicate existing WMS order ID / destination identity rejects that destination. Confirm marks `PROCESSING` and returns. The durable worker bulk-inserts headers (`INSERT … RETURNING`) then lines. Operational visibility requires `ImportBatch.status = COMPLETED`.  
+8. Audit `ORDER_IMPORT` when the batch completes. Pick ticket number is `{wms_order_id}-01`.
 
-Example: three rows for 1251 with qtys 2, 3, 1 → one order, three lines, six ordered units.
+Example: raw Order Number 24 with three customers → `01-CEL-24-01`, `01-CEL-24-02`, `01-CEL-24-03`, all with `client_order_number = 24`.
 
 ---
 
@@ -91,7 +91,7 @@ Two concurrent allocators cannot reserve the same `inventory_units.id`.
 ## 8. Pick ticket
 
 1. Created only when order is `ALLOCATED` (full reservation).  
-2. One ticket per order. Number `{client_code}-{client_order_number}-{seq:02d}` with seq starting at 01.  
+2. One ticket per WMS fulfillment order. Number `{wms_order_id}-01`.  
 3. Order → `PICK_TICKET_READY`. Audit `PICK_TICKET_CREATED`.  
 4. Reprint increments `print_count`, inserts `pick_ticket_print_events`, updates last printed; number unchanged. Audit `PICK_TICKET_PRINTED`.  
 5. Lines resolved from ACTIVE allocations: Location, UPC, SKU, Description, Qty (count).

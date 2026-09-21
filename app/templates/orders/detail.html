@@ -10,7 +10,8 @@
     Client {{ order.client.client_code if order.client else '—' }} ·
     Warehouse {{ order.warehouse.warehouse_code if order.warehouse else '—' }} ·
     Division {{ order.division.code if order.division else '—' }} ·
-    Client order {{ order.client_order_number }}
+    Client order {{ order.client_order_number }} ·
+    Destination {{ '%02d'|format(order.destination_sequence) }}
   </p>
 </div>
 

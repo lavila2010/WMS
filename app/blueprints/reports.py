@@ -12,6 +12,7 @@ from ..constants import OrderStatus
 from ..extensions import db
 from ..models import Carton, CartonContent, Division, Document, Invoice, Order, Warehouse
 from ..services.documents import get_store, persist_closure_pdf
+from ..services.order_visibility import apply_operational_order_visibility
 from ..services.tenant import accessible_clients, require_entity_client, user_can_access_client
 
 bp = Blueprint("reports", __name__, url_prefix="/reports")
@@ -39,15 +40,15 @@ def _filters():
 
 
 def _query(scope, filters):
-    query = Order.query.filter_by(status=OrderStatus.CLOSED)
+    query = apply_operational_order_visibility(Order.query.filter(Order.status == OrderStatus.CLOSED))
     if scope["client_id"]:
-        query = query.filter_by(client_id=scope["client_id"])
+        query = query.filter(Order.client_id == scope["client_id"])
     elif not current_user.is_admin():
         query = query.filter(Order.client_id.in_([c.id for c in scope["clients"]] or [-1]))
     if scope["warehouse_id"]:
-        query = query.filter_by(warehouse_id=scope["warehouse_id"])
+        query = query.filter(Order.warehouse_id == scope["warehouse_id"])
     if scope["division_id"]:
-        query = query.filter_by(division_id=scope["division_id"])
+        query = query.filter(Order.division_id == scope["division_id"])
     if filters.get("carrier"):
         query = query.filter(Order.carrier.ilike(f"%{filters['carrier']}%"))
     if filters.get("closed_by"):

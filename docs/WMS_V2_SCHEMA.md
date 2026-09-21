@@ -239,6 +239,10 @@ Same-client rule: application + `CHECK` enforced by trigger `division_warehouses
 | unique_upc_count | INT | NO | |
 | unique_style_count | INT | NO | |
 | unique_location_count | INT | NO | |
+| orders_expected | INT | NO | order imports |
+| order_lines_expected | INT | NO | order imports |
+| orders_created | INT | NO | order imports |
+| order_lines_created | INT | NO | order imports |
 | started_at | TIMESTAMP | YES | |
 | completed_at | TIMESTAMP | YES | |
 | failed_at | TIMESTAMP | YES | |
@@ -267,6 +271,32 @@ Durable staging for inventory workbooks. Preview JSON is not the source of truth
 | size | VARCHAR(32) | YES | |
 | quantity | INT | NO | |
 | location | VARCHAR(64) | YES | stored as text |
+| validation_status | VARCHAR(16) | NO | VALID / INVALID |
+| validation_error | TEXT | YES | |
+
+Indexes: `(import_batch_id)`, `(import_batch_id, validation_status)`.
+
+### `order_import_rows`
+
+Durable staging for order workbooks. Preview JSON is not the source of truth.
+
+| Column | Type | Null |
+|---|---|---|
+| id | INT PK | NO |
+| import_batch_id | INT FK import_batches | NO |
+| source_row_number | INT | NO | Excel row |
+| warehouse | VARCHAR(64) | YES | raw warehouse token |
+| warehouse_id | INT FK warehouses | YES | resolved when VALID |
+| raw_order_number | VARCHAR(64) | YES | client-provided number |
+| customer | VARCHAR(255) | YES | |
+| customer_address | VARCHAR(512) | YES | |
+| customer_phone | VARCHAR(64) | YES | optional |
+| upc | VARCHAR(64) | YES | stored as text |
+| qty | INT | NO | |
+| carrier | VARCHAR(128) | YES | optional |
+| shipping_service | VARCHAR(128) | YES | optional |
+| sku | VARCHAR(64) | YES | optional |
+| description | VARCHAR(255) | YES | optional |
 | validation_status | VARCHAR(16) | NO | VALID / INVALID |
 | validation_error | TEXT | YES | |
 
@@ -339,8 +369,9 @@ No UPDATE/DELETE from application except failed-import cleanup. Indexes: `client
 | client_id | INT FK clients | NO | |
 | division_id | INT FK divisions | NO | |
 | warehouse_id | INT FK warehouses | NO | |
-| client_order_number | VARCHAR(64) | NO | |
-| wms_order_id | VARCHAR(96) | NO | UNIQUE |
+| client_order_number | VARCHAR(64) | NO | raw client number; not unique by client |
+| destination_sequence | INT | NO | 1, 2, 3… within Client + raw Order Number |
+| wms_order_id | VARCHAR(96) | NO | UNIQUE `{client_code}-{client_order_number}-{seq:02d}` |
 | customer | VARCHAR(255) | YES | |
 | customer_address | VARCHAR(512) | YES | |
 | customer_phone | VARCHAR(64) | YES | |
@@ -359,8 +390,9 @@ No UPDATE/DELETE from application except failed-import cleanup. Indexes: `client
 | closed_by_user_id | INT FK users | YES | |
 | closed_by_username | VARCHAR(64) | YES | |
 
-UNIQUE(`client_id`, `client_order_number`)  
-Indexes: `status`, `created_at`, `division_id`, `processing_lock_id`, `warehouse_id`
+UNIQUE(`wms_order_id`)  
+UNIQUE(`client_id`, `client_order_number`, `destination_sequence`)  
+Indexes: `status`, `created_at`, `division_id`, `processing_lock_id`, `warehouse_id`, `import_batch_id`, `(client_id, client_order_number)`
 
 ### `order_lines`
 

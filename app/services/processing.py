@@ -24,6 +24,7 @@ from ..models import (
 )
 from .documents import persist_closure_pdf
 from .inventory_ledger import LedgerError, transition_unit
+from .order_visibility import order_is_operational
 
 LOCK_MESSAGE = "Order is currently being processed by another user."
 
@@ -35,6 +36,9 @@ class ProcessingError(ValueError):
 def find_ticket(number: str) -> PickTicket:
     ticket = PickTicket.query.filter_by(pick_ticket_number=(number or "").strip()).first()
     if ticket is None:
+        raise ProcessingError("Pick ticket not found.")
+    order = db.session.get(Order, ticket.order_id)
+    if order is not None and not order_is_operational(order):
         raise ProcessingError("Pick ticket not found.")
     return ticket
 

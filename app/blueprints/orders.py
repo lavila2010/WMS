@@ -7,6 +7,7 @@ from flask import (
     Blueprint,
     abort,
     flash,
+    jsonify,
     redirect,
     render_template,
     request,
@@ -18,19 +19,26 @@ from flask_login import current_user
 from sqlalchemy import func
 
 from ..auth import permission_required
-from ..constants import OrderStatus
+from ..constants import ImportBatchStatus, OrderStatus
 from ..extensions import db
 from ..models import Division, ImportBatch, Order, OrderLine, PickTicket, Warehouse
 from ..services.order_import import (
     OrderImportError,
     analyze,
+    batch_progress,
+    begin_processing,
+    cancel_validated_batch,
+    cleanup_failed_import,
     clear_preview,
-    commit_import,
     load_preview,
+    preview_from_batch,
+    process_import_batch,
     resolve_context,
+    retry_import,
     save_preview,
     template_bytes,
 )
+from ..services.order_visibility import apply_operational_order_visibility
 from ..services.tenant import accessible_clients, require_entity_client, user_can_access_client
 
 bp = Blueprint("orders", __name__, url_prefix="/orders")
@@ -100,11 +108,11 @@ def index():
     daily = []
     breakdown = []
     if client_selected:
-        query = Order.query.filter_by(client_id=scope["client_id"])
+        query = apply_operational_order_visibility(Order.query.filter_by(client_id=scope["client_id"]))
         if scope["warehouse_id"]:
-            query = query.filter_by(warehouse_id=scope["warehouse_id"])
+            query = query.filter(Order.warehouse_id == scope["warehouse_id"])
         if status:
-            query = query.filter_by(status=status)
+            query = query.filter(Order.status == status)
         if date_str:
             day = datetime.strptime(date_str, "%Y-%m-%d")
             query = query.filter(Order.created_at >= day, Order.created_at < day + timedelta(days=1))
@@ -132,9 +140,9 @@ def index():
                     "pick_ticket": ticket.pick_ticket_number if ticket else "—",
                 }
             )
-        all_client = Order.query.filter_by(client_id=scope["client_id"])
+        all_client = apply_operational_order_visibility(Order.query.filter_by(client_id=scope["client_id"]))
         if scope["warehouse_id"]:
-            all_client = all_client.filter_by(warehouse_id=scope["warehouse_id"])
+            all_client = all_client.filter(Order.warehouse_id == scope["warehouse_id"])
         today = datetime.utcnow().date()
         start = datetime(today.year, today.month, today.day)
         kpis["orders_today"] = all_client.filter(Order.created_at >= start).count()
@@ -142,7 +150,7 @@ def index():
         kpis["allocated"] = all_client.filter(
             Order.status.in_([OrderStatus.ALLOCATED, OrderStatus.PICK_TICKET_READY, OrderStatus.PROCESSING])
         ).count()
-        kpis["short"] = all_client.filter_by(status=OrderStatus.PARTIALLY_ALLOCATED).count()
+        kpis["short"] = all_client.filter(Order.status == OrderStatus.PARTIALLY_ALLOCATED).count()
         kpis["pick_tickets"] = (
             PickTicket.query.join(Order, Order.id == PickTicket.order_id)
             .filter(Order.client_id == scope["client_id"])
@@ -152,9 +160,9 @@ def index():
             Order.status == OrderStatus.CLOSED, Order.closed_at >= start
         ).count()
         for status_name in OrderStatus.ALL:
-            subset = all_client.filter_by(status=status_name)
+            subset = all_client.filter(Order.status == status_name)
             count = subset.count()
-            units = (
+            units = apply_operational_order_visibility(
                 db.session.query(func.coalesce(func.sum(OrderLine.qty_ordered), 0))
                 .join(Order, Order.id == OrderLine.order_id)
                 .filter(Order.client_id == scope["client_id"], Order.status == status_name)
@@ -185,12 +193,43 @@ def detail(order_id):
     return render_template("orders/detail.html", order=order)
 
 
+def _active_order_batch():
+    batch_id = request.args.get("import_batch_id", type=int) or session.get("ord_import_batch_id")
+    if not batch_id:
+        return None
+    batch = db.session.get(ImportBatch, batch_id)
+    if batch is None or not user_can_access_client(current_user, batch.client_id):
+        return None
+    return batch
+
+
 @bp.route("/upload", methods=["GET"])
 @permission_required("ORDERS_UPLOAD")
 def import_view():
+    preview = None
+    processing_batch = None
     token = session.get("ord_preview_token")
-    preview = load_preview(token) if token else None
-    return _page("orders/upload.html", "upload", preview=preview, last_result=None)
+    if token:
+        preview = load_preview(token)
+        if preview and preview.get("batch_id"):
+            batch = db.session.get(ImportBatch, preview["batch_id"])
+            if batch is not None:
+                preview = preview_from_batch(batch)
+    batch = _active_order_batch()
+    if batch is not None and batch.status in {
+        ImportBatchStatus.PROCESSING,
+        ImportBatchStatus.COMPLETED,
+        ImportBatchStatus.FAILED,
+    }:
+        processing_batch = batch_progress(batch)
+        preview = None
+    return _page(
+        "orders/upload.html",
+        "upload",
+        preview=preview,
+        processing_batch=processing_batch,
+        last_result=None,
+    )
 
 
 @bp.route("/upload/preview", methods=["POST"])
@@ -215,6 +254,7 @@ def import_preview():
         flash(str(exc), "error")
         return redirect(url_for("orders.import_view", client_id=client.id, division_id=division.id))
     session["ord_preview_token"] = save_preview(preview)
+    session["ord_import_batch_id"] = preview["batch_id"]
     return redirect(url_for("orders.import_view", client_id=client.id, division_id=division.id))
 
 
@@ -223,32 +263,105 @@ def import_preview():
 def import_confirm():
     token = session.get("ord_preview_token")
     preview = load_preview(token) if token else None
-    if not preview:
+    batch_id = (preview or {}).get("batch_id") or session.get("ord_import_batch_id")
+    if not batch_id:
         flash("Preview expired. Upload the file again.", "error")
         return redirect(url_for("orders.import_view"))
     try:
-        resolve_context(current_user, preview["client_id"], preview["division_id"])
-        if preview["has_blocking"]:
-            raise OrderImportError("Confirm is disabled while blocking errors exist.")
-        batch = commit_import(preview, user=current_user)
-    except (OrderImportError, Exception) as exc:
+        batch = begin_processing(int(batch_id), user=current_user, run="async")
+    except OrderImportError as exc:
         flash(str(exc), "error")
-        return redirect(
-            url_for("orders.import_view", client_id=preview["client_id"], division_id=preview["division_id"])
-        )
+        return redirect(url_for("orders.import_view"))
     clear_preview(token)
     session.pop("ord_preview_token", None)
-    flash(f"Imported {batch.rows_imported} orders from {batch.filename}.", "success")
-    return redirect(url_for("orders.index", client_id=batch.client_id))
+    session["ord_import_batch_id"] = batch.id
+    return redirect(
+        url_for(
+            "orders.import_view",
+            client_id=batch.client_id,
+            division_id=batch.division_id,
+            import_batch_id=batch.id,
+        )
+    )
 
 
 @bp.route("/upload/cancel", methods=["POST"])
 @permission_required("ORDERS_UPLOAD")
 def import_cancel():
     token = session.pop("ord_preview_token", None)
+    preview = load_preview(token) if token else None
+    batch_id = (preview or {}).get("batch_id") or session.pop("ord_import_batch_id", None)
     clear_preview(token)
+    if batch_id:
+        try:
+            cancel_validated_batch(int(batch_id), user=current_user)
+        except OrderImportError as exc:
+            flash(str(exc), "error")
+            return redirect(url_for("orders.import_view"))
     flash("Order preview cancelled.", "success")
     return redirect(url_for("orders.import_view"))
+
+
+@bp.route("/imports/<int:batch_id>/status")
+@permission_required("ORDERS_UPLOAD")
+def import_status(batch_id):
+    batch = db.session.get(ImportBatch, batch_id)
+    if batch is None or not user_can_access_client(current_user, batch.client_id):
+        abort(404)
+    return jsonify(batch_progress(batch))
+
+
+@bp.route("/imports/<int:batch_id>/advance", methods=["POST"])
+@permission_required("ORDERS_UPLOAD")
+def import_advance(batch_id):
+    """Admin-only recovery. The UI must not call this; the worker executes jobs."""
+    if not current_user.is_admin():
+        abort(403)
+    batch = db.session.get(ImportBatch, batch_id)
+    if batch is None or not user_can_access_client(current_user, batch.client_id):
+        abort(404)
+    try:
+        resolve_context(current_user, batch.client_id, batch.division_id)
+        if batch.status == ImportBatchStatus.PROCESSING:
+            process_import_batch(batch.id, max_chunks=3)
+            batch = db.session.get(ImportBatch, batch.id)
+    except OrderImportError as exc:
+        return jsonify({"error": str(exc), **batch_progress(batch)}), 400
+    return jsonify(batch_progress(batch))
+
+
+@bp.route("/imports/<int:batch_id>/retry", methods=["POST"])
+@permission_required("ORDERS_UPLOAD")
+def import_retry(batch_id):
+    try:
+        batch = retry_import(batch_id, user=current_user, run="async")
+    except OrderImportError as exc:
+        flash(str(exc), "error")
+        return redirect(url_for("orders.import_view"))
+    session["ord_import_batch_id"] = batch.id
+    return redirect(
+        url_for(
+            "orders.import_view",
+            client_id=batch.client_id,
+            division_id=batch.division_id,
+            import_batch_id=batch.id,
+        )
+    )
+
+
+@bp.route("/imports/<int:batch_id>/cleanup", methods=["POST"])
+@permission_required("ORDERS_UPLOAD")
+def import_cleanup(batch_id):
+    try:
+        batch = cleanup_failed_import(batch_id, user=current_user)
+    except OrderImportError as exc:
+        flash(str(exc), "error")
+        return redirect(url_for("orders.import_view"))
+    flash("Failed import cleaned up. No operational orders remain from that file.", "success")
+    session.pop("ord_import_batch_id", None)
+    return redirect(
+        url_for("orders.import_view", client_id=batch.client_id, division_id=batch.division_id)
+    )
 
 
 @bp.route("/template")
@@ -270,7 +383,9 @@ def pick_tickets():
     tickets = []
     if ctx["scope"]["client_id"]:
         eligible = (
-            Order.query.filter_by(client_id=ctx["scope"]["client_id"], status=OrderStatus.ALLOCATED)
+            apply_operational_order_visibility(
+                Order.query.filter_by(client_id=ctx["scope"]["client_id"], status=OrderStatus.ALLOCATED)
+            )
             .order_by(Order.created_at.desc())
             .all()
         )

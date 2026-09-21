@@ -179,6 +179,35 @@ def ledger_rows(
     )
 
 
+def bulk_client_upc_descriptions(client_id: int, upcs) -> dict[str, str]:
+    """Return Client+UPC descriptions that resolve to exactly one value.
+
+    Issues one query per 1,000 UPCs. Never reads another client's units.
+    """
+    wanted = [str(u).strip() for u in (upcs or []) if str(u or "").strip()]
+    if not client_id or not wanted:
+        return {}
+    found: dict[str, set[str]] = {}
+    for offset in range(0, len(wanted), 1000):
+        chunk = wanted[offset : offset + 1000]
+        rows = (
+            db.session.query(InventoryUnit.upc, InventoryUnit.description)
+            .outerjoin(ImportBatch, InventoryUnit.import_batch_id == ImportBatch.id)
+            .filter(
+                InventoryUnit.client_id == client_id,
+                InventoryUnit.upc.in_(chunk),
+                InventoryUnit.description.isnot(None),
+                InventoryUnit.description != "",
+                operational_batch_clause(),
+            )
+            .distinct()
+            .all()
+        )
+        for upc, description in rows:
+            found.setdefault(upc, set()).add(description)
+    return {upc: next(iter(values)) for upc, values in found.items() if len(values) == 1}
+
+
 def unique_client_upc_description(client_id: int, upc: str) -> str | None:
     """Return the Description for Client+UPC when it resolves to one value.
 

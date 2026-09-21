@@ -45,8 +45,8 @@ Server-side tenant authorization is mandatory. Query params, URL ids, hidden fie
 | Client | `client_code` e.g. `01-CEL` | `clients.id` | `client_code` unique; `sequence_number` unique |
 | Division | `code` e.g. `01-CEL-ECOM` | `divisions.id` | `code` unique platform-wide; belongs to one client |
 | Warehouse | `warehouse_code` e.g. `01-CEL-NY` | `warehouses.id` | `UNIQUE(client_id, warehouse_symbol)`; `warehouse_code` unique |
-| Order | `wms_order_id` e.g. `01-CEL-1251` | `orders.id` | `UNIQUE(client_id, client_order_number)`; `wms_order_id` unique |
-| Pick ticket | e.g. `01-CEL-1251-01` | `pick_tickets.id` | number unique; one ticket per order |
+| Order | `wms_order_id` e.g. `01-CEL-24-02` | `orders.id` | `UNIQUE(wms_order_id)`; `UNIQUE(client_id, client_order_number, destination_sequence)` |
+| Pick ticket | e.g. `01-CEL-24-02-01` | `pick_tickets.id` | `{wms_order_id}-01`; number unique; one ticket per WMS order |
 | Carton | `{client_order_number}-BOX01` | `cartons.id` | unique per order sequence |
 | Inventory unit | `inventory_units.id` | same | one physical unit per row; UPC not unique |
 
@@ -184,7 +184,7 @@ I4. `order.client_id = warehouse.client_id = division.client_id`.
 I5. Every `division_warehouses` pair shares one `client_id`.  
 I6. Every inventory status change has exactly one `inventory_transactions` row.  
 I7. Closed order: `qty_ordered = qty_allocated = qty_packed = qty_shipped` and remaining units = 0.  
-I8. `wms_order_id = client_code || '-' || client_order_number`.  
+I8. `wms_order_id = client_code || '-' || client_order_number || '-' || destination_sequence(2)`. Raw `client_order_number` is preserved and is not unique per client.  
 I9. Pick ticket number never changes after insert.  
 I10. No inventory_unit.client_id differs from its warehouse.client_id.
 

@@ -8,7 +8,7 @@
   </div>
   <p class="sub">
     {{ order.client.client_code }} · {{ order.division.code }} · {{ order.warehouse.warehouse_code }} ·
-    {{ order.wms_order_id }} · {{ order.customer or '—' }}
+    {{ order.wms_order_id }} · Client order {{ order.client_order_number }} · {{ order.customer or '—' }}
   </p>
 </div>
 <div class="card">

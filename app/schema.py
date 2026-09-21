@@ -59,12 +59,40 @@ def ensure_v2_schema() -> None:
                 "ALTER TABLE import_batches ADD COLUMN IF NOT EXISTS unique_upc_count INTEGER NOT NULL DEFAULT 0",
                 "ALTER TABLE import_batches ADD COLUMN IF NOT EXISTS unique_style_count INTEGER NOT NULL DEFAULT 0",
                 "ALTER TABLE import_batches ADD COLUMN IF NOT EXISTS unique_location_count INTEGER NOT NULL DEFAULT 0",
+                "ALTER TABLE import_batches ADD COLUMN IF NOT EXISTS orders_expected INTEGER NOT NULL DEFAULT 0",
+                "ALTER TABLE import_batches ADD COLUMN IF NOT EXISTS order_lines_expected INTEGER NOT NULL DEFAULT 0",
+                "ALTER TABLE import_batches ADD COLUMN IF NOT EXISTS orders_created INTEGER NOT NULL DEFAULT 0",
+                "ALTER TABLE import_batches ADD COLUMN IF NOT EXISTS order_lines_created INTEGER NOT NULL DEFAULT 0",
                 "ALTER TABLE import_batches ADD COLUMN IF NOT EXISTS started_at TIMESTAMP",
                 "ALTER TABLE import_batches ADD COLUMN IF NOT EXISTS completed_at TIMESTAMP",
                 "ALTER TABLE import_batches ADD COLUMN IF NOT EXISTS failed_at TIMESTAMP",
                 "ALTER TABLE import_batches ADD COLUMN IF NOT EXISTS error_message TEXT",
             ):
                 conn.execute(text(stmt))
+        orders = conn.execute(text("SELECT to_regclass('public.orders')")).scalar()
+        if orders:
+            conn.execute(text("ALTER TABLE orders DROP CONSTRAINT IF EXISTS uq_order_client_number"))
+            conn.execute(
+                text(
+                    "ALTER TABLE orders ADD COLUMN IF NOT EXISTS destination_sequence INTEGER NOT NULL DEFAULT 1"
+                )
+            )
+            conn.execute(
+                text(
+                    """
+                    DO $$
+                    BEGIN
+                      IF NOT EXISTS (
+                        SELECT 1 FROM pg_constraint WHERE conname = 'uq_order_client_number_dest'
+                      ) THEN
+                        ALTER TABLE orders
+                          ADD CONSTRAINT uq_order_client_number_dest
+                          UNIQUE (client_id, client_order_number, destination_sequence);
+                      END IF;
+                    END $$
+                    """
+                )
+            )
         txns = conn.execute(text("SELECT to_regclass('public.inventory_transactions')")).scalar()
         if txns:
             conn.execute(
@@ -95,6 +123,31 @@ def ensure_v2_schema() -> None:
                     """
                 )
             )
+            conn.execute(
+                text(
+                    """
+                    CREATE TABLE IF NOT EXISTS order_import_rows (
+                        id SERIAL PRIMARY KEY,
+                        import_batch_id INTEGER NOT NULL REFERENCES import_batches(id),
+                        source_row_number INTEGER NOT NULL,
+                        warehouse VARCHAR(64),
+                        warehouse_id INTEGER REFERENCES warehouses(id),
+                        raw_order_number VARCHAR(64),
+                        customer VARCHAR(255),
+                        customer_address VARCHAR(512),
+                        customer_phone VARCHAR(64),
+                        upc VARCHAR(64),
+                        qty INTEGER NOT NULL DEFAULT 0,
+                        carrier VARCHAR(128),
+                        shipping_service VARCHAR(128),
+                        sku VARCHAR(64),
+                        description VARCHAR(255),
+                        validation_status VARCHAR(16) NOT NULL DEFAULT 'INVALID',
+                        validation_error TEXT
+                    )
+                    """
+                )
+            )
         for idx in (
             "CREATE INDEX IF NOT EXISTS ix_import_batches_status ON import_batches (status)",
             "CREATE INDEX IF NOT EXISTS ix_import_batches_cwc ON import_batches (client_id, warehouse_id, created_at)",
@@ -105,6 +158,10 @@ def ensure_v2_schema() -> None:
             "CREATE INDEX IF NOT EXISTS ix_txn_cwu ON inventory_transactions (client_id, warehouse_id, upc)",
             "CREATE INDEX IF NOT EXISTS ix_inv_import_rows_batch ON inventory_import_rows (import_batch_id)",
             "CREATE INDEX IF NOT EXISTS ix_inv_import_rows_batch_status ON inventory_import_rows (import_batch_id, validation_status)",
+            "CREATE INDEX IF NOT EXISTS ix_ord_import_rows_batch ON order_import_rows (import_batch_id)",
+            "CREATE INDEX IF NOT EXISTS ix_ord_import_rows_batch_status ON order_import_rows (import_batch_id, validation_status)",
+            "CREATE INDEX IF NOT EXISTS ix_orders_import_batch ON orders (import_batch_id)",
+            "CREATE INDEX IF NOT EXISTS ix_orders_client_number ON orders (client_id, client_order_number)",
         ):
             try:
                 conn.execute(text(idx))

@@ -10,7 +10,8 @@ from sqlalchemy import Date, case, cast, func
 
 from ..constants import OperationType, OrderStatus
 from ..extensions import db
-from ..models import Client, Division, Order, OrderLine
+from ..models import Client, Division, ImportBatch, Order, OrderLine
+from .order_visibility import operational_order_batch_clause
 
 
 def operational_timezone() -> str:
@@ -99,7 +100,8 @@ def summarize(client_ids=None, client_id=None, division_id=None, from_date=None,
         .join(Client, Client.id == Order.client_id)
         .join(Division, Division.id == Order.division_id)
         .outerjoin(units, units.c.order_id == Order.id)
-        .filter(*filters)
+        .outerjoin(ImportBatch, Order.import_batch_id == ImportBatch.id)
+        .filter(operational_order_batch_clause(), *filters)
         .group_by(Client.client_code, Division.code, Division.operation_type)
         .order_by(Client.client_code, Division.code)
     )
