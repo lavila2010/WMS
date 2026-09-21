@@ -35,7 +35,10 @@
 </div>
 
 {% if processing_batch %}
-<div class="panel" id="import-progress" data-status-url="{{ url_for('inventory.import_status', batch_id=processing_batch.batch_id) }}">
+<div class="panel" id="import-progress"
+     data-status-url="{{ url_for('inventory.import_status', batch_id=processing_batch.batch_id) }}"
+     data-recover-url="{{ url_for('imports.recover', batch_id=processing_batch.batch_id) }}"
+     data-csrf-token="{{ csrf_token() }}">
   {% if processing_batch.status == 'FAILED' %}
     <h2>IMPORT FAILED</h2>
   {% elif processing_batch.status == 'COMPLETED' %}
@@ -53,9 +56,16 @@
     <div class="kpi"><div class="num" id="imp-units">{{ processing_batch.units_created }} / {{ processing_batch.units_expected }}</div><div class="label">Units</div></div>
     <div class="kpi"><div class="num" id="imp-progress">{{ processing_batch.progress_percent }}%</div><div class="label">Progress</div></div>
     <div class="kpi"><div class="num" id="imp-status">{{ processing_batch.status }}</div><div class="label">Status</div></div>
+    <div class="kpi"><div class="num" id="imp-worker">{{ processing_batch.worker_status or 'Offline' }}</div><div class="label">Worker</div></div>
     <div class="kpi"><div class="num">{{ processing_batch.unique_upcs }}</div><div class="label">Unique UPCs</div></div>
     <div class="kpi"><div class="num">{{ processing_batch.unique_locations }}</div><div class="label">Locations</div></div>
   </div>
+  <p class="sub" id="imp-mode">
+    {% if processing_batch.status == 'PROCESSING' %}
+      {% if processing_batch.worker_healthy %}Worker: Online{% else %}Recovery Mode{% endif %}
+    {% endif %}
+  </p>
+  <p class="sub" id="imp-recovering" style="{{ '' if processing_batch.status == 'PROCESSING' and not processing_batch.worker_healthy else 'display:none;' }}">Recovering import automatically...</p>
   <div id="imp-complete" style="{{ '' if processing_batch.status == 'COMPLETED' else 'display:none;' }}">
     <div class="grid2">
       <div class="kv"><span>Rows Imported</span><span id="imp-rows-imported">{{ processing_batch.rows_validated }}</span></div>
@@ -89,11 +99,25 @@
   var panel = document.getElementById("import-progress");
   if (!panel) return;
   var statusUrl = panel.getAttribute("data-status-url");
+  var recoverUrl = panel.getAttribute("data-recover-url");
+  var csrf = panel.getAttribute("data-csrf-token");
+  var recovering = false;
   function render(data) {
     document.getElementById("imp-rows").textContent = data.rows_validated + " / " + data.rows_submitted;
     document.getElementById("imp-units").textContent = data.units_created + " / " + data.units_expected;
     document.getElementById("imp-progress").textContent = data.progress_percent + "%";
     document.getElementById("imp-status").textContent = data.status;
+    var workerEl = document.getElementById("imp-worker");
+    if (workerEl) workerEl.textContent = data.worker_status || "Offline";
+    var mode = document.getElementById("imp-mode");
+    var recoveringEl = document.getElementById("imp-recovering");
+    if (data.status === "PROCESSING") {
+      if (mode) mode.textContent = data.worker_healthy ? "Worker: Online" : "Recovery Mode";
+      if (recoveringEl) recoveringEl.style.display = data.worker_healthy ? "none" : "";
+    } else if (mode) {
+      mode.textContent = "";
+      if (recoveringEl) recoveringEl.style.display = "none";
+    }
     var complete = document.getElementById("imp-complete");
     var failed = document.getElementById("imp-failed");
     if (data.status === "COMPLETED") {
@@ -112,14 +136,31 @@
       if (headingFail) headingFail.textContent = "IMPORT FAILED";
     }
   }
+  function recover(data) {
+    if (!recoverUrl || recovering || !data.recovery_eligible) return Promise.resolve(data);
+    recovering = true;
+    var body = new URLSearchParams();
+    body.append("csrf_token", csrf || "");
+    return fetch(recoverUrl, {
+      method: "POST",
+      headers: { "Accept": "application/json", "X-Requested-With": "XMLHttpRequest" },
+      credentials: "same-origin",
+      body: body
+    }).then(function (r) { return r.json(); }).finally(function () { recovering = false; });
+  }
   function poll() {
     fetch(statusUrl, { headers: { "Accept": "application/json" }, credentials: "same-origin" })
       .then(function (r) { return r.json(); })
       .then(function (data) {
         render(data);
-        if (data.status === "PROCESSING") {
-          setTimeout(poll, 1500);
-        }
+        if (data.status !== "PROCESSING") return data;
+        return recover(data).then(function (next) {
+          if (next && next.status) render(next);
+          return next || data;
+        });
+      })
+      .then(function (data) {
+        if (data && data.status === "PROCESSING") setTimeout(poll, 1500);
       })
       .catch(function () { setTimeout(poll, 2500); });
   }
