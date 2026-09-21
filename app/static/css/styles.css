@@ -184,6 +184,7 @@ input:disabled, select:disabled { background: var(--header-bg); color: var(--mut
   pointer-events: none;
 }
 .btn-row { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; margin-top: 0.5rem; }
+.pager { display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap; margin-top: 0.85rem; }
 
 .inline-form { display: flex; gap: 0.7rem; align-items: flex-end; flex-wrap: wrap; }
 .inline-form label { min-width: 130px; }

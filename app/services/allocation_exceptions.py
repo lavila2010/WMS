@@ -6,13 +6,14 @@ from io import BytesIO
 
 import pandas as pd
 from sqlalchemy import or_
+from sqlalchemy.orm import contains_eager
 
 from ..auth import record_audit
 from ..constants import OrderStatus
 from ..extensions import db
 from ..models import Client, Division, Order, Warehouse
+from .allocation_overview import bulk_order_quantity_rows, bulk_upc_rows
 from .end_of_day import ny_day_utc_bounds, operational_today, parse_eod_date, to_ny
-from .fulfillment import enrich_upc_rows_from_units, order_quantities
 from .order_visibility import apply_operational_order_visibility
 
 
@@ -24,15 +25,6 @@ EXCEPTION_STATUSES = {
     OrderStatus.PICK_TICKET_READY,
     OrderStatus.PROCESSING,
 }
-
-
-def _partial_label(order: Order) -> str:
-    if order.partial_approved_wave and order.partial_approved_wave == order.current_wave_number:
-        return "APPROVED"
-    qty = order_quantities(order)
-    if qty["currently_allocated"] > 0 and qty["remaining"] > 0:
-        return "PENDING"
-    return "—"
 
 
 def list_daily_exceptions(
@@ -73,6 +65,11 @@ def list_daily_exceptions(
         query.join(Client, Client.id == Order.client_id)
         .join(Division, Division.id == Order.division_id)
         .join(Warehouse, Warehouse.id == Order.warehouse_id)
+        .options(
+            contains_eager(Order.client),
+            contains_eager(Order.division),
+            contains_eager(Order.warehouse),
+        )
         .order_by(
             Client.client_code.asc(),
             Division.code.asc(),
@@ -81,10 +78,13 @@ def list_daily_exceptions(
             Order.wms_order_id.asc(),
         )
     )
+    orders = query.all()
+    qty_map = bulk_order_quantity_rows([order.id for order in orders])
+    upc_map = bulk_upc_rows([order.id for order in orders])
     rows = []
-    for order in query.all():
-        qty = order_quantities(order)
-        if qty["remaining"] <= 0:
+    for order in orders:
+        qty = qty_map.get(order.id)
+        if qty is None or qty["remaining"] <= 0:
             continue
         status = order.status
         if status == OrderStatus.PARTIALLY_FULFILLED and qty["currently_allocated"] > 0:
@@ -103,8 +103,8 @@ def list_daily_exceptions(
                 "currently_allocated": qty["currently_allocated"],
                 "remaining": qty["remaining"],
                 "allocation_status": status,
-                "partial_approval": _partial_label(order),
-                "upc_rows": enrich_upc_rows_from_units(order, qty["upc_rows"]),
+                "partial_approval": qty["partial_approval"],
+                "upc_rows": upc_map.get(order.id, []),
                 "created_ny": to_ny(order.created_at),
                 "last_attempt_ny": to_ny(order.last_allocation_attempt_at),
             }

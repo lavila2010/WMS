@@ -321,8 +321,11 @@ class InventoryUnit(db.Model):
         db.Index("ix_units_cwu", "client_id", "warehouse_id", "upc"),
         db.Index("ix_units_cwuls", "client_id", "warehouse_id", "upc", "location", "status"),
         db.Index("ix_units_cwus", "client_id", "warehouse_id", "upc", "status"),
+        db.Index("ix_units_cwus_loc_id", "client_id", "warehouse_id", "upc", "status", "location", "id"),
         db.Index("ix_units_import_batch", "import_batch_id"),
         db.Index("ix_units_cwl", "client_id", "warehouse_id", "location"),
+        db.Index("ix_units_allocation", "allocation_id"),
+        db.Index("ix_units_alloc_order_status", "allocated_order_id", "status"),
     )
 
     id = db.Column(db.Integer, primary_key=True)
@@ -368,6 +371,7 @@ class Order(db.Model):
         db.Index("ix_orders_shipping_status", "shipping_status"),
         db.Index("ix_orders_closed_at", "closed_at"),
         db.Index("ix_orders_client_div_closed", "client_id", "division_id", "closed_at"),
+        db.Index("ix_orders_client_status_created", "client_id", "status", "created_at"),
     )
 
     id = db.Column(db.Integer, primary_key=True)
@@ -437,6 +441,9 @@ class Allocation(db.Model):
         db.Index("ix_alloc_unit_status", "inventory_unit_id", "status"),
         db.Index("ix_alloc_ticket", "pick_ticket_id"),
         db.Index("ix_alloc_wave", "order_id", "wave_number"),
+        db.Index("ix_alloc_order_status", "order_id", "status"),
+        db.Index("ix_alloc_line_status", "order_line_id", "status"),
+        db.Index("ix_alloc_order_wave_ticket", "order_id", "wave_number", "pick_ticket_id"),
     )
 
     id = db.Column(db.Integer, primary_key=True)
@@ -488,7 +495,10 @@ class InventoryTransaction(db.Model):
 
 class PickTicket(db.Model):
     __tablename__ = "pick_tickets"
-    __table_args__ = (db.Index("ix_pick_tickets_order", "order_id"),)
+    __table_args__ = (
+        db.Index("ix_pick_tickets_order", "order_id"),
+        db.Index("ix_pick_tickets_order_status", "order_id", "status"),
+    )
 
     id = db.Column(db.Integer, primary_key=True)
     client_id = db.Column(db.Integer, db.ForeignKey("clients.id"), nullable=False)
