@@ -16,6 +16,8 @@
     <div class="kv"><span>Transactions</span><span>{{ batch.transactions_created }}</span></div>
     <div class="kv"><span>Rows rejected</span><span>{{ batch.rows_rejected }}</span></div>
     <div class="kv"><span>Progress</span><span>{{ batch.progress_percent }}%</span></div>
+    <div class="kv"><span>Executor</span><span>{% if batch.last_executor == 'web-recovery' %}Recovery{% elif batch.last_executor == 'worker' %}Worker{% else %}{{ batch.last_executor or '—' }}{% endif %}</span></div>
+    <div class="kv"><span>Last Progress</span><span>{{ batch.last_progress_at.strftime('%Y-%m-%d %H:%M:%S UTC') if batch.last_progress_at else '—' }}</span></div>
   </div>
   {% if batch.error_message and batch.status == 'FAILED' %}
     <p class="err" style="margin-top:0.6rem;">{{ batch.error_message }}</p>

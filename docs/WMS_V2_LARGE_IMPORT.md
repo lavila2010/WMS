@@ -41,6 +41,7 @@ Confirm Import:
 2. CAS `VALIDATED → PROCESSING`.
 3. Returns the processing page immediately. No in-process thread.
 4. The worker polls PostgreSQL for `status=PROCESSING`, claims one batch with advisory lock `87421001, batch_id`, and calls `process_import_batch()`.
+5. If the worker heartbeat is missing or stale, the UI POSTs `/imports/<id>/recover` (bounded chunks, CSRF, advisory lock) until the batch completes.
 
 Closing the browser has no effect. A worker or web redeploy leaves the batch `PROCESSING`; the next worker resume uses `units_created` and staged rows. The UI polls `GET /inventory/imports/<id>/status` only.
 

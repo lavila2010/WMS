@@ -67,6 +67,8 @@ def ensure_v2_schema() -> None:
                 "ALTER TABLE import_batches ADD COLUMN IF NOT EXISTS completed_at TIMESTAMP",
                 "ALTER TABLE import_batches ADD COLUMN IF NOT EXISTS failed_at TIMESTAMP",
                 "ALTER TABLE import_batches ADD COLUMN IF NOT EXISTS error_message TEXT",
+                "ALTER TABLE import_batches ADD COLUMN IF NOT EXISTS last_progress_at TIMESTAMP",
+                "ALTER TABLE import_batches ADD COLUMN IF NOT EXISTS last_executor VARCHAR(32)",
             ):
                 conn.execute(text(stmt))
         orders = conn.execute(text("SELECT to_regclass('public.orders')")).scalar()
@@ -179,6 +181,24 @@ def ensure_v2_schema() -> None:
                     """
                 )
             )
+            conn.execute(
+                text(
+                    """
+                    CREATE TABLE IF NOT EXISTS worker_heartbeats (
+                        id SERIAL PRIMARY KEY,
+                        worker_name VARCHAR(64) NOT NULL,
+                        worker_type VARCHAR(32) NOT NULL DEFAULT 'import',
+                        instance_id VARCHAR(128) NOT NULL,
+                        last_seen_at TIMESTAMP NOT NULL,
+                        status VARCHAR(20) NOT NULL DEFAULT 'ONLINE',
+                        current_batch_id INTEGER REFERENCES import_batches(id),
+                        created_at TIMESTAMP NOT NULL,
+                        updated_at TIMESTAMP NOT NULL,
+                        UNIQUE (worker_name, instance_id)
+                    )
+                    """
+                )
+            )
         for idx in (
             "CREATE INDEX IF NOT EXISTS ix_import_batches_status ON import_batches (status)",
             "CREATE INDEX IF NOT EXISTS ix_import_batches_cwc ON import_batches (client_id, warehouse_id, created_at)",
@@ -199,6 +219,7 @@ def ensure_v2_schema() -> None:
             "CREATE INDEX IF NOT EXISTS ix_orders_client_div_closed ON orders (client_id, division_id, closed_at)",
             "CREATE INDEX IF NOT EXISTS ix_cartons_tracking_number ON cartons (tracking_number)",
             "CREATE INDEX IF NOT EXISTS ix_cartons_order_label ON cartons (order_id, shipping_label_status)",
+            "CREATE INDEX IF NOT EXISTS ix_worker_heartbeats_seen ON worker_heartbeats (worker_type, last_seen_at)",
         ):
             try:
                 conn.execute(text(idx))

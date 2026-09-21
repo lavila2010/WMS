@@ -30,6 +30,9 @@ def create_app(config: Config | None = None) -> Flask:
             from .schema import ensure_v2_schema
 
             ensure_v2_schema()
+            from .services.import_execution import inspect_orphaned_import_batches
+
+            inspect_orphaned_import_batches()
         except Exception:
             pass
 
@@ -38,6 +41,7 @@ def create_app(config: Config | None = None) -> Flask:
     from .blueprints.auth import bp as auth_bp
     from .blueprints.dashboard import bp as dashboard_bp
     from .blueprints.health import bp as health_bp
+    from .blueprints.imports import bp as imports_bp
     from .blueprints.inventory import bp as inventory_bp
     from .blueprints.kpi import bp as kpi_bp
     from .blueprints.orders import bp as orders_bp
@@ -48,6 +52,7 @@ def create_app(config: Config | None = None) -> Flask:
     app.register_blueprint(auth_bp)
     app.register_blueprint(dashboard_bp)
     app.register_blueprint(inventory_bp)
+    app.register_blueprint(imports_bp)
     app.register_blueprint(orders_bp)
     app.register_blueprint(allocation_bp)
     app.register_blueprint(processing_bp)
@@ -206,3 +211,19 @@ def _register_cli(app):
         from .workers.import_worker import run_forever
 
         run_forever()
+
+    @app.cli.command("recover-imports")
+    def recover_imports_cmd():
+        """Emergency: advance stale/orphaned PROCESSING import batches."""
+        from .services.import_execution import recover_stale_imports
+
+        results = recover_stale_imports()
+        if not results:
+            click.echo("No PROCESSING import batches.")
+            return
+        for row in results:
+            click.echo(
+                f"batch={row.get('batch_id')} type={row.get('status')} "
+                f"recovered={row.get('recovered')} reason={row.get('reason')} "
+                f"progress={row.get('progress_percent')}"
+            )

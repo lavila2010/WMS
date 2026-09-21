@@ -51,8 +51,8 @@ All mutations fail closed. Tenant and permission checks run on the server before
 2. Upload Excel: UPC, SKU, Description, Style, Color, Size, Quantity, Location.  
 3. Optional Client/Warehouse columns: must match selected context or the file is rejected.  
 4. Preview parses once into `inventory_import_rows`. Quantity must be integer > 0. UPC, Description, Style, Color, Size, and Location required. SKU may be blank. Description is copied onto every physical unit created from Quantity. Preview JSON stores only batch identity, counts, and the first 100 rows.  
-5. Confirm authorizes, marks the batch `PROCESSING`, and returns immediately. It does not start a thread. The browser polls status only.  
-6. Render worker `wms-v2-import-worker` (`python -m app.workers.import_worker`) claims `PROCESSING` batches from PostgreSQL and dispatches by type: inventory bulk-inserts units and IMPORT ledger rows in 2,000-unit chunks; orders bulk-insert headers then lines. It resumes from `units_created` / `orders_created` after restart. Advisory locks prevent two workers from mutating the same batch. `POST /inventory/imports/<id>/advance` is admin-only recovery. `flask process-inventory-import --batch-id` is the operator fallback.  
+5. Confirm authorizes, marks the batch `PROCESSING`, and returns immediately. It does not start a thread. GET status never mutates.  
+6. Render worker `wms-v2-import-worker` (`python -m app.workers.import_worker`) is primary: it heartbeats and claims `PROCESSING` batches. If the heartbeat is missing/stale, the UI automatically POSTs CSRF-protected `/imports/<id>/recover` for bounded chunks. Advisory locks prevent overlap. `flask recover-imports` is emergency-only. `POST /inventory/imports/<id>/advance` remains admin-only.  
 7. Units stay invisible to allocation and operational availability until `ImportBatch.status = COMPLETED`. A `FAILED` batch is also invisible; Retry resumes remaining chunks; Cleanup deletes the batch's units and ledger rows.  
 8. Audit `INVENTORY_IMPORT` when the batch completes.
 

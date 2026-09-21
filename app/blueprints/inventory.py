@@ -536,7 +536,14 @@ def import_history():
     if ctx["scope"]["warehouse_id"]:
         query = query.filter_by(warehouse_id=ctx["scope"]["warehouse_id"])
     batches = query.order_by(ImportBatch.created_at.desc()).all()
-    return _page("inventory/import_history.html", "import_history", batches=batches)
+    from ..services.import_execution import worker_health
+
+    return _page(
+        "inventory/import_history.html",
+        "import_history",
+        batches=batches,
+        worker_health=worker_health(),
+    )
 
 
 @bp.route("/imports/<int:batch_id>")

@@ -47,3 +47,11 @@ def require_entity_client(user: User, entity):
     client_id = getattr(entity, "client_id", None)
     require_client_access(user, client_id)
     return entity
+
+
+def resolve_import_access(user: User, batch) -> None:
+    """Tenant check for import recovery. Raises ValueError when unauthorized."""
+    if batch is None:
+        raise ValueError("Import batch was not found.")
+    if not user_can_access_client(user, getattr(batch, "client_id", None)):
+        raise ValueError("Import batch was not found.")
