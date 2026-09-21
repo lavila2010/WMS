@@ -5,9 +5,9 @@ from flask_login import current_user
 from io import BytesIO
 
 from ..auth import permission_required
-from ..constants import AllocationStatus, OrderStatus
+from ..constants import AllocationStatus
 from ..extensions import db
-from ..models import Allocation, Order, OrderLine
+from ..models import Allocation, Order
 from ..services.allocation import (
     AllocationError,
     allocate_order,
@@ -16,38 +16,11 @@ from ..services.allocation import (
     release_allocation,
 )
 from ..services.allocation_exceptions import export_daily_exceptions, list_daily_exceptions, parse_exception_date
-from ..services.fulfillment import is_allocation_eligible, order_quantities, pick_ticket_eligible
-from ..services.order_visibility import apply_operational_order_visibility
+from ..services.allocation_overview import DEFAULT_PER_PAGE, allocation_overview_page, parse_page, parse_per_page
+from ..services.fulfillment import order_quantities, pick_ticket_eligible
 from ..services.tenant import accessible_clients, require_entity_client, user_can_access_client
 
 bp = Blueprint("allocation", __name__, url_prefix="/allocation")
-
-
-def _allocation_rows(orders):
-    rows = []
-    for order in orders:
-        qty = order_quantities(order)
-        rows.append(
-            {
-                "order": order,
-                "ordered": qty["ordered"],
-                "shipped": qty["shipped"],
-                "currently_allocated": qty["currently_allocated"],
-                "remaining": qty["remaining"],
-                "eligible": is_allocation_eligible(order, qty),
-                "partial_approval": (
-                    "APPROVED"
-                    if order.partial_approved_wave == order.current_wave_number and order.partial_approved_wave
-                    else "PENDING"
-                    if qty["currently_allocated"] > 0 and qty["remaining"] > 0
-                    else "—"
-                ),
-                "can_approve": qty["currently_allocated"] > 0
-                and qty["remaining"] > 0
-                and not pick_ticket_eligible(order, qty),
-            }
-        )
-    return rows
 
 
 @bp.route("/")
@@ -57,21 +30,24 @@ def index():
     client_id = request.args.get("client_id", type=int)
     if client_id and not user_can_access_client(current_user, client_id):
         abort(404)
-    query = apply_operational_order_visibility(
-        Order.query.filter(Order.status.notin_([OrderStatus.CLOSED, OrderStatus.CANCELLED]))
+    page_data = allocation_overview_page(
+        client_id=client_id,
+        accessible_client_ids=[c.id for c in clients],
+        admin=current_user.is_admin(),
+        page=parse_page(request.args.get("page")),
+        per_page=parse_per_page(request.args.get("per_page", DEFAULT_PER_PAGE)),
     )
-    if client_id:
-        query = query.filter(Order.client_id == client_id)
-    elif not current_user.is_admin():
-        query = query.filter(Order.client_id.in_([c.id for c in clients] or [-1]))
-    orders = query.order_by(Order.created_at.desc()).limit(200).all()
-    rows = [row for row in _allocation_rows(orders) if row["remaining"] > 0 or row["currently_allocated"] > 0]
     return render_template(
         "allocation/index.html",
-        rows=rows,
+        rows=page_data["rows"],
         clients=clients,
         client_id=client_id,
         summary=None,
+        page=page_data["page"],
+        pages=page_data["pages"],
+        per_page=page_data["per_page"],
+        total=page_data["total"],
+        per_page_options=page_data["per_page_options"],
     )
 
 
@@ -81,7 +57,14 @@ def bulk():
     ids = request.form.getlist("order_ids", type=int)
     if not ids:
         flash("Select at least one order.", "error")
-        return redirect(url_for("allocation.index", client_id=request.form.get("client_id") or None))
+        return redirect(
+            url_for(
+                "allocation.index",
+                client_id=request.form.get("client_id") or None,
+                page=request.form.get("page") or None,
+                per_page=request.form.get("per_page") or None,
+            )
+        )
     for oid in ids:
         order = db.session.get(Order, oid)
         require_entity_client(current_user, order)
@@ -94,7 +77,14 @@ def bulk():
         ),
         "success" if not summary["failed"] else "warning",
     )
-    return redirect(url_for("allocation.index", client_id=request.form.get("client_id") or None))
+    return redirect(
+        url_for(
+            "allocation.index",
+            client_id=request.form.get("client_id") or None,
+            page=request.form.get("page") or None,
+            per_page=request.form.get("per_page") or None,
+        )
+    )
 
 
 @bp.route("/exceptions")

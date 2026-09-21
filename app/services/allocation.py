@@ -4,23 +4,25 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import select
+from sqlalchemy import insert, select, text
+from sqlalchemy.orm.attributes import set_committed_value
 
 from ..auth import current_actor, record_audit
 from ..constants import AllocationStatus, LedgerType, OrderStatus, UnitStatus
 from ..extensions import db
-from ..models import Allocation, ImportBatch, InventoryUnit, Order, OrderLine
+from ..models import Allocation, ImportBatch, InventoryTransaction, InventoryUnit, Order, OrderLine
 from .fulfillment import (
-    allocation_need,
     is_allocation_eligible,
-    is_fully_allocated,
+    live_allocated_by_line,
     order_quantities,
     refresh_order_status,
     unticketed_allocation_count,
 )
-from .inventory_ledger import LedgerError, transition_unit
+from .inventory_ledger import ALLOWED, LedgerError, transition_unit
 from .inventory_visibility import operational_batch_clause
 from .order_visibility import order_is_operational
+
+ALLOC_CHUNK_SIZE = 1000
 
 
 class AllocationError(ValueError):
@@ -49,13 +51,108 @@ def _candidate_units(order: Order, upc: str, need: int) -> list[InventoryUnit]:
         )
         .order_by(InventoryUnit.location.asc(), InventoryUnit.id.asc())
         .with_for_update(skip_locked=True, of=InventoryUnit)
+        .execution_options(populate_existing=True)
         .limit(need)
     )
     return list(db.session.execute(stmt).scalars().all())
 
 
-def _refresh_order_status(order: Order) -> str:
-    return refresh_order_status(order)
+def _refresh_order_status(order: Order, qty: dict | None = None) -> str:
+    return refresh_order_status(order, qty)
+
+
+def _line_need(line: OrderLine, live_map: dict[int, int]) -> int:
+    return max(int(line.qty_ordered) - int(line.qty_shipped or 0) - int(live_map.get(line.id, 0)), 0)
+
+
+def _persist_reservation_chunk(
+    locked: Order,
+    line: OrderLine,
+    units: list[InventoryUnit],
+    *,
+    wave: int,
+    user_id,
+) -> int:
+    """One Allocation + RESERVE ledger row per unit, flushed as a bounded chunk."""
+    if not units:
+        return 0
+    now = datetime.utcnow()
+    reference = f"alloc:{locked.wms_order_id}"
+    alloc_rows = []
+    for unit in units:
+        if unit.client_id != locked.client_id or unit.warehouse_id != locked.warehouse_id:
+            raise AllocationError("Refusing cross-tenant unit.")
+        if unit.upc != line.upc:
+            raise AllocationError("Refusing SKU/UPC mismatch.")
+        allowed = ALLOWED.get((unit.status, UnitStatus.RESERVED))
+        if not allowed or LedgerType.RESERVE not in allowed:
+            raise LedgerError(
+                f"Illegal transition {unit.status} → {UnitStatus.RESERVED} as {LedgerType.RESERVE}."
+            )
+        alloc_rows.append(
+            {
+                "client_id": locked.client_id,
+                "order_id": locked.id,
+                "order_line_id": line.id,
+                "inventory_unit_id": unit.id,
+                "warehouse_id": locked.warehouse_id,
+                "upc": unit.upc,
+                "location": unit.location,
+                "status": AllocationStatus.ACTIVE,
+                "wave_number": wave,
+                "created_by": user_id,
+                "created_at": now,
+            }
+        )
+    inserted = list(
+        db.session.execute(
+            insert(Allocation).values(alloc_rows).returning(Allocation.id, Allocation.inventory_unit_id)
+        )
+    )
+    by_unit = {int(unit_id): int(alloc_id) for alloc_id, unit_id in inserted}
+    value_sql = ",".join(f"({int(unit.id)}::int, {int(by_unit[unit.id])}::int)" for unit in units)
+    db.session.execute(
+        text(
+            f"""
+            UPDATE inventory_units AS u
+            SET status = :st,
+                allocated_order_id = :oid,
+                allocation_id = v.aid,
+                updated_at = :now
+            FROM (VALUES {value_sql}) AS v(uid, aid)
+            WHERE u.id = v.uid
+            """
+        ),
+        {"st": UnitStatus.RESERVED, "oid": locked.id, "now": now},
+    )
+    txn_rows = []
+    for unit in units:
+        alloc_id = by_unit[unit.id]
+        txn_rows.append(
+            {
+                "client_id": unit.client_id,
+                "warehouse_id": unit.warehouse_id,
+                "inventory_unit_id": unit.id,
+                "import_batch_id": unit.import_batch_id,
+                "upc": unit.upc,
+                "location": unit.location,
+                "transaction_type": LedgerType.RESERVE,
+                "from_status": UnitStatus.AVAILABLE,
+                "to_status": UnitStatus.RESERVED,
+                "order_id": locked.id,
+                "order_line_id": line.id,
+                "allocation_id": alloc_id,
+                "user_id": user_id,
+                "reference": reference,
+                "created_at": now,
+            }
+        )
+        set_committed_value(unit, "status", UnitStatus.RESERVED)
+        set_committed_value(unit, "allocation_id", alloc_id)
+        set_committed_value(unit, "allocated_order_id", locked.id)
+    db.session.execute(insert(InventoryTransaction).values(txn_rows))
+    line.qty_allocated = int(line.qty_allocated or 0) + len(units)
+    return len(units)
 
 
 def allocate_order(order: Order, *, user=None, _fail_after: int | None = None) -> dict:
@@ -90,47 +187,30 @@ def allocate_order(order: Order, *, user=None, _fail_after: int | None = None) -
     reserved = 0
     shortages = []
     try:
+        live_map = live_allocated_by_line(locked.id)
         for line in OrderLine.query.filter_by(order_id=locked.id).order_by(OrderLine.id).all():
-            need = allocation_need(line)
+            need = _line_need(line, live_map)
             if need <= 0:
                 continue
-            units = _candidate_units(locked, line.upc, need)
-            for unit in units:
-                if unit.client_id != locked.client_id or unit.warehouse_id != locked.warehouse_id:
-                    raise AllocationError("Refusing cross-tenant unit.")
-                if unit.upc != line.upc:
-                    raise AllocationError("Refusing SKU/UPC mismatch.")
-                allocation = Allocation(
-                    client_id=locked.client_id,
-                    order_id=locked.id,
-                    order_line_id=line.id,
-                    inventory_unit_id=unit.id,
-                    warehouse_id=locked.warehouse_id,
-                    upc=unit.upc,
-                    location=unit.location,
-                    status=AllocationStatus.ACTIVE,
-                    wave_number=wave,
-                    created_by=uid,
+            leftover = need
+            while leftover > 0:
+                take = min(leftover, ALLOC_CHUNK_SIZE)
+                if _fail_after is not None:
+                    budget = _fail_after - reserved
+                    if budget <= 0:
+                        raise LedgerError("injected failure")
+                    take = min(take, budget)
+                units = _candidate_units(locked, line.upc, take)
+                if not units:
+                    break
+                reserved += _persist_reservation_chunk(
+                    locked, line, units, wave=wave, user_id=uid
                 )
-                db.session.add(allocation)
-                db.session.flush()
-                transition_unit(
-                    unit,
-                    to_status=UnitStatus.RESERVED,
-                    transaction_type=LedgerType.RESERVE,
-                    user_id=uid,
-                    order_id=locked.id,
-                    order_line_id=line.id,
-                    allocation_id=allocation.id,
-                    allocated_order_id=locked.id,
-                    reference=f"alloc:{locked.wms_order_id}",
-                )
-                unit.allocation_id = allocation.id
-                line.qty_allocated += 1
-                reserved += 1
+                leftover -= len(units)
                 if _fail_after is not None and reserved >= _fail_after:
                     raise LedgerError("injected failure")
-            leftover = allocation_need(line)
+                if len(units) < take:
+                    break
             if leftover > 0:
                 shortages.append(
                     {
@@ -140,8 +220,8 @@ def allocate_order(order: Order, *, user=None, _fail_after: int | None = None) -
                         "allocated": line.qty_allocated,
                     }
                 )
-        status = _refresh_order_status(locked)
         qty_after = order_quantities(locked)
+        status = _refresh_order_status(locked, qty_after)
         if qty_after["remaining"] > 0 and qty_after["currently_allocated"] > 0:
             record_audit(
                 "PARTIAL_ALLOCATION_CREATED",

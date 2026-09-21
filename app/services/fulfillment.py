@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from sqlalchemy import func
+
 from ..constants import AllocationStatus, OrderStatus, UnitStatus
 from ..extensions import db
 from ..models import Allocation, InventoryUnit, Order, OrderLine
@@ -10,17 +12,25 @@ from ..models import Allocation, InventoryUnit, Order, OrderLine
 ACTIVE_ALLOC_STATUSES = {UnitStatus.RESERVED, UnitStatus.PACKED}
 
 
-def line_live_allocated(line: OrderLine) -> int:
-    return (
-        db.session.query(InventoryUnit)
-        .join(Allocation, Allocation.inventory_unit_id == InventoryUnit.id)
+def live_allocated_by_line(order_id: int) -> dict[int, int]:
+    """One grouped COUNT for every line on an order. No per-line round trip."""
+    rows = (
+        db.session.query(Allocation.order_line_id, func.count(InventoryUnit.id))
+        .join(InventoryUnit, InventoryUnit.id == Allocation.inventory_unit_id)
         .filter(
-            Allocation.order_line_id == line.id,
+            Allocation.order_id == order_id,
             Allocation.status == AllocationStatus.ACTIVE,
-            InventoryUnit.status.in_(ACTIVE_ALLOC_STATUSES),
+            InventoryUnit.status.in_(tuple(ACTIVE_ALLOC_STATUSES)),
         )
-        .count()
+        .group_by(Allocation.order_line_id)
+        .all()
     )
+    return {int(line_id): int(count) for line_id, count in rows}
+
+
+def line_live_allocated(line: OrderLine) -> int:
+    mapped = live_allocated_by_line(line.order_id)
+    return int(mapped.get(line.id, 0))
 
 
 def line_remaining(line: OrderLine) -> int:
@@ -29,13 +39,14 @@ def line_remaining(line: OrderLine) -> int:
 
 def order_quantities(order: Order) -> dict:
     lines = OrderLine.query.filter_by(order_id=order.id).order_by(OrderLine.id).all()
+    live_map = live_allocated_by_line(order.id) if lines else {}
     ordered = sum(int(line.qty_ordered) for line in lines)
     shipped = sum(int(line.qty_shipped or 0) for line in lines)
     currently = 0
     remaining = 0
     upc_rows = []
     for line in lines:
-        live = line_live_allocated(line)
+        live = int(live_map.get(line.id, 0))
         rem = max(int(line.qty_ordered) - int(line.qty_shipped or 0) - live, 0)
         currently += live
         remaining += rem
@@ -96,8 +107,10 @@ def pick_ticket_eligible(order: Order, qty: dict | None = None) -> bool:
         return False
     if qty["currently_allocated"] <= 0:
         return False
-    unticketed = unticketed_allocation_count(order)
-    if unticketed <= 0:
+    unticketed = qty.get("unticketed")
+    if unticketed is None:
+        unticketed = unticketed_allocation_count(order)
+    if int(unticketed) <= 0:
         return False
     if qty["remaining"] == 0:
         return True
@@ -129,10 +142,10 @@ def open_ticket_for_order(order: Order):
     )
 
 
-def refresh_order_status(order: Order) -> str:
+def refresh_order_status(order: Order, qty: dict | None = None) -> str:
     if order.status in {OrderStatus.CLOSED, OrderStatus.CANCELLED}:
         return order.status
-    qty = order_quantities(order)
+    qty = qty or order_quantities(order)
     shipped = qty["shipped"]
     ordered = qty["ordered"]
     if ordered and shipped >= ordered:
