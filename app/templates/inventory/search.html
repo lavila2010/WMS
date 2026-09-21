@@ -6,6 +6,7 @@
   <form method="get" action="{{ request.path }}" class="scopebar" style="border:none;padding:0;background:none;">
     {% if scope.client_id %}<input type="hidden" name="client_id" value="{{ scope.client_id }}" />{% endif %}
     {% if scope.warehouse_id %}<input type="hidden" name="warehouse_id" value="{{ scope.warehouse_id }}" />{% endif %}
+    {% if show_zero %}<input type="hidden" name="show_zero" value="1" />{% endif %}
     <div><label>Search (UPC, SKU, Description, Style, Color, Size, Location, Unit ID)</label><br />
       <input name="q" value="{{ q }}" style="min-width:340px;" placeholder="type a value…" /></div>
     <div><label>Status</label><br />

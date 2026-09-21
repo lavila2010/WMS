@@ -16,7 +16,20 @@
   padding: 0.85rem 1rem;
   margin-bottom: 1rem;
 }
-.inv .scopebar label { color: #6b7280; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; }
+.inv .scopebar .zero-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: #374151;
+  font-size: 0.86rem;
+  text-transform: none;
+  letter-spacing: 0;
+  padding-bottom: 0.35rem;
+  font-weight: 500;
+}
+.inv .scopebar .zero-toggle input {
+  margin: 0;
+}
 .inv input, .inv select {
   background: #fff;
   border: 1px solid #d1d5db;

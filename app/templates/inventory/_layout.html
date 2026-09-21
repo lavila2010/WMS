@@ -36,8 +36,12 @@
       </select>
     </div>
     <button class="btn" type="submit">Apply</button>
+    <label class="zero-toggle">
+      <input type="checkbox" name="show_zero" value="1" {{ 'checked' if show_zero }} />
+      Show Zero On Hand
+    </label>
     {% if can('INVENTORY_EXPORT') %}
-      <a class="btn btn-secondary" href="{{ url_for('inventory.export_xlsx', client_id=scope.client_id or None, warehouse_id=scope.warehouse_id or None) }}">Export Excel</a>
+      <a class="btn btn-secondary" href="{{ url_for('inventory.export_xlsx', client_id=scope.client_id or None, warehouse_id=scope.warehouse_id or None, show_zero='1' if show_zero else None) }}">Export Excel</a>
     {% endif %}
   </form>
 
@@ -45,7 +49,7 @@
     {% for key, label, endpoint in tabs %}
       {% if key != 'upload' or can('INVENTORY_UPLOAD') %}
       <a class="{{ 'active' if active_tab == key }}"
-         href="{{ url_for(endpoint, client_id=scope.client_id or None, warehouse_id=scope.warehouse_id or None) }}">{{ label }}</a>
+         href="{{ url_for(endpoint, client_id=scope.client_id or None, warehouse_id=scope.warehouse_id or None, show_zero='1' if show_zero else None) }}">{{ label }}</a>
       {% endif %}
     {% endfor %}
   </div>

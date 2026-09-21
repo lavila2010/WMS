@@ -10,6 +10,18 @@ from ..models import ImportBatch, InventoryTransaction, InventoryUnit
 from .inventory_visibility import apply_operational_visibility, operational_batch_clause
 
 
+def show_zero_enabled(raw) -> bool:
+    return str(raw or "").strip().lower() in {"1", "true", "on", "yes"}
+
+
+def _on_hand_sum():
+    return (
+        func.sum(case((InventoryUnit.status == UnitStatus.AVAILABLE, 1), else_=0))
+        + func.sum(case((InventoryUnit.status == UnitStatus.RESERVED, 1), else_=0))
+        + func.sum(case((InventoryUnit.status == UnitStatus.PACKED, 1), else_=0))
+    )
+
+
 def _base(client_id=None, warehouse_id=None, client_ids=None, *, operational=True):
     query = InventoryUnit.query
     if operational:
@@ -33,6 +45,7 @@ def status_counts(client_id=None, warehouse_id=None, client_ids=None, upc=None, 
     reserved = query.filter(InventoryUnit.status == UnitStatus.RESERVED).count()
     packed = query.filter(InventoryUnit.status == UnitStatus.PACKED).count()
     shipped = query.filter(InventoryUnit.status == UnitStatus.SHIPPED).count()
+    on_hand_q = query.filter(InventoryUnit.status.in_(UnitStatus.ON_HAND))
     return {
         "available": available,
         "reserved": reserved,
@@ -40,16 +53,16 @@ def status_counts(client_id=None, warehouse_id=None, client_ids=None, upc=None, 
         "shipped": shipped,
         "on_hand": available + reserved + packed,
         "total": available + reserved + packed + shipped,
-        "unique_upcs": query.with_entities(InventoryUnit.upc).distinct().count(),
-        "unique_skus": query.filter(InventoryUnit.sku.isnot(None))
+        "unique_upcs": on_hand_q.with_entities(InventoryUnit.upc).distinct().count(),
+        "unique_skus": on_hand_q.filter(InventoryUnit.sku.isnot(None), InventoryUnit.sku != "")
         .with_entities(InventoryUnit.sku)
         .distinct()
         .count(),
-        "locations": query.with_entities(InventoryUnit.location).distinct().count(),
+        "locations": on_hand_q.with_entities(InventoryUnit.location).distinct().count(),
     }
 
 
-def aggregate_rows(client_id=None, warehouse_id=None, client_ids=None):
+def aggregate_rows(client_id=None, warehouse_id=None, client_ids=None, *, include_zero=False):
     filters = []
     if client_id:
         filters.append(InventoryUnit.client_id == client_id)
@@ -64,8 +77,9 @@ def aggregate_rows(client_id=None, warehouse_id=None, client_ids=None):
     reserved = func.sum(case((InventoryUnit.status == UnitStatus.RESERVED, 1), else_=0))
     packed = func.sum(case((InventoryUnit.status == UnitStatus.PACKED, 1), else_=0))
     shipped = func.sum(case((InventoryUnit.status == UnitStatus.SHIPPED, 1), else_=0))
+    on_hand_expr = _on_hand_sum()
 
-    rows = (
+    query = (
         db.session.query(
             InventoryUnit.client_id,
             InventoryUnit.warehouse_id,
@@ -89,14 +103,15 @@ def aggregate_rows(client_id=None, warehouse_id=None, client_ids=None):
             InventoryUnit.upc,
             InventoryUnit.location,
         )
-        .order_by(
-            InventoryUnit.client_id,
-            InventoryUnit.warehouse_id,
-            InventoryUnit.upc,
-            InventoryUnit.location,
-        )
-        .all()
     )
+    if not include_zero:
+        query = query.having(on_hand_expr > 0)
+    rows = query.order_by(
+        InventoryUnit.client_id,
+        InventoryUnit.warehouse_id,
+        InventoryUnit.upc,
+        InventoryUnit.location,
+    ).all()
     result = []
     for row in rows:
         available_n = int(row.available or 0)
@@ -124,7 +139,16 @@ def aggregate_rows(client_id=None, warehouse_id=None, client_ids=None):
     return result
 
 
-def search_units(q, *, status=None, client_id=None, warehouse_id=None, client_ids=None, limit=200):
+def search_units(
+    q,
+    *,
+    status=None,
+    client_id=None,
+    warehouse_id=None,
+    client_ids=None,
+    include_zero=False,
+    limit=200,
+):
     query = _base(client_id, warehouse_id, client_ids)
     term = (q or "").strip()
     if term:
@@ -141,8 +165,12 @@ def search_units(q, *, status=None, client_id=None, warehouse_id=None, client_id
                 cast(InventoryUnit.id, String).ilike(like),
             )
         )
+    if status == UnitStatus.SHIPPED and not include_zero:
+        return []
     if status:
         query = query.filter(InventoryUnit.status == status)
+    elif not include_zero:
+        query = query.filter(InventoryUnit.status.in_(UnitStatus.ON_HAND))
     return query.order_by(InventoryUnit.location.asc(), InventoryUnit.id.asc()).limit(limit).all()
 
 
@@ -235,13 +263,14 @@ def unique_client_upc_description(client_id: int, upc: str) -> str | None:
     return values[0][0]
 
 
-def warehouse_comparison(client_id, client_ids=None):
+def warehouse_comparison(client_id, client_ids=None, *, include_zero=False):
     filters = []
     if client_id:
         filters.append(InventoryUnit.client_id == client_id)
     elif client_ids is not None:
         filters.append(InventoryUnit.client_id.in_(client_ids or [-1]))
-    rows = (
+    on_hand_expr = _on_hand_sum()
+    query = (
         db.session.query(
             InventoryUnit.warehouse_id,
             func.sum(case((InventoryUnit.status == UnitStatus.AVAILABLE, 1), else_=0)).label("available"),
@@ -251,8 +280,10 @@ def warehouse_comparison(client_id, client_ids=None):
         .outerjoin(ImportBatch, InventoryUnit.import_batch_id == ImportBatch.id)
         .filter(operational_batch_clause(), *filters)
         .group_by(InventoryUnit.warehouse_id)
-        .all()
     )
+    if not include_zero:
+        query = query.having(on_hand_expr > 0)
+    rows = query.all()
     return [
         {
             "warehouse_id": row.warehouse_id,
