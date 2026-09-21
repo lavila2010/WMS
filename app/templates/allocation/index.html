@@ -68,10 +68,10 @@
             <td><span class="badge badge-{{ o.status }}">{{ o.status }}</span></td>
             <td>{{ row.partial_approval }}</td>
             <td class="muted">{{ o.created_at.strftime('%Y-%m-%d %H:%M') if o.created_at else '—' }}</td>
-            <td class="right"><a class="btn" href="{{ url_for('allocation.detail', order_id=o.id) }}">Allocate</a></td>
+            <td class="right"><a class="btn{% if row.pick_ticket_ready %} btn-secondary{% endif %}" href="{{ row.action_href }}">{{ row.action_label }}</a></td>
           </tr>
         {% else %}
-          <tr><td colspan="15" class="muted">No unallocated or partially allocated orders.</td></tr>
+          <tr><td colspan="15" class="muted">No orders are waiting for allocation.</td></tr>
         {% endfor %}
       </tbody>
     </table>

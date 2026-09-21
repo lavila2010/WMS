@@ -16,7 +16,13 @@ from ..services.allocation import (
     release_allocation,
 )
 from ..services.allocation_exceptions import export_daily_exceptions, list_daily_exceptions, parse_exception_date
-from ..services.fulfillment import is_allocation_eligible, order_quantities, pick_ticket_eligible
+from ..services.fulfillment import (
+    allocation_page_visible,
+    current_wave_approved,
+    is_allocation_eligible,
+    order_quantities,
+    pick_ticket_eligible,
+)
 from ..services.order_visibility import apply_operational_order_visibility
 from ..services.tenant import accessible_clients, require_entity_client, user_can_access_client
 
@@ -35,6 +41,22 @@ def _allocation_rows(orders):
     rows = []
     for order in orders:
         qty = order_quantities(order)
+        if not allocation_page_visible(order, qty):
+            continue
+        ticket_ok = pick_ticket_eligible(order, qty)
+        approved = current_wave_approved(order)
+        if ticket_ok:
+            action_label = "Ready for Pick Ticket"
+            if current_user.has_permission("PICK_TICKET_VIEW"):
+                action_href = url_for("orders.pick_tickets", **_pick_tickets_filter_args(order))
+            else:
+                action_href = url_for("allocation.detail", order_id=order.id)
+        elif qty["currently_allocated"] > 0 and qty["remaining"] > 0 and not approved:
+            action_label = "Approve Partial"
+            action_href = url_for("allocation.approve_partial", order_id=order.id)
+        else:
+            action_label = "Allocate"
+            action_href = url_for("allocation.detail", order_id=order.id)
         rows.append(
             {
                 "order": order,
@@ -42,17 +64,20 @@ def _allocation_rows(orders):
                 "shipped": qty["shipped"],
                 "currently_allocated": qty["currently_allocated"],
                 "remaining": qty["remaining"],
-                "eligible": is_allocation_eligible(order, qty),
+                "eligible": is_allocation_eligible(order, qty) and not ticket_ok,
                 "partial_approval": (
                     "APPROVED"
-                    if order.partial_approved_wave == order.current_wave_number and order.partial_approved_wave
+                    if approved
                     else "PENDING"
                     if qty["currently_allocated"] > 0 and qty["remaining"] > 0
                     else "—"
                 ),
                 "can_approve": qty["currently_allocated"] > 0
                 and qty["remaining"] > 0
-                and not pick_ticket_eligible(order, qty),
+                and not ticket_ok,
+                "action_label": action_label,
+                "action_href": action_href,
+                "pick_ticket_ready": ticket_ok,
             }
         )
     return rows
@@ -73,7 +98,7 @@ def index():
     elif not current_user.is_admin():
         query = query.filter(Order.client_id.in_([c.id for c in clients] or [-1]))
     orders = query.order_by(Order.created_at.desc()).limit(200).all()
-    rows = [row for row in _allocation_rows(orders) if row["remaining"] > 0 or row["currently_allocated"] > 0]
+    rows = _allocation_rows(orders)
     return render_template(
         "allocation/index.html",
         rows=rows,

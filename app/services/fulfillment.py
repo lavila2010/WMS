@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
-from ..constants import AllocationStatus, OrderStatus, UnitStatus
+from sqlalchemy import text
+
+from ..constants import AllocationStatus, OrderStatus, PickTicketStatus, UnitStatus
 from ..extensions import db
-from ..models import Allocation, InventoryUnit, Order, OrderLine
+from ..models import Allocation, InventoryUnit, Order, OrderLine, PickTicket
 
 
 ACTIVE_ALLOC_STATUSES = {UnitStatus.RESERVED, UnitStatus.PACKED}
@@ -138,10 +140,112 @@ def current_wave_allocation_count(order: Order) -> int:
     return query.count()
 
 
+def active_unticketed_wave_numbers(order: Order) -> list[int]:
+    rows = (
+        db.session.query(Allocation.wave_number)
+        .filter_by(order_id=order.id, status=AllocationStatus.ACTIVE, pick_ticket_id=None)
+        .distinct()
+        .all()
+    )
+    return sorted({int(row[0] or 0) for row in rows})
+
+
+def derive_active_wave(order: Order, pending: list[Allocation] | None = None) -> int:
+    """Resolve the operational wave from the order, falling back to unticketed allocations."""
+    pending = pending if pending is not None else unticketed_allocations(order)
+    waves = [int(row.wave_number or 0) for row in pending]
+    current = current_wave_number(order)
+    if current > 0:
+        on_current = [wave for wave in waves if wave == current]
+        if on_current:
+            return current
+    positive = [wave for wave in waves if wave > 0]
+    if positive:
+        return max(positive)
+    if waves:
+        return max(waves)
+    return current
+
+
+def open_pick_ticket_count(order: Order) -> int:
+    return PickTicket.query.filter(
+        PickTicket.order_id == order.id,
+        PickTicket.status.in_(PickTicketStatus.LEGACY_OPEN),
+    ).count()
+
+
+def allocation_page_visible(order: Order, qty: dict | None = None) -> bool:
+    """Allocation action-queue visibility. Daily Exceptions does not use this rule."""
+    if order.status in {OrderStatus.CLOSED, OrderStatus.CANCELLED}:
+        return False
+    if order.status == OrderStatus.PROCESSING:
+        return False
+    if open_pick_ticket_count(order) > 0:
+        return False
+    qty = qty or order_quantities(order)
+    if qty["remaining"] > 0:
+        return True
+    return qty["currently_allocated"] > 0 and pick_ticket_eligible(order, qty)
+
+
+def repair_zero_current_wave_numbers() -> dict:
+    """Idempotent repair: current_wave_number=0 with a single active unticketed wave.
+
+    Does not change Allocation.wave_number, Pick Ticket numbers, or orders already
+    on a positive current wave. Conflicting multi-wave rows are skipped.
+    """
+    allocs = db.session.execute(text("SELECT to_regclass('public.allocations')")).scalar()
+    orders = db.session.execute(text("SELECT to_regclass('public.orders')")).scalar()
+    if not allocs or not orders:
+        return {"repaired": 0, "skipped_conflicts": []}
+    skipped_rows = db.session.execute(
+        text(
+            """
+            SELECT o.wms_order_id AS wms_order_id,
+                   array_agg(DISTINCT a.wave_number) AS waves
+            FROM orders o
+            JOIN allocations a ON a.order_id = o.id
+            WHERE COALESCE(o.current_wave_number, 0) <= 0
+              AND a.status = 'ACTIVE'
+              AND a.pick_ticket_id IS NULL
+            GROUP BY o.id, o.wms_order_id
+            HAVING COUNT(DISTINCT a.wave_number) > 1
+            """
+        )
+    ).mappings().all()
+    skipped = [
+        {"wms_order_id": row["wms_order_id"], "waves": sorted(int(w) for w in (row["waves"] or []))}
+        for row in skipped_rows
+    ]
+    result = db.session.execute(
+        text(
+            """
+            UPDATE orders o
+            SET current_wave_number = sub.max_wave
+            FROM (
+                SELECT a.order_id AS order_id, MAX(a.wave_number) AS max_wave
+                FROM allocations a
+                WHERE a.status = 'ACTIVE' AND a.pick_ticket_id IS NULL
+                GROUP BY a.order_id
+                HAVING COUNT(DISTINCT a.wave_number) = 1
+            ) sub
+            WHERE o.id = sub.order_id
+              AND COALESCE(o.current_wave_number, 0) <= 0
+            RETURNING o.wms_order_id
+            """
+        )
+    )
+    repaired_ids = [row[0] for row in result]
+    if repaired_ids or skipped:
+        db.session.commit()
+    return {"repaired": len(repaired_ids), "skipped_conflicts": skipped, "repaired_ids": repaired_ids}
+
+
 def pick_ticket_handoff_diagnostic(order: Order) -> dict:
     """Admin-safe snapshot for partial-approval → Pick Ticket debugging. No customer PII."""
     qty = order_quantities(order)
     wave = current_wave_number(order)
+    current_unticketed = unticketed_allocation_count(order, wave=wave or None)
     return {
         "wms_order_id": order.wms_order_id,
         "status": order.status,
@@ -151,17 +255,21 @@ def pick_ticket_handoff_diagnostic(order: Order) -> dict:
         "remaining": qty["remaining"],
         "current_wave_number": wave,
         "partial_approved_wave": order.partial_approved_wave,
-        "unticketed_allocation_count": unticketed_allocation_count(order, wave=wave or None),
+        "active_unticketed_wave_numbers": active_unticketed_wave_numbers(order),
+        "unticketed_allocation_count": current_unticketed,
+        "current_wave_unticketed_count": current_unticketed,
+        "open_pick_ticket_count": open_pick_ticket_count(order),
         "pick_ticket_eligible": pick_ticket_eligible(order, qty),
+        "allocation_page_visible": allocation_page_visible(order, qty),
     }
 
 
 def open_ticket_for_order(order: Order):
-    from ..models import PickTicket
-    from ..constants import PickTicketStatus
-
     return (
-        PickTicket.query.filter_by(order_id=order.id, status=PickTicketStatus.OPEN)
+        PickTicket.query.filter(
+            PickTicket.order_id == order.id,
+            PickTicket.status.in_(PickTicketStatus.LEGACY_OPEN),
+        )
         .order_by(PickTicket.ticket_sequence.desc())
         .first()
     )

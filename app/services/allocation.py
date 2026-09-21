@@ -12,11 +12,13 @@ from ..extensions import db
 from ..models import Allocation, ImportBatch, InventoryUnit, Order, OrderLine
 from .fulfillment import (
     allocation_need,
+    derive_active_wave,
     is_allocation_eligible,
     is_fully_allocated,
     order_quantities,
     refresh_order_status,
     unticketed_allocation_count,
+    unticketed_allocations,
 )
 from .inventory_ledger import LedgerError, transition_unit
 from .inventory_visibility import operational_batch_clause
@@ -231,14 +233,19 @@ def allocate_orders(order_ids: list[int], *, user=None) -> dict:
 def approve_partial_allocation(order: Order, *, user=None) -> Order:
     if not order_is_operational(order):
         raise AllocationError("Order is not operational.")
-    qty = order_quantities(order)
-    if not (qty["currently_allocated"] > 0 and qty["remaining"] > 0):
-        raise AllocationError("Order does not have a partial allocation to approve.")
-    if unticketed_allocation_count(order) <= 0:
-        raise AllocationError("No current allocation wave is waiting for approval.")
     uid, uname = current_actor()
     locked = _lock_order(order.id)
-    locked.partial_approved_wave = int(locked.current_wave_number or 1)
+    qty = order_quantities(locked)
+    if not (qty["currently_allocated"] > 0 and qty["remaining"] > 0):
+        raise AllocationError("Order does not have a partial allocation to approve.")
+    pending = unticketed_allocations(locked)
+    if not pending:
+        raise AllocationError("No current allocation wave is waiting for approval.")
+    active_wave = derive_active_wave(locked, pending)
+    if active_wave <= 0:
+        raise AllocationError("No current allocation wave is waiting for approval.")
+    locked.current_wave_number = active_wave
+    locked.partial_approved_wave = active_wave
     locked.partial_allocation_approved_at = datetime.utcnow()
     locked.partial_allocation_approved_by_user_id = uid
     record_audit(
@@ -249,7 +256,7 @@ def approve_partial_allocation(order: Order, *, user=None) -> Order:
         client_id=locked.client_id,
         detail=(
             f"{locked.wms_order_id} allocated={qty['currently_allocated']} "
-            f"remaining={qty['remaining']} approved_by={uname}"
+            f"remaining={qty['remaining']} wave={active_wave} approved_by={uname}"
         ),
     )
     db.session.commit()

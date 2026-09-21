@@ -378,3 +378,6 @@ def ensure_v2_schema() -> None:
         if tables:
             for stmt in statements[1:]:
                 conn.execute(text(stmt))
+    from .services.fulfillment import repair_zero_current_wave_numbers
+
+    repair_zero_current_wave_numbers()
