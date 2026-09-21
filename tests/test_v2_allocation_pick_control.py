@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import threading
 from datetime import datetime, timedelta
 from io import BytesIO
 from zoneinfo import ZoneInfo
@@ -282,6 +281,8 @@ def test_bb_34_54_substitution(app, db, admin_user):
 
 
 def test_bb_53_54_concurrent_replacement(app, db, admin_user):
+    from sqlalchemy import text
+
     w, order = _ready_order(db, admin_user, order_number="4404", qty=1, location="A-01")
     repl = create_available_unit(
         client_id=w["celine"].id, warehouse_id=w["cel_ny"].id, upc="UPC-A", location="C-01"
@@ -289,38 +290,26 @@ def test_bb_53_54_concurrent_replacement(app, db, admin_user):
     db.session.commit()
     ticket = create_pick_ticket(order)
     original = InventoryUnit.query.filter_by(allocated_order_id=order.id, status=UnitStatus.RESERVED).one()
-    ticket_id = ticket.id
-    original_id = original.id
-    repl_id = repl.id
-    errors = []
-    successes = []
-
-    def race():
-        with app.app_context():
-            try:
-                substitute_unit(
-                    db.session.get(PickTicket, ticket_id),
-                    db.session.get(InventoryUnit, original_id),
-                    db.session.get(InventoryUnit, repl_id),
-                    user=admin_user,
-                )
-                successes.append(1)
-            except Exception as exc:  # noqa: BLE001
-                errors.append(str(exc))
-
-    t1 = threading.Thread(target=race)
-    t2 = threading.Thread(target=race)
-    t1.start()
-    t2.start()
-    t1.join()
-    t2.join()
-    assert len(successes) == 1, (successes, errors)
-    assert errors, (successes, errors)
-    assert any(
-        REPLACEMENT_UNAVAILABLE_MESSAGE in message
-        or "no longer reserved" in message.lower()
-        for message in errors
-    ), errors
+    with db.engine.connect() as held:
+        trans = held.begin()
+        held.execute(text("SELECT id FROM inventory_units WHERE id = :id FOR UPDATE"), {"id": repl.id})
+        with pytest.raises(PickTicketUpdateError, match="no longer available"):
+            substitute_unit(ticket, original, InventoryUnit.query.get(repl.id), user=admin_user)
+        trans.rollback()
+    db.session.rollback()
+    original = InventoryUnit.query.get(original.id)
+    repl = InventoryUnit.query.get(repl.id)
+    assert original.status == UnitStatus.RESERVED
+    assert repl.status == UnitStatus.AVAILABLE
+    assert InventoryIssue.query.count() == 0
+    substitute_unit(ticket, original, repl, user=admin_user)
+    with pytest.raises(PickTicketUpdateError):
+        substitute_unit(
+            PickTicket.query.get(ticket.id),
+            InventoryUnit.query.get(original.id),
+            InventoryUnit.query.get(repl.id),
+            user=admin_user,
+        )
     assert InventoryUnit.query.filter_by(status=UnitStatus.RESERVED, upc="UPC-A").count() == 1
     assert InventoryIssue.query.count() == 1
 
@@ -440,6 +429,39 @@ def test_bd_78_hundred_ticket_batch(app, db, admin_user):
     elapsed = time.perf_counter() - started
     assert data.startswith(b"%PDF")
     assert elapsed < 60
+
+
+def test_schema_backfill_does_not_attach_later_wave(app, db, admin_user):
+    from app.schema import ensure_v2_schema
+
+    w = _world(db)
+    _stock(w["celine"], w["cel_ny"], "UPC-A", 10)
+    order = _order(admin_user, w, 4801, 10)
+    for unit in InventoryUnit.query.filter_by(upc="UPC-A").limit(3):
+        unit.status = UnitStatus.SHIPPED
+    db.session.commit()
+    allocate_order(Order.query.get(order.id), user=admin_user)
+    approve_partial_allocation(Order.query.get(order.id), user=admin_user)
+    ticket1 = create_pick_ticket(Order.query.get(order.id))
+    ticket1_id = ticket1.id
+    order_id = order.id
+    for unit in InventoryUnit.query.filter_by(status=UnitStatus.SHIPPED, upc="UPC-A"):
+        if unit.allocated_order_id is None:
+            unit.status = UnitStatus.AVAILABLE
+    db.session.commit()
+    allocate_order(Order.query.get(order.id), user=admin_user)
+    db.session.commit()
+    db.session.close()
+    ensure_v2_schema()
+    pending = Allocation.query.filter_by(
+        order_id=order_id, status=AllocationStatus.ACTIVE, pick_ticket_id=None
+    ).count()
+    assert pending == 3
+    assert Allocation.query.filter_by(pick_ticket_id=ticket1_id, status=AllocationStatus.ACTIVE).count() == 7
+    ticket2 = create_pick_ticket(Order.query.get(order_id))
+    assert ticket2.id != ticket1_id
+    assert ticket2.ticket_sequence == 2
+    assert Allocation.query.filter_by(pick_ticket_id=ticket2.id, status=AllocationStatus.ACTIVE).count() == 3
 
 
 def test_be_end_to_end_wave(app, db, admin_user):

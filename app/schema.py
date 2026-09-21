@@ -73,7 +73,11 @@ def ensure_v2_schema() -> None:
                 conn.execute(text(stmt))
         orders = conn.execute(text("SELECT to_regclass('public.orders')")).scalar()
         if orders:
-            conn.execute(text("ALTER TABLE orders DROP CONSTRAINT IF EXISTS uq_order_client_number"))
+            has_old_uq = conn.execute(
+                text("SELECT 1 FROM pg_constraint WHERE conname = 'uq_order_client_number'")
+            ).scalar()
+            if has_old_uq:
+                conn.execute(text("ALTER TABLE orders DROP CONSTRAINT IF EXISTS uq_order_client_number"))
             conn.execute(
                 text(
                     "ALTER TABLE orders ADD COLUMN IF NOT EXISTS destination_sequence INTEGER NOT NULL DEFAULT 1"
@@ -154,8 +158,13 @@ def ensure_v2_schema() -> None:
             ):
                 conn.execute(text(stmt))
         if pick_tickets:
-            conn.execute(text("ALTER TABLE pick_tickets DROP CONSTRAINT IF EXISTS pick_tickets_order_id_key"))
-            conn.execute(text("ALTER TABLE pick_tickets DROP CONSTRAINT IF EXISTS uq_pick_tickets_order_id"))
+            for conname in ("pick_tickets_order_id_key", "uq_pick_tickets_order_id"):
+                exists = conn.execute(
+                    text("SELECT 1 FROM pg_constraint WHERE conname = :n"),
+                    {"n": conname},
+                ).scalar()
+                if exists:
+                    conn.execute(text(f"ALTER TABLE pick_tickets DROP CONSTRAINT IF EXISTS {conname}"))
             conn.execute(text("ALTER TABLE pick_tickets ADD COLUMN IF NOT EXISTS revision_number INTEGER NOT NULL DEFAULT 1"))
             conn.execute(text("CREATE INDEX IF NOT EXISTS ix_pick_tickets_order ON pick_tickets (order_id)"))
             has_ticket_sequence = conn.execute(
@@ -176,9 +185,8 @@ def ensure_v2_schema() -> None:
                         FROM pick_tickets pt
                         WHERE a.order_id = pt.order_id
                           AND a.pick_ticket_id IS NULL
-                          AND pt.ticket_sequence = (
-                            SELECT MIN(pt2.ticket_sequence) FROM pick_tickets pt2 WHERE pt2.order_id = a.order_id
-                          )
+                          AND a.wave_number = pt.ticket_sequence
+                          AND a.created_at <= pt.created_at
                         """
                     )
                 )
@@ -191,6 +199,7 @@ def ensure_v2_schema() -> None:
                         FROM pick_tickets pt
                         WHERE c.order_id = pt.order_id
                           AND c.pick_ticket_id IS NULL
+                          AND c.created_at <= pt.created_at
                           AND pt.ticket_sequence = (
                             SELECT MIN(pt2.ticket_sequence) FROM pick_tickets pt2 WHERE pt2.order_id = c.order_id
                           )

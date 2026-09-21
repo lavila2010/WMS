@@ -100,6 +100,14 @@ def substitute_unit(ticket: PickTicket, original: InventoryUnit, replacement: In
         raise PickTicketUpdateError("Replacement must be the same Client.")
     if original.warehouse_id != replacement.warehouse_id or original.warehouse_id != order.warehouse_id:
         raise PickTicketUpdateError("Replacement must be the same Warehouse.")
+    try:
+        return _substitute_locked(ticket, original, replacement, order)
+    except Exception:
+        db.session.rollback()
+        raise
+
+
+def _substitute_locked(ticket: PickTicket, original: InventoryUnit, replacement: InventoryUnit, order: Order) -> dict:
     locked_ticket = db.session.execute(
         select(PickTicket)
         .where(PickTicket.id == ticket.id)
