@@ -183,6 +183,7 @@ def ensure_v2_schema() -> None:
             "CREATE INDEX IF NOT EXISTS ix_import_batches_status ON import_batches (status)",
             "CREATE INDEX IF NOT EXISTS ix_import_batches_cwc ON import_batches (client_id, warehouse_id, created_at)",
             "CREATE INDEX IF NOT EXISTS ix_units_cwus ON inventory_units (client_id, warehouse_id, upc, status)",
+            "CREATE INDEX IF NOT EXISTS ix_units_cwuls ON inventory_units (client_id, warehouse_id, upc, location, status)",
             "CREATE INDEX IF NOT EXISTS ix_units_import_batch ON inventory_units (import_batch_id)",
             "CREATE INDEX IF NOT EXISTS ix_units_cwl ON inventory_units (client_id, warehouse_id, location)",
             "CREATE INDEX IF NOT EXISTS ix_txn_import_batch ON inventory_transactions (import_batch_id)",

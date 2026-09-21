@@ -6,6 +6,7 @@
   <form method="get" action="{{ url_for('inventory.upc_view') }}" class="scopebar" style="border:none;padding:0;background:none;">
     {% if scope.client_id %}<input type="hidden" name="client_id" value="{{ scope.client_id }}" />{% endif %}
     {% if scope.warehouse_id %}<input type="hidden" name="warehouse_id" value="{{ scope.warehouse_id }}" />{% endif %}
+    {% if show_zero %}<input type="hidden" name="show_zero" value="1" />{% endif %}
     <div><label>UPC</label><br /><input name="upc" value="{{ upc }}" placeholder="enter UPC" /></div>
     <button class="btn" type="submit">Lookup</button>
   </form>
@@ -48,6 +49,6 @@
   </table>
 </div>
 {% elif upc %}
-<div class="panel"><p class="sub">No on-hand inventory for UPC {{ upc }} in this scope.</p></div>
+<div class="panel"><p class="sub">No inventory for UPC {{ upc }} in this scope.</p></div>
 {% endif %}
 {% endblock %}

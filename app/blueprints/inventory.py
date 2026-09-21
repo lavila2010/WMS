@@ -39,6 +39,7 @@ from ..services.inventory_import import (
     template_bytes,
 )
 from ..services import inventory_query as iq
+from ..services.inventory_query import show_zero_enabled
 from ..services.inventory_visibility import apply_operational_visibility
 from ..services.tenant import accessible_clients, user_can_access_client
 
@@ -82,8 +83,13 @@ def _scope():
     }
 
 
+def _show_zero():
+    return show_zero_enabled(request.args.get("show_zero") or request.form.get("show_zero"))
+
+
 def _page(template, active_tab, **kwargs):
     ctx = _scope()
+    kwargs.setdefault("show_zero", _show_zero())
     return render_template(
         template,
         active_tab=active_tab,
@@ -107,13 +113,14 @@ def overview():
         client_id=scope["client_id"],
         warehouse_id=scope["warehouse_id"],
         client_ids=ctx["client_ids"],
+        include_zero=_show_zero(),
     )
     comparison = []
     if scope["client_id"] and not scope["warehouse_id"]:
         names = {w.id: w.warehouse_code for w in ctx["warehouses"]}
         comparison = [
             {**row, "warehouse": names.get(row["warehouse_id"], row["warehouse_id"])}
-            for row in iq.warehouse_comparison(scope["client_id"])
+            for row in iq.warehouse_comparison(scope["client_id"], include_zero=_show_zero())
         ]
     return _page(
         "inventory/overview.html",
@@ -325,6 +332,7 @@ def search():
             client_id=ctx["scope"]["client_id"],
             warehouse_id=ctx["scope"]["warehouse_id"],
             client_ids=ctx["client_ids"],
+            include_zero=_show_zero(),
         )
     return _page(
         "inventory/search.html",
@@ -350,6 +358,7 @@ def upc_view():
                 client_id=ctx["scope"]["client_id"],
                 warehouse_id=ctx["scope"]["warehouse_id"],
                 client_ids=ctx["client_ids"],
+                include_zero=True,
             )
             if r["upc"] == upc
         ]
@@ -464,9 +473,25 @@ def export_xlsx():
         client_id=ctx["scope"]["client_id"],
         warehouse_id=ctx["scope"]["warehouse_id"],
         client_ids=ctx["client_ids"],
+        include_zero=_show_zero(),
     )
     clients = {c.id: c.client_code for c in Client.query.all()}
     warehouses = {w.id: w.warehouse_code for w in Warehouse.query.all()}
+    columns = [
+        "Client",
+        "Warehouse",
+        "UPC",
+        "SKU",
+        "Description",
+        "Style",
+        "Color",
+        "Size",
+        "Location",
+        "Available",
+        "Reserved",
+        "Packed",
+        "ON_HAND",
+    ]
     frame = pd.DataFrame(
         [
             {
@@ -482,10 +507,11 @@ def export_xlsx():
                 "Available": r["available"],
                 "Reserved": r["reserved"],
                 "Packed": r["packed"],
-                "OnHand": r["on_hand"],
+                "ON_HAND": r["on_hand"],
             }
             for r in rows
-        ]
+        ],
+        columns=columns,
     )
     buffer = io.BytesIO()
     frame.to_excel(buffer, index=False)
