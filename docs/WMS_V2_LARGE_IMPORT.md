@@ -19,30 +19,40 @@ An 18,436-row / 50,336-unit file therefore issued 100,000+ statements inside one
 1. Parse Excel once (`dtype=str`).
 2. Persist source rows in `inventory_import_rows`.
 3. Store a compact preview only (batch id, counts, first 100 rows, capped errors).
-4. Confirm marks the batch `PROCESSING` and returns.
-5. A Gunicorn worker thread bulk-inserts `inventory_units` with `INSERT … RETURNING`, then bulk-inserts matching `IMPORT` ledger rows.
+4. Confirm marks the batch `PROCESSING` and returns. It does not start a thread.
+5. The Render worker `wms-v2-import-worker` (`python -m app.workers.inventory_import_worker`) claims `PROCESSING` batches from PostgreSQL and bulk-inserts `inventory_units` with `INSERT … RETURNING`, then matching `IMPORT` ledger rows.
 6. Allocation and operational availability require `InventoryUnit.status = AVAILABLE` **and** (`import_batch_id IS NULL` or `ImportBatch.status = COMPLETED`).
 
 Unit architecture is unchanged: Quantity 5,105 creates 5,105 unit rows and 5,105 IMPORT transactions.
 
 ## Background execution on Render
 
-There is **no dedicated Render worker** on the current blueprint (`wms-v2` is a web service only).
+Durable executor: Render Background Worker `wms-v2-import-worker`.
+
+```text
+python -m app.workers.inventory_import_worker
+```
+
+Equivalent Flask CLI: `flask inventory-import-worker`.
 
 Confirm Import:
 
 1. Authorizes Client/Warehouse.
 2. CAS `VALIDATED → PROCESSING`.
-3. Starts a daemon thread in the handling Gunicorn worker.
-4. Returns the processing page immediately.
+3. Returns the processing page immediately. No in-process thread.
+4. The worker polls PostgreSQL for `status=PROCESSING`, claims one batch with advisory lock `87421001, batch_id`, and calls `process_import_batch()`.
 
-The job is durable in PostgreSQL (`units_created`, `current_source_row`, advisory lock `87421001, batch_id`). Closing the browser does not stop the thread. If the worker is recycled, the processing page polls every 1.5s and `POST /inventory/imports/<id>/advance` resumes remaining chunks. Operators can also run:
+Closing the browser has no effect. A worker or web redeploy leaves the batch `PROCESSING`; the next worker resume uses `units_created` and staged rows. The UI polls `GET /inventory/imports/<id>/status` only.
+
+`POST /inventory/imports/<id>/advance` is admin-only recovery. It is not used by the upload UI.
+
+Admin fallback for a single batch:
 
 ```text
 flask process-inventory-import --batch-id <id>
 ```
 
-on the same web service (Render one-off / shell). That is the supported fallback until a worker service is provisioned.
+The worker uses the same `WMS_V2_DATABASE_URL` as `wms-v2`. Do not create a second database.
 
 `MAX_UPLOAD_MB=50` is configured for future files. It is **not** the fix for this performance issue.
 

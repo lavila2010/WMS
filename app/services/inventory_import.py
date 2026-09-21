@@ -12,7 +12,6 @@ import io
 import json
 import math
 import re
-import threading
 import uuid
 from datetime import date, datetime
 from pathlib import Path
@@ -73,8 +72,6 @@ ADVISORY_LOCK_CLASS = 87421001
 
 _SCI = re.compile(r"^[+-]?\d+(\.\d+)?[eE][+-]?\d+$")
 _FLOAT_INT = re.compile(r"^[+-]?\d+\.0+$")
-_JOBS: dict[int, threading.Thread] = {}
-_JOBS_GUARD = threading.Lock()
 
 
 class ImportErrorClosed(ValueError):
@@ -823,25 +820,23 @@ def process_import_batch(
             db.session.rollback()
 
 
-def start_background_import(app, batch_id: int) -> None:
-    with _JOBS_GUARD:
-        existing = _JOBS.get(batch_id)
-        if existing is not None and existing.is_alive():
-            return
-
-        def run():
-            with app.app_context():
-                try:
-                    process_import_batch(batch_id)
-                except Exception:
-                    current_app.logger.exception("inventory import batch %s failed", batch_id)
-
-        thread = threading.Thread(target=run, name=f"inv-import-{batch_id}", daemon=True)
-        _JOBS[batch_id] = thread
-        thread.start()
+def processing_inventory_batch_ids() -> list[int]:
+    """Return PROCESSING inventory batches in durable-queue order."""
+    rows = (
+        ImportBatch.query.filter_by(type=ImportType.INVENTORY, status=ImportBatchStatus.PROCESSING)
+        .order_by(ImportBatch.started_at.asc().nullsfirst(), ImportBatch.id.asc())
+        .with_entities(ImportBatch.id)
+        .all()
+    )
+    return [row[0] for row in rows]
 
 
 def begin_processing(batch_id: int, *, user, run: str = "async") -> ImportBatch:
+    """Mark a validated batch PROCESSING. The Render worker executes it.
+
+    ``run='sync'`` is test/admin-only and processes immediately in-process.
+    The web Confirm path must use ``run='async'`` and must not start a thread.
+    """
     batch = db.session.get(ImportBatch, batch_id)
     if batch is None:
         raise ImportErrorClosed("Import batch was not found.")
@@ -851,8 +846,8 @@ def begin_processing(batch_id: int, *, user, run: str = "async") -> ImportBatch:
     if batch.status == ImportBatchStatus.COMPLETED:
         return batch
     if batch.status == ImportBatchStatus.PROCESSING:
-        if run == "async":
-            start_background_import(current_app._get_current_object(), batch.id)
+        if run == "sync":
+            return process_import_batch(batch.id)
         return batch
     if batch.status == ImportBatchStatus.FAILED:
         raise ImportErrorClosed("Import failed. Use Retry Import.")
@@ -877,7 +872,6 @@ def begin_processing(batch_id: int, *, user, run: str = "async") -> ImportBatch:
         return batch
     if run == "sync":
         return process_import_batch(batch.id)
-    start_background_import(current_app._get_current_object(), batch.id)
     return batch
 
 
@@ -905,7 +899,6 @@ def retry_import(batch_id: int, *, user, run: str = "async") -> ImportBatch:
         raise ImportErrorClosed("Retry could not be started.")
     if run == "sync":
         return process_import_batch(batch.id)
-    start_background_import(current_app._get_current_object(), batch.id)
     return batch
 
 

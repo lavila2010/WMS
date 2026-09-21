@@ -11,8 +11,9 @@ Do **not** run `init-db` as the Gunicorn start command.
 Source of truth for this deploy:
 
 - Branch: `cursor/wms-v2-rebuild-6b85`
-- Blueprint: `render.yaml` service `wms-v2` (V1 `wms` remains listed and untouched)
-- Entry: `wsgi:app`
+- Blueprint: `render.yaml` services `wms-v2` (web) and `wms-v2-import-worker` (V1 `wms` remains listed and untouched)
+- Web entry: `wsgi:app`
+- Worker entry: `python -m app.workers.inventory_import_worker`
 
 ---
 
@@ -87,6 +88,14 @@ gunicorn wsgi:app --bind 0.0.0.0:$PORT --workers 2 --timeout 120
 ```
 
 Do **not** put `flask --app wsgi init-db` or `create-admin` in the start command.
+
+Inventory import worker (`wms-v2-import-worker`), same Aiven `WMS_V2_DATABASE_URL`:
+
+```text
+python -m app.workers.inventory_import_worker
+```
+
+Do **not** create a second database for the worker.
 
 ---
 

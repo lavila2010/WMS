@@ -250,6 +250,9 @@ def import_status(batch_id):
 @bp.route("/imports/<int:batch_id>/advance", methods=["POST"])
 @permission_required("INVENTORY_UPLOAD")
 def import_advance(batch_id):
+    """Admin-only recovery. The UI must not call this; the worker executes jobs."""
+    if not current_user.is_admin():
+        abort(403)
     batch = db.session.get(ImportBatch, batch_id)
     if batch is None or not user_can_access_client(current_user, batch.client_id):
         abort(404)

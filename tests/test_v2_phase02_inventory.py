@@ -232,12 +232,12 @@ def test_p2_http_import_and_isolation(app, db, admin_client):
         follow_redirects=True,
     )
     assert confirm.status_code == 200
-    assert b"Inventory Import Processing" in confirm.data or b"COMPLETED" in confirm.data
+    assert b"Inventory Import Processing" in confirm.data
     batch = ImportBatch.query.filter_by(type="INVENTORY", client_id=celine.id).one()
-    if batch.status != "COMPLETED":
-        from app.services.inventory_import import process_import_batch
+    assert batch.status == "PROCESSING"
+    from app.workers.inventory_import_worker import process_due_batches
 
-        process_import_batch(batch.id)
+    process_due_batches()
     assert InventoryUnit.query.count() == 3
 
     other = app.test_client()

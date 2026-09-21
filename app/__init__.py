@@ -175,8 +175,15 @@ def _register_cli(app):
     @app.cli.command("process-inventory-import")
     @click.option("--batch-id", required=True, type=int)
     def process_inventory_import_cmd(batch_id):
-        """Resume a PROCESSING/FAILED inventory import on the web service or a one-off job."""
+        """Admin fallback: process one inventory import batch in this process."""
         from .services.inventory_import import process_import_batch
 
         batch = process_import_batch(batch_id)
         click.echo(f"Batch {batch.id} status={batch.status} units={batch.units_created}")
+
+    @app.cli.command("inventory-import-worker")
+    def inventory_import_worker_cmd():
+        """Run the durable inventory import worker loop (same as the Render worker)."""
+        from .workers.inventory_import_worker import run_forever
+
+        run_forever()

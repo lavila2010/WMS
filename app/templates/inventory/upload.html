@@ -35,7 +35,7 @@
 </div>
 
 {% if processing_batch %}
-<div class="panel" id="import-progress" data-status-url="{{ url_for('inventory.import_status', batch_id=processing_batch.batch_id) }}" data-advance-url="{{ url_for('inventory.import_advance', batch_id=processing_batch.batch_id) }}">
+<div class="panel" id="import-progress" data-status-url="{{ url_for('inventory.import_status', batch_id=processing_batch.batch_id) }}">
   {% if processing_batch.status == 'FAILED' %}
     <h2>IMPORT FAILED</h2>
   {% elif processing_batch.status == 'COMPLETED' %}
@@ -89,9 +89,6 @@
   var panel = document.getElementById("import-progress");
   if (!panel) return;
   var statusUrl = panel.getAttribute("data-status-url");
-  var advanceUrl = panel.getAttribute("data-advance-url");
-  var csrf = document.querySelector('meta[name="csrf-token"]');
-  var token = csrf ? csrf.getAttribute("content") : "";
   function render(data) {
     document.getElementById("imp-rows").textContent = data.rows_validated + " / " + data.rows_submitted;
     document.getElementById("imp-units").textContent = data.units_created + " / " + data.units_expected;
@@ -121,11 +118,6 @@
       .then(function (data) {
         render(data);
         if (data.status === "PROCESSING") {
-          fetch(advanceUrl, {
-            method: "POST",
-            headers: { "X-CSRFToken": token, "Accept": "application/json", "X-Requested-With": "XMLHttpRequest" },
-            credentials: "same-origin"
-          }).catch(function () {});
           setTimeout(poll, 1500);
         }
       })

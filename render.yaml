@@ -37,3 +37,30 @@ services:
         value: local
       - key: MAX_UPLOAD_MB
         value: "50"
+  - type: worker
+    name: wms-v2-import-worker
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: python -m app.workers.inventory_import_worker
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.6"
+      - key: WMS_ENV
+        value: production
+      - key: WMS_V2_DATABASE_URL
+        fromService:
+          type: web
+          name: wms-v2
+          envVarKey: WMS_V2_DATABASE_URL
+      - key: SECRET_KEY
+        fromService:
+          type: web
+          name: wms-v2
+          envVarKey: SECRET_KEY
+      - key: WMS_TIMEZONE
+        value: America/New_York
+      - key: DOCUMENT_STORE
+        value: local
+      - key: MAX_UPLOAD_MB
+        value: "50"
