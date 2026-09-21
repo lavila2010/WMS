@@ -49,6 +49,19 @@ class OrderStatus:
     ]
 
 
+class PickTicketStatus:
+    OPEN = "OPEN"
+    CLOSED = "CLOSED"
+    CANCELLED = "CANCELLED"
+    ALL = [OPEN, CLOSED, CANCELLED]
+    LEGACY_OPEN = frozenset({OPEN, "ACTIVE"})
+
+
+CLOSED_PICK_TICKET_MESSAGE = (
+    "Pick Ticket is closed because the associated order is complete."
+)
+
+
 class AllocationStatus:
     ACTIVE = "ACTIVE"
     RELEASED = "RELEASED"

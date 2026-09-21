@@ -9,6 +9,11 @@
 <div class="card start-order-card">
   <h2>Start Order</h2>
   <p class="sub" style="margin-bottom:1rem;">Enter or scan the Pick Ticket number associated with the client order.</p>
+  {% if pdf_id %}
+  <p class="sub">Opening Order Closure Report…
+    <a href="{{ url_for('processing.open_pdf', document_id=pdf_id) }}" target="_blank" rel="noopener">Open PDF</a>
+  </p>
+  {% endif %}
   <form method="post" action="{{ url_for('processing.find') }}" class="inline-form">
     {% include "_csrf.html" %}
     <label>Pick Ticket Number

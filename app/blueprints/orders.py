@@ -378,9 +378,17 @@ def template():
 @bp.route("/pick-tickets")
 @permission_required("PICK_TICKET_VIEW")
 def pick_tickets():
+    from ..constants import PickTicketStatus
+    from ..services.pick_tickets import list_pick_tickets
+
     ctx = _scope()
     eligible = []
     tickets = []
+    q = request.args.get("q", "").strip()
+    status = (request.args.get("status") or PickTicketStatus.OPEN).strip() or PickTicketStatus.OPEN
+    date_str = request.args.get("date", "").strip()
+    sort = request.args.get("sort", "created").strip() or "created"
+    direction = request.args.get("dir", "desc").strip() or "desc"
     if ctx["scope"]["client_id"]:
         eligible = (
             apply_operational_order_visibility(
@@ -389,12 +397,28 @@ def pick_tickets():
             .order_by(Order.created_at.desc())
             .all()
         )
-        tickets = (
-            PickTicket.query.filter_by(client_id=ctx["scope"]["client_id"])
-            .order_by(PickTicket.created_at.desc())
-            .all()
+        tickets = list_pick_tickets(
+            client_id=ctx["scope"]["client_id"],
+            division_id=ctx["scope"]["division_id"],
+            warehouse_id=ctx["scope"]["warehouse_id"],
+            status=status,
+            date_str=date_str,
+            q=q,
+            sort=sort,
+            direction=direction,
         )
-    return _page("orders/pick_tickets.html", "pick_tickets", tickets=tickets, eligible=eligible)
+    return _page(
+        "orders/pick_tickets.html",
+        "pick_tickets",
+        tickets=tickets,
+        eligible=eligible,
+        q=q,
+        status=status,
+        date_str=date_str,
+        sort=sort,
+        direction=direction,
+        ticket_statuses=["ALL", "OPEN", "CLOSED", "CANCELLED"],
+    )
 
 
 @bp.route("/allocation-report")
@@ -422,7 +446,7 @@ def generate_pick_ticket(order_id):
 @bp.route("/pick-tickets/<int:ticket_id>")
 @permission_required("PICK_TICKET_VIEW")
 def pick_ticket_preview(ticket_id):
-    from ..services.pick_tickets import ticket_lines
+    from ..services.pick_tickets import desired_ticket_status, ticket_lines
 
     ticket = db.session.get(PickTicket, ticket_id)
     if ticket is None:
@@ -434,6 +458,7 @@ def pick_ticket_preview(ticket_id):
         ticket=ticket,
         order=order,
         lines=ticket_lines(order),
+        ticket_status=desired_ticket_status(order),
     )
 
 
@@ -462,7 +487,7 @@ def pick_ticket_pdf(ticket_id):
     require_entity_client(current_user, ticket)
     return send_file(
         io.BytesIO(render_pdf(ticket)),
-        as_attachment=True,
+        as_attachment=False,
         download_name=f"{ticket.pick_ticket_number}.pdf",
         mimetype="application/pdf",
     )

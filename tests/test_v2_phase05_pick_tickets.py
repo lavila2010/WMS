@@ -70,7 +70,16 @@ def test_p5_05_lines_show_location_upc_qty(app, db, admin_user):
     create_pick_ticket(order)
     lines = ticket_lines(order)
     assert lines == [
-        {"location": "C-09", "upc": "UPC-A", "sku": "SKU-A", "description": None, "qty": 3}
+        {
+            "location": "C-09",
+            "upc": "UPC-A",
+            "sku": "SKU-A",
+            "description": None,
+            "style": None,
+            "color": None,
+            "size": None,
+            "qty": 3,
+        }
     ]
 
 

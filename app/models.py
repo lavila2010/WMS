@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from .constants import AllocationStatus, CartonStatus, OrderStatus, Role, UnitStatus
+from .constants import AllocationStatus, CartonStatus, OrderStatus, PickTicketStatus, Role, UnitStatus
 from .extensions import db
 
 
@@ -463,7 +463,7 @@ class PickTicket(db.Model):
     order_id = db.Column(db.Integer, db.ForeignKey("orders.id"), unique=True, nullable=False)
     pick_ticket_number = db.Column(db.String(96), unique=True, nullable=False, index=True)
     ticket_sequence = db.Column(db.Integer, nullable=False, default=1)
-    status = db.Column(db.String(16), nullable=False, default="ACTIVE")
+    status = db.Column(db.String(16), nullable=False, default=PickTicketStatus.OPEN)
     print_count = db.Column(db.Integer, nullable=False, default=0)
     last_printed_at = db.Column(db.DateTime)
     last_printed_by = db.Column(db.String(64))

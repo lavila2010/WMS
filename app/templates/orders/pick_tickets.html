@@ -11,6 +11,38 @@
         {% endfor %}
       </select>
     </label>
+    <label>Division
+      <select name="division_id">
+        <option value="">All divisions</option>
+        {% for d in options.divisions %}
+          <option value="{{ d.id }}" {{ 'selected' if scope.division_id == d.id }}>{{ d.code }} — {{ d.name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Warehouse
+      <select name="warehouse_id">
+        <option value="">All warehouses</option>
+        {% for w in options.warehouses %}
+          <option value="{{ w.id }}" {{ 'selected' if scope.warehouse_id == w.id }}>{{ w.warehouse_code }} — {{ w.name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Status
+      <select name="status">
+        {% for s in ticket_statuses %}
+          <option value="{{ s }}" {{ 'selected' if status == s }}>{{ 'All' if s == 'ALL' else s|capitalize }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Date
+      <input type="date" name="date" value="{{ date_str }}" />
+    </label>
+    <label>Search
+      <input name="q" value="{{ q }}" placeholder="Ticket, order, customer" />
+    </label>
+    <input type="hidden" name="sort" value="{{ sort }}" />
+    <input type="hidden" name="dir" value="{{ direction }}" />
+    <button type="submit">Apply</button>
   </form>
 </div>
 
@@ -39,20 +71,65 @@
     </tbody>
   </table>
 </div>
+{% macro sort_link(key, label) -%}
+  {% set next_dir = 'asc' if not (sort == key and direction == 'asc') else 'desc' %}
+  <a class="sort-link" href="{{ url_for('orders.pick_tickets', client_id=scope.client_id, division_id=scope.division_id or None, warehouse_id=scope.warehouse_id or None, status=status, date=date_str or None, q=q or None, sort=key, dir=next_dir) }}">{{ label }}{% if sort == key %}{% if direction == 'asc' %} ↑{% else %} ↓{% endif %}{% endif %}</a>
+{%- endmacro %}
 <div class="card">
   <h2>Pick Tickets</h2>
-  <table>
-    <thead><tr><th>Ticket</th><th>WMS Order</th><th>Prints</th><th></th></tr></thead>
+  <table class="pick-tickets-table">
+    <thead>
+      <tr>
+        <th>{{ sort_link('ticket', 'Pick Ticket #') }}</th>
+        <th>{{ sort_link('wms_order', 'WMS Order ID') }}</th>
+        <th>Client Order #</th>
+        <th>Client</th>
+        <th>Division</th>
+        <th>Warehouse</th>
+        <th>{{ sort_link('customer', 'Customer') }}</th>
+        <th class="right">{{ sort_link('units', 'Units') }}</th>
+        <th class="right">Locations</th>
+        <th>{{ sort_link('status', 'Status') }}</th>
+        <th class="right">Print Count</th>
+        <th>{{ sort_link('printed', 'Last Printed') }}</th>
+        <th>Last Printed By</th>
+        <th>{{ sort_link('created', 'Created') }}</th>
+        <th>Action</th>
+      </tr>
+    </thead>
     <tbody>
-      {% for t in tickets %}
+      {% for row in tickets %}
+        {% set t = row.ticket %}
+        {% set o = row.order %}
         <tr>
           <td class="mono">{{ t.pick_ticket_number }}</td>
-          <td class="mono">{{ t.order.wms_order_id if t.order else t.order_id }}</td>
-          <td>{{ t.print_count }}</td>
-          <td class="right"><a class="btn-secondary btn" href="{{ url_for('orders.pick_ticket_preview', ticket_id=t.id) }}">Open</a></td>
+          <td class="mono">{{ o.wms_order_id }}</td>
+          <td class="mono">{{ o.client_order_number }}</td>
+          <td>{{ o.client.client_code if o.client else '—' }}</td>
+          <td>{{ o.division.code if o.division else '—' }}</td>
+          <td>{{ o.warehouse.warehouse_code if o.warehouse else '—' }}</td>
+          <td>{{ o.customer or '—' }}</td>
+          <td class="right num-cell">{{ row.units }}</td>
+          <td class="right num-cell">{{ row.locations }}</td>
+          <td><span class="badge badge-{{ row.status }}">{{ row.status }}</span></td>
+          <td class="right num-cell">{{ t.print_count }}</td>
+          <td class="muted">{{ t.last_printed_at.strftime('%Y-%m-%d %H:%M') if t.last_printed_at else '—' }}</td>
+          <td>{{ t.last_printed_by or '—' }}</td>
+          <td class="muted">{{ t.created_at.strftime('%Y-%m-%d %H:%M') if t.created_at else '—' }}</td>
+          <td>
+            <div class="btn-row" style="margin:0;">
+              <a class="btn-secondary btn" href="{{ url_for('orders.pick_ticket_preview', ticket_id=t.id) }}">View</a>
+              {% if can('PICK_TICKET_PRINT') %}
+              <form method="post" action="{{ url_for('orders.pick_ticket_print', ticket_id=t.id) }}">{% include "_csrf.html" %}<button class="btn-secondary" type="submit">{{ 'Reprint' if row.status != 'OPEN' or t.print_count else 'Print' }}</button></form>
+              {% endif %}
+              {% if row.status == 'OPEN' and can('PROCESSING_EXECUTE') %}
+              <form method="post" action="{{ url_for('processing.find') }}">{% include "_csrf.html" %}<input type="hidden" name="pick_ticket_number" value="{{ t.pick_ticket_number }}" /><button type="submit">Process Order</button></form>
+              {% endif %}
+            </div>
+          </td>
         </tr>
       {% else %}
-        <tr><td colspan="4" class="muted">No pick tickets yet.</td></tr>
+        <tr><td colspan="15" class="muted">No pick tickets match the selected filters.</td></tr>
       {% endfor %}
     </tbody>
   </table>

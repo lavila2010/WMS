@@ -9,7 +9,14 @@ from uuid import uuid4
 from sqlalchemy import select, text
 
 from ..auth import current_actor, record_audit
-from ..constants import CartonStatus, LedgerType, OrderStatus, UnitStatus
+from ..constants import (
+    CLOSED_PICK_TICKET_MESSAGE,
+    CartonStatus,
+    LedgerType,
+    OrderStatus,
+    PickTicketStatus,
+    UnitStatus,
+)
 from ..extensions import db
 from ..models import (
     Allocation,
@@ -21,16 +28,45 @@ from ..models import (
     OrderLine,
     PickTicket,
     User,
+    Document,
 )
 from .documents import persist_closure_pdf
 from .inventory_ledger import LedgerError, transition_unit
 from .order_visibility import order_is_operational
+from .pick_tickets import desired_ticket_status, sync_ticket_status
 
 LOCK_MESSAGE = "Order is currently being processed by another user."
+CANCELLED_TICKET_MESSAGE = "Pick ticket is cancelled."
+PROCESSABLE_ORDER_STATUSES = {OrderStatus.PICK_TICKET_READY, OrderStatus.PROCESSING}
 
 
 class ProcessingError(ValueError):
     pass
+
+
+def assert_ticket_processable(ticket: PickTicket, order: Order | None = None) -> Order:
+    order = order or db.session.get(Order, ticket.order_id)
+    if ticket is None or order is None:
+        raise ProcessingError("Pick ticket not found.")
+    derived = desired_ticket_status(order)
+    stored = ticket.status if ticket.status != "ACTIVE" else PickTicketStatus.OPEN
+    if (
+        derived == PickTicketStatus.CLOSED
+        or stored == PickTicketStatus.CLOSED
+        or order.status == OrderStatus.CLOSED
+    ):
+        raise ProcessingError(CLOSED_PICK_TICKET_MESSAGE)
+    if (
+        derived == PickTicketStatus.CANCELLED
+        or stored == PickTicketStatus.CANCELLED
+        or order.status == OrderStatus.CANCELLED
+    ):
+        raise ProcessingError(CANCELLED_TICKET_MESSAGE)
+    if stored != PickTicketStatus.OPEN:
+        raise ProcessingError(CLOSED_PICK_TICKET_MESSAGE)
+    if order.status not in PROCESSABLE_ORDER_STATUSES:
+        raise ProcessingError("Order is not eligible for processing.")
+    return order
 
 
 def find_ticket(number: str) -> PickTicket:
@@ -40,10 +76,15 @@ def find_ticket(number: str) -> PickTicket:
     order = db.session.get(Order, ticket.order_id)
     if order is not None and not order_is_operational(order):
         raise ProcessingError("Pick ticket not found.")
+    assert_ticket_processable(ticket, order)
     return ticket
 
 
 def acquire_lock(order: Order, user: User) -> str:
+    ticket = PickTicket.query.filter_by(order_id=order.id).first()
+    if ticket is None:
+        raise ProcessingError("Pick ticket not found.")
+    assert_ticket_processable(ticket, order)
     lock_id = uuid4().hex
     result = db.session.execute(
         text(
@@ -105,6 +146,9 @@ def next_carton_number(order: Order) -> str:
 
 
 def ensure_open_carton(order: Order, user: User) -> Carton:
+    ticket = PickTicket.query.filter_by(order_id=order.id).first()
+    if ticket:
+        assert_ticket_processable(ticket, order)
     current = (
         Carton.query.filter_by(order_id=order.id)
         .filter(Carton.status != CartonStatus.CLOSED)
@@ -200,6 +244,9 @@ def carton_contents(carton: Carton) -> list[dict]:
 
 def scan_upc(order: Order, carton: Carton, upc: str, user: User) -> InventoryUnit:
     require_owner(order, user)
+    ticket = PickTicket.query.filter_by(order_id=order.id).first()
+    if ticket:
+        assert_ticket_processable(ticket, order)
     upc = (upc or "").strip()
     if not upc:
         raise ProcessingError("UPC is required.")
@@ -414,6 +461,8 @@ def kpis(order: Order, current: Carton | None) -> dict:
 
 
 def can_close(order: Order) -> tuple[bool, str]:
+    if order.status == OrderStatus.CLOSED:
+        return False, CLOSED_PICK_TICKET_MESSAGE
     lines = OrderLine.query.filter_by(order_id=order.id).all()
     if not lines:
         return False, "Order has no lines."
@@ -437,6 +486,8 @@ def can_close(order: Order) -> tuple[bool, str]:
 
 def close_order(order: Order, user: User):
     require_owner(order, user)
+    if order.status == OrderStatus.CLOSED:
+        raise ProcessingError(CLOSED_PICK_TICKET_MESSAGE)
     ok, reason = can_close(order)
     if not ok:
         raise ProcessingError(reason)
@@ -477,13 +528,24 @@ def close_order(order: Order, user: User):
         created_by_username=user.username,
     )
     db.session.add(invoice)
+    ticket = PickTicket.query.filter_by(order_id=order.id).first()
+    if ticket:
+        sync_ticket_status(ticket, order)
+        record_audit(
+            "PICK_TICKET_CLOSED",
+            module="Processing",
+            entity_type="pick_ticket",
+            entity_id=ticket.id,
+            client_id=order.client_id,
+            detail=f"{ticket.pick_ticket_number} {order.wms_order_id}",
+        )
     record_audit(
         "ORDER_RECONCILED",
         module="Processing",
         entity_type="order",
         entity_id=order.id,
         client_id=order.client_id,
-        detail=order.wms_order_id,
+        detail=f"{order.wms_order_id} {ticket.pick_ticket_number if ticket else ''}".strip(),
     )
     record_audit(
         "ORDER_CLOSED",
@@ -491,8 +553,19 @@ def close_order(order: Order, user: User):
         entity_type="order",
         entity_id=order.id,
         client_id=order.client_id,
-        detail=order.wms_order_id,
+        detail=f"{order.wms_order_id} {ticket.pick_ticket_number if ticket else ''}".strip(),
     )
+    document = Document(
+        client_id=order.client_id,
+        order_id=order.id,
+        type="ORDER_CLOSURE",
+        filename=f"{order.wms_order_id}-closure.pdf",
+        storage_key=f"pending-closure-{order.id}",
+        created_by_user_id=user.id,
+        created_by_username=user.username,
+    )
+    db.session.add(document)
+    db.session.commit()
     document = persist_closure_pdf(order)
     db.session.commit()
     return document

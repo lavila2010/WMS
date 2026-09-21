@@ -152,14 +152,24 @@ def closure(order_id):
     order = db.session.get(Order, order_id)
     require_entity_client(current_user, order)
     document = persist_closure_pdf(order)
+    already = bool(document.storage_key) and not str(document.storage_key).startswith("pending-")
     record_audit(
         "PDF_PRINTED",
         module="Reports",
         entity_type="document",
         entity_id=document.id,
         client_id=order.client_id,
-        detail="reprint closure",
+        detail=f"reprint closure {order.wms_order_id}",
     )
+    if already:
+        record_audit(
+            "PDF_REPRINTED",
+            module="Reports",
+            entity_type="document",
+            entity_id=document.id,
+            client_id=order.client_id,
+            detail=f"reprint closure {order.wms_order_id}",
+        )
     db.session.commit()
     return redirect(url_for("reports.download", document_id=document.id))
 

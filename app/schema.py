@@ -93,6 +93,11 @@ def ensure_v2_schema() -> None:
                     """
                 )
             )
+        pick_tickets = conn.execute(text("SELECT to_regclass('public.pick_tickets')")).scalar()
+        if pick_tickets:
+            conn.execute(
+                text("UPDATE pick_tickets SET status = 'OPEN' WHERE status = 'ACTIVE'")
+            )
         txns = conn.execute(text("SELECT to_regclass('public.inventory_transactions')")).scalar()
         if txns:
             conn.execute(

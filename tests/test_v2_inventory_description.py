@@ -1,8 +1,10 @@
 """Description is a first-class Client-scoped inventory attribute."""
 
-import re
-import zlib
-from base64 import a85decode
+from tests.pdf_support import extract_pdf_text
+
+
+def _pdf_text(data: bytes) -> bytes:
+    return extract_pdf_text(data).encode("latin-1", "replace")
 
 from app.constants import OrderStatus
 from app.models import InventoryUnit, Order, OrderLine
@@ -19,18 +21,6 @@ from tests.test_v2_phase02_inventory import _masters, _row, _xlsx
 from tests.test_v2_phase03_orders import _line, _xlsx as _order_xlsx
 from tests.test_v2_phase04_allocation import _import_order, _stock, _world
 from tests.test_v2_phase06_processing import _processing_order
-
-
-def _pdf_text(data: bytes) -> bytes:
-    match = re.search(rb"stream\r?\n(.*?)endstream", data, re.S)
-    if not match:
-        return data
-    payload = match.group(1).strip()
-    try:
-        inflated = zlib.decompress(a85decode(payload, adobe=True))
-    except Exception:
-        return data
-    return inflated
 
 
 def test_description_import_persists_and_expands(app, db, admin_user):

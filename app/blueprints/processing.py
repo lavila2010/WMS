@@ -13,6 +13,7 @@ from ..services.documents import get_store
 from ..services.processing import (
     ProcessingError,
     acquire_lock,
+    assert_ticket_processable,
     can_close,
     carton_contents,
     close_order,
@@ -72,8 +73,9 @@ def find():
 @bp.route("/<int:order_id>/confirm", methods=["POST"])
 @permission_required("PROCESSING_EXECUTE")
 def confirm(order_id):
-    order, _ticket = _ticket_and_order(order_id)
+    order, ticket = _ticket_and_order(order_id)
     try:
+        assert_ticket_processable(ticket, order)
         acquire_lock(order, current_user)
         ensure_open_carton(order, current_user)
         db.session.commit()

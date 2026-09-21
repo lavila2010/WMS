@@ -4,6 +4,7 @@
 <div class="page-header">
   <div class="section-title">
     <h1>{{ ticket.pick_ticket_number }}</h1>
+    <span class="badge badge-{{ ticket_status }}">{{ ticket_status }}</span>
     <span class="badge">PRINTS {{ ticket.print_count }}</span>
   </div>
   <p class="sub">
@@ -13,7 +14,7 @@
 </div>
 <div class="card">
   <table>
-    <thead><tr><th>Location</th><th>UPC</th><th>SKU</th><th>Description</th><th class="right">Qty</th></tr></thead>
+    <thead><tr><th>Location</th><th>UPC</th><th>SKU</th><th>Description</th><th>Style</th><th>Color</th><th>Size</th><th class="right">Qty</th></tr></thead>
     <tbody>
       {% for line in lines %}
         <tr>
@@ -21,15 +22,21 @@
           <td class="mono">{{ line.upc }}</td>
           <td>{{ line.sku or '—' }}</td>
           <td>{{ line.description or '—' }}</td>
+          <td>{{ line.style or '—' }}</td>
+          <td>{{ line.color or '—' }}</td>
+          <td>{{ line.size or '—' }}</td>
           <td class="right num-cell">{{ line.qty }}</td>
         </tr>
       {% endfor %}
     </tbody>
   </table>
   <div class="btn-row">
-    <a class="btn-secondary btn" href="{{ url_for('orders.pick_ticket_pdf', ticket_id=ticket.id) }}">Download PDF</a>
+    <a class="btn-secondary btn" href="{{ url_for('orders.pick_ticket_pdf', ticket_id=ticket.id) }}" target="_blank" rel="noopener">View PDF</a>
     {% if can('PICK_TICKET_PRINT') %}
-    <form method="post" action="{{ url_for('orders.pick_ticket_print', ticket_id=ticket.id) }}">{% include "_csrf.html" %}<button type="submit">Record print / reprint</button></form>
+    <form method="post" action="{{ url_for('orders.pick_ticket_print', ticket_id=ticket.id) }}">{% include "_csrf.html" %}<button type="submit">{{ 'Reprint' if ticket_status != 'OPEN' or ticket.print_count else 'Print' }}</button></form>
+    {% endif %}
+    {% if ticket_status == 'OPEN' and can('PROCESSING_EXECUTE') %}
+    <form method="post" action="{{ url_for('processing.find') }}">{% include "_csrf.html" %}<input type="hidden" name="pick_ticket_number" value="{{ ticket.pick_ticket_number }}" /><button type="submit">Process Order</button></form>
     {% endif %}
     <a class="btn-secondary btn" href="{{ url_for('orders.pick_tickets', client_id=order.client_id) }}">Back</a>
   </div>
