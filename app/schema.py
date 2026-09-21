@@ -123,6 +123,19 @@ def ensure_v2_schema() -> None:
                     """
                 )
             )
+            for stmt in (
+                "ALTER TABLE orders ADD COLUMN IF NOT EXISTS short_closed BOOLEAN NOT NULL DEFAULT FALSE",
+                "ALTER TABLE orders ADD COLUMN IF NOT EXISTS short_qty INTEGER NOT NULL DEFAULT 0",
+                "ALTER TABLE orders ADD COLUMN IF NOT EXISTS short_closed_at TIMESTAMP",
+                "ALTER TABLE orders ADD COLUMN IF NOT EXISTS short_closed_by_user_id INTEGER REFERENCES users(id)",
+                "ALTER TABLE orders ADD COLUMN IF NOT EXISTS short_close_reason TEXT",
+            ):
+                conn.execute(text(stmt))
+        lines = conn.execute(text("SELECT to_regclass('public.order_lines')")).scalar()
+        if lines:
+            conn.execute(
+                text("ALTER TABLE order_lines ADD COLUMN IF NOT EXISTS qty_short INTEGER NOT NULL DEFAULT 0")
+            )
         pick_tickets = conn.execute(text("SELECT to_regclass('public.pick_tickets')")).scalar()
         if pick_tickets:
             conn.execute(
@@ -166,6 +179,13 @@ def ensure_v2_schema() -> None:
                 if exists:
                     conn.execute(text(f"ALTER TABLE pick_tickets DROP CONSTRAINT IF EXISTS {conname}"))
             conn.execute(text("ALTER TABLE pick_tickets ADD COLUMN IF NOT EXISTS revision_number INTEGER NOT NULL DEFAULT 1"))
+            for stmt in (
+                "ALTER TABLE pick_tickets ADD COLUMN IF NOT EXISTS expected_qty INTEGER NOT NULL DEFAULT 0",
+                "ALTER TABLE pick_tickets ADD COLUMN IF NOT EXISTS packed_qty INTEGER NOT NULL DEFAULT 0",
+                "ALTER TABLE pick_tickets ADD COLUMN IF NOT EXISTS short_qty INTEGER NOT NULL DEFAULT 0",
+                "ALTER TABLE pick_tickets ADD COLUMN IF NOT EXISTS short_closed BOOLEAN NOT NULL DEFAULT FALSE",
+            ):
+                conn.execute(text(stmt))
             conn.execute(text("CREATE INDEX IF NOT EXISTS ix_pick_tickets_order ON pick_tickets (order_id)"))
             has_ticket_sequence = conn.execute(
                 text(

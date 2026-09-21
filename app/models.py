@@ -400,6 +400,11 @@ class Order(db.Model):
     partial_allocation_approved_at = db.Column(db.DateTime)
     partial_allocation_approved_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"))
     last_allocation_attempt_at = db.Column(db.DateTime)
+    short_closed = db.Column(db.Boolean, nullable=False, default=False)
+    short_qty = db.Column(db.Integer, nullable=False, default=0)
+    short_closed_at = db.Column(db.DateTime)
+    short_closed_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+    short_close_reason = db.Column(db.Text)
 
     lines = db.relationship("OrderLine", backref="order", cascade="all, delete-orphan")
     client = db.relationship("Client")
@@ -423,6 +428,7 @@ class OrderLine(db.Model):
     qty_allocated = db.Column(db.Integer, nullable=False, default=0)
     qty_packed = db.Column(db.Integer, nullable=False, default=0)
     qty_shipped = db.Column(db.Integer, nullable=False, default=0)
+    qty_short = db.Column(db.Integer, nullable=False, default=0)
 
 
 class Allocation(db.Model):
@@ -498,6 +504,10 @@ class PickTicket(db.Model):
     document_id = db.Column(db.Integer, db.ForeignKey("documents.id"))
     assigned_at = db.Column(db.DateTime, default=_utcnow, nullable=False)
     assigned_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+    expected_qty = db.Column(db.Integer, nullable=False, default=0)
+    packed_qty = db.Column(db.Integer, nullable=False, default=0)
+    short_qty = db.Column(db.Integer, nullable=False, default=0)
+    short_closed = db.Column(db.Boolean, nullable=False, default=False)
     created_at = db.Column(db.DateTime, default=_utcnow, nullable=False)
     updated_at = db.Column(db.DateTime, default=_utcnow, onupdate=_utcnow, nullable=False)
     order = db.relationship("Order")

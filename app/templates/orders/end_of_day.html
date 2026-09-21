@@ -73,9 +73,14 @@
         <th>Client Order Number</th>
         <th>Pick Ticket</th>
         <th>Customer</th>
-        <th class="right">Units</th>
+        <th class="right">Ordered</th>
+        <th class="right">Shipped</th>
+        <th class="right">Short</th>
+        <th>Short Close</th>
+        <th>Short Reason</th>
         <th class="right">Cartons</th>
         <th class="right">Weight</th>
+        <th>Close Type</th>
         <th>Shipping Status</th>
         <th>Closed Time</th>
         <th>Closed By</th>
@@ -92,15 +97,20 @@
           <td class="mono">{{ o.client_order_number }}</td>
           <td class="mono">{{ row.ticket }}</td>
           <td>{{ o.customer or '—' }}</td>
+          <td class="right num-cell">{{ row.ordered }}</td>
           <td class="right num-cell">{{ row.shipped }}</td>
+          <td class="right num-cell">{{ row.short }}</td>
+          <td>{{ 'YES' if row.short_closed else 'NO' }}</td>
+          <td class="muted">{{ row.short_reason or '—' }}</td>
           <td class="right num-cell">{{ row.carton_count }}</td>
           <td class="right num-cell">{{ row.total_weight }}</td>
+          <td><span class="badge {{ 'badge-MISSING' if row.short_closed else 'badge-CLOSED' }}">{{ row.close_type }}</span></td>
           <td><span class="badge badge-{{ row.shipping_status }}">{{ row.shipping_status }}</span></td>
           <td class="muted">{{ row.closed_local.strftime('%H:%M:%S') if row.closed_local else '—' }}</td>
           <td>{{ o.closed_by_username or '—' }}</td>
         </tr>
       {% else %}
-        <tr><td colspan="13" class="muted">No orders closed on this operational date.</td></tr>
+        <tr><td colspan="18" class="muted">No orders closed on this operational date.</td></tr>
       {% endfor %}
     </tbody>
   </table>

@@ -11,9 +11,9 @@ from reportlab.lib.units import inch
 from reportlab.platypus import Spacer
 
 from ..auth import current_actor, record_audit
-from ..constants import CartonStatus, OrderStatus, UnitStatus
+from ..constants import CartonStatus, InventoryIssueStatus, OrderStatus, UnitStatus
 from ..extensions import db
-from ..models import Carton, CartonContent, Document, InventoryUnit, Order, PickTicket
+from ..models import Carton, CartonContent, Document, InventoryIssue, InventoryUnit, Order, OrderLine, PickTicket
 from .document_pdf import (
     build_pdf,
     data_table,
@@ -93,19 +93,53 @@ def reconciliation_snapshot(order: Order) -> dict:
     allocated = sum(line.qty_allocated for line in lines)
     packed = sum(line.qty_packed for line in lines)
     shipped = sum(line.qty_shipped for line in lines)
+    short = sum(int(getattr(line, "qty_short", 0) or 0) for line in lines)
     cartons = Carton.query.filter_by(order_id=order.id).all()
     total_weight = sum((carton.weight or 0) for carton in cartons)
-    passed = ordered == allocated == packed == shipped and ordered > 0
+    short_closed = bool(getattr(order, "short_closed", False))
+    if short_closed:
+        passed = ordered > 0 and (shipped + short) == ordered and shipped == packed and short > 0
+        result = "CLOSED SHORT"
+    else:
+        passed = ordered == allocated == packed == shipped and ordered > 0
+        result = "RECONCILED / PASS" if passed else "FAIL"
     return {
         "ordered": ordered,
         "allocated": allocated,
         "packed": packed,
         "shipped": shipped,
+        "short": short,
         "carton_count": len(cartons),
         "total_weight": total_weight,
         "passed": passed,
-        "result": "RECONCILED / PASS" if passed else "FAIL",
+        "short_closed": short_closed,
+        "result": result,
     }
+
+
+def _missing_unit_rows(order: Order) -> list[list]:
+    issues = (
+        InventoryIssue.query.filter_by(source_order_id=order.id, status=InventoryIssueStatus.MISSING)
+        .order_by(InventoryIssue.id.asc())
+        .all()
+    )
+    grouped = {}
+    for issue in issues:
+        unit = db.session.get(InventoryUnit, issue.inventory_unit_id)
+        line = db.session.get(OrderLine, issue.source_order_line_id) if issue.source_order_line_id else None
+        key = (
+            issue.original_location,
+            issue.upc,
+            unit.sku if unit else (line.sku if line else None),
+            (unit.description if unit else None) or (line.description if line else None),
+            issue.status,
+        )
+        grouped.setdefault(key, 0)
+        grouped[key] += 1
+    return [
+        [location, upc, sku, description, qty, status]
+        for (location, upc, sku, description, status), qty in grouped.items()
+    ]
 
 
 def _carton_unit_rows(order: Order) -> list[list]:
@@ -136,20 +170,46 @@ def _carton_unit_rows(order: Order) -> list[list]:
 
 
 def render_closure_pdf(order: Order) -> bytes:
-    ticket = PickTicket.query.filter_by(order_id=order.id).first()
+    ticket = PickTicket.query.filter_by(order_id=order.id).order_by(PickTicket.ticket_sequence.desc()).first()
     snap = reconciliation_snapshot(order)
-    if not snap["passed"] or order.status != OrderStatus.CLOSED:
+    if order.status != OrderStatus.CLOSED:
+        raise ValueError("Order Closure Report is generated only after successful reconciliation.")
+    if getattr(order, "short_closed", False):
+        if not snap["passed"]:
+            raise ValueError("Order Closure Report is generated only after a confirmed short close.")
+    elif not snap["passed"]:
         raise ValueError("Order Closure Report is generated only after successful reconciliation.")
     cartons = Carton.query.filter_by(order_id=order.id).order_by(Carton.id).all()
     s = pdf_styles()
     generated = generated_now()
     ticket_number = ticket.pick_ticket_number if ticket else "—"
+    short_closed = bool(getattr(order, "short_closed", False))
+    header_status = "CLOSED SHORT" if short_closed else OrderStatus.CLOSED
+    summary_items = [
+        ("Ordered Units", snap["ordered"]),
+        ("Allocated Units", snap["allocated"]),
+        ("Packed Units", snap["packed"]),
+        ("Shipped Units", snap["shipped"]),
+        ("Short / Missing Units", snap["short"]),
+        ("Carton Count", snap["carton_count"]),
+        ("Total Weight", f"{snap['total_weight']:g}" if snap["total_weight"] else "0"),
+    ]
+    if short_closed:
+        recon_pairs = [
+            ("Explicit reconciliation", "ORDERED = SHIPPED + SHORT"),
+            ("Result", "CLOSED SHORT — not fully fulfilled"),
+        ]
+    else:
+        recon_pairs = [
+            ("Explicit reconciliation", "ORDERED = ALLOCATED = PACKED = SHIPPED"),
+            ("Result", snap["result"]),
+        ]
     story = [
         header_block(
             s,
             title="ORDER CLOSURE REPORT",
             ident=order.wms_order_id,
-            status=OrderStatus.CLOSED,
+            status=header_status,
         ),
         Spacer(1, 10),
         section_title(s, "ORDER INFORMATION"),
@@ -176,26 +236,9 @@ def render_closure_pdf(order: Order) -> bytes:
         Spacer(1, 10),
         section_title(s, "RECONCILIATION SUMMARY"),
         Spacer(1, 4),
-        summary_row(
-            s,
-            [
-                ("Ordered Units", snap["ordered"]),
-                ("Allocated Units", snap["allocated"]),
-                ("Packed Units", snap["packed"]),
-                ("Shipped Units", snap["shipped"]),
-                ("Carton Count", snap["carton_count"]),
-                ("Total Weight", f"{snap['total_weight']:g}" if snap["total_weight"] else "0"),
-            ],
-        ),
+        summary_row(s, summary_items),
         Spacer(1, 6),
-        kv_table(
-            s,
-            [
-                ("Explicit reconciliation", "ORDERED = ALLOCATED = PACKED = SHIPPED"),
-                ("Result", snap["result"]),
-            ],
-            cols=2,
-        ),
+        kv_table(s, recon_pairs, cols=2),
         Spacer(1, 10),
         section_title(s, "CARTON SUMMARY"),
         Spacer(1, 4),
@@ -238,6 +281,22 @@ def render_closure_pdf(order: Order) -> bytes:
             ],
         ),
     ]
+    if short_closed:
+        missing_rows = _missing_unit_rows(order)
+        story.extend(
+            [
+                Spacer(1, 10),
+                section_title(s, "MISSING / SHORT UNITS"),
+                Spacer(1, 4),
+                data_table(
+                    s,
+                    ["Location", "UPC", "SKU", "Description", "Qty", "Issue status"],
+                    missing_rows,
+                    col_widths=[0.9 * inch, 1.2 * inch, 0.9 * inch, 2.2 * inch, 0.5 * inch, 1.0 * inch],
+                    numeric_last=False,
+                ),
+            ]
+        )
     footer = {
         "left": f"{order.wms_order_id}  ·  {display(ticket_number)}",
         "mid": "WMS SYSTEM",
@@ -250,7 +309,7 @@ def render_closure_pdf(order: Order) -> bytes:
         later_header={
             "title": "ORDER CLOSURE REPORT",
             "ident": order.wms_order_id,
-            "status": OrderStatus.CLOSED,
+            "status": header_status,
         },
     )
 

@@ -35,6 +35,7 @@ PERMISSIONS = [
     ("PROCESSING_EXECUTE", "Execute processing / scanning", "Processing"),
     ("BOX_CLOSE", "Close boxes", "Processing"),
     ("ORDER_CLOSE", "Close orders", "Processing"),
+    ("ORDER_CLOSE_SHORT", "Close orders short when allocated units cannot be found", "Processing"),
     ("REPORTS_VIEW", "View reports", "Reports"),
     ("REPORTS_EXPORT", "Generate / export reports", "Reports"),
     ("DOCUMENT_REPRINT", "Reprint / download documents", "Reports"),

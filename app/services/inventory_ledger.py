@@ -146,6 +146,7 @@ def transition_unit(
     allocated_order_id=None,
     clear_allocation=False,
     clear_carton=False,
+    clear_reserved_order=False,
 ) -> InventoryTransaction:
     if unit is None:
         raise LedgerError("Inventory unit is required.")
@@ -165,6 +166,8 @@ def transition_unit(
     if clear_allocation:
         unit.allocated_order_id = None
         unit.allocation_id = None
+    if clear_reserved_order:
+        unit.allocated_order_id = None
     if clear_carton:
         unit.carton_id = None
     db.session.flush()

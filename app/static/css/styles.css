@@ -213,6 +213,24 @@ input:disabled, select:disabled { background: var(--header-bg); color: var(--mut
 .badge-NOT_READY { background: var(--neutral); color: var(--muted); }
 .badge-AWAITING_WEIGHT, .badge-REWEIGH_REQUIRED { background: var(--amber-light); color: var(--amber); }
 .badge-NO_INVENTORY, .badge-EXCEPTION { background: var(--red-light); color: var(--red); }
+.badge-CLOSED { background: var(--green-light); color: var(--green); }
+.shortage-card {
+  border: 1px solid #EBD9A0;
+  background: var(--amber-light);
+  padding: 0.95rem 1.05rem;
+  margin: 0 0 1rem;
+  border-radius: 8px;
+}
+.shortage-card h2 { margin: 0 0 0.35rem; color: var(--amber); }
+.shortage-card p { margin: 0 0 0.7rem; }
+.confirm-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  margin: 1rem 0;
+  font-size: 0.9rem;
+}
+.confirm-check input { margin-top: 0.2rem; }
 
 .flashes { margin-bottom: 1rem; display: flex; flex-direction: column; gap: 0.45rem; }
 .flash { padding: 0.65rem 0.85rem; border-radius: 6px; font-size: 0.86rem; border: 1px solid var(--border); }

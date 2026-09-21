@@ -15,8 +15,10 @@ from ..services.processing import (
     acquire_lock,
     assert_ticket_processable,
     can_close,
+    can_close_short,
     carton_contents,
     close_order,
+    close_order_short,
     dims_ready,
     ensure_open_carton,
     find_ticket,
@@ -27,7 +29,9 @@ from ..services.processing import (
     require_owner,
     set_dimensions,
     set_weight,
+    shortage_summary,
     snapshot,
+    SHORT_CLOSE_CONFIRM_TEXT,
 )
 from ..services.processing import remove_unit as remove_unit_svc
 from ..services.processing import request_close as request_close_svc
@@ -113,18 +117,23 @@ def detail(order_id):
             }
         )
     ready, _ = can_close(order)
+    remaining = remaining_rows(order)
+    short_ok, short_reason = can_close_short(order, current_user)
     return render_template(
         "processing/detail.html",
         order=order,
         snap=snapshot(order, ticket),
         kpis=kpis(order, current),
-        remaining=remaining_rows(order),
+        remaining=remaining,
         current=current,
         current_index=cartons[-1]["index"] if current and cartons else 1,
         dims_ready=dims_ready(current) if current else False,
         contents=carton_contents(current) if current else [],
         cartons=cartons,
         show_modal=ready,
+        short_ok=short_ok,
+        short_reason=short_reason,
+        remaining_count=sum(row["qty"] for row in remaining),
     )
 
 
@@ -233,7 +242,55 @@ def recall(box_id):
         recall_carton(carton, current_user)
     except ProcessingError as exc:
         flash(str(exc), "error")
-    return redirect(url_for("processing.detail", order_id=carton.order_id))
+    return redirect(url_for("processing.detail", order_id=carton.order_id)    )
+
+
+@bp.route("/<int:order_id>/short-close", methods=["GET", "POST"])
+@permission_required("PROCESSING_VIEW")
+def short_close(order_id):
+    order, ticket = _ticket_and_order(order_id)
+    summary = shortage_summary(order)
+    if request.method == "GET":
+        if summary["missing"]:
+            record_audit(
+                "PROCESSING_SHORTAGE_DETECTED",
+                module="Processing",
+                entity_type="order",
+                entity_id=order.id,
+                client_id=order.client_id,
+                detail=f"{order.wms_order_id} expected={summary['expected']} packed={summary['packed']} missing={summary['missing']}",
+            )
+            db.session.commit()
+        short_ok, short_reason = can_close_short(order, current_user)
+        return render_template(
+            "processing/short_close.html",
+            order=order,
+            ticket=ticket,
+            snap=snapshot(order, ticket),
+            summary=summary,
+            short_ok=short_ok,
+            short_reason=short_reason,
+            confirm_text=SHORT_CLOSE_CONFIRM_TEXT,
+            is_admin=current_user.is_admin(),
+        )
+    if not current_user.has_permission("ORDER_CLOSE_SHORT"):
+        abort(403)
+    if request.form.get("confirm_missing") != "1":
+        flash("Close Short requires the confirmation checkbox.", "error")
+        return redirect(url_for("processing.short_close", order_id=order.id))
+    try:
+        document = close_order_short(order, current_user, confirmed=True)
+    except ProcessingError as exc:
+        flash(str(exc), "error")
+        return redirect(url_for("processing.short_close", order_id=order.id))
+    packing = Document.query.filter_by(order_id=order.id, type="PACKING_LIST").order_by(Document.id.asc()).first()
+    return redirect(
+        url_for(
+            "processing.index",
+            pdf_id=document.id if document else None,
+            packing_id=packing.id if packing else None,
+        )
+    )
 
 
 @bp.route("/<int:order_id>/cancel", methods=["POST"])

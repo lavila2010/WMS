@@ -92,6 +92,8 @@ def _order_metrics(order: Order) -> dict:
     allocated = sum(line.qty_allocated for line in order.lines)
     packed = sum(line.qty_packed for line in order.lines)
     shipped = sum(line.qty_shipped for line in order.lines)
+    short = sum(int(getattr(line, "qty_short", 0) or 0) for line in order.lines)
+    short_closed = bool(getattr(order, "short_closed", False))
     status = sync_shipping_status(order, cartons)
     return {
         "order": order,
@@ -104,9 +106,17 @@ def _order_metrics(order: Order) -> dict:
         "allocated": allocated,
         "packed": packed,
         "shipped": shipped,
+        "short": short,
+        "short_closed": short_closed,
+        "short_reason": order.short_close_reason if short_closed else "",
+        "close_type": "CLOSED SHORT" if short_closed else "CLOSED COMPLETE",
         "shipping_status": status,
         "closed_local": to_ny(order.closed_at),
-        "reconciled": ordered == allocated == packed == shipped == carton_units,
+        "reconciled": (
+            (shipped + short) == ordered == carton_units + short
+            if short_closed
+            else ordered == allocated == packed == shipped == carton_units
+        ),
     }
 
 
@@ -157,6 +167,10 @@ def export_eod_excel(rows: list[dict], *, client_id=None) -> bytes:
                 "Allocated Units": row["allocated"],
                 "Packed Units": row["packed"],
                 "Shipped Units": row["shipped"],
+                "Short Units": row["short"],
+                "Short Close": "YES" if row["short_closed"] else "NO",
+                "Short Reason": row["short_reason"] or "",
+                "Close Type": row["close_type"],
                 "Carton Count": row["carton_count"],
                 "Total Weight": row["total_weight"],
                 "Shipping Status": row["shipping_status"],
@@ -207,6 +221,10 @@ def export_eod_excel(rows: list[dict], *, client_id=None) -> bytes:
         "Allocated Units",
         "Packed Units",
         "Shipped Units",
+        "Short Units",
+        "Short Close",
+        "Short Reason",
+        "Close Type",
         "Carton Count",
         "Total Weight",
         "Shipping Status",

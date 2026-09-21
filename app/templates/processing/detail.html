@@ -36,9 +36,17 @@
   <div class="kpi"><div class="num">{{ kpis.current_remaining }}</div><div class="label">Remaining</div></div>
 </div>
 
+{% if remaining_count %}
+<div class="card shortage-card">
+  <h2>{{ remaining_count }} allocated unit{{ 's' if remaining_count != 1 else '' }} have not been scanned.</h2>
+  <p>These units remain RESERVED on the open Pick Ticket after packing physically found merchandise.</p>
+  <a class="btn" href="{{ url_for('processing.short_close', order_id=order.id) }}">Review Missing Units</a>
+</div>
+{% endif %}
+
 <div class="processing-layout">
   <div class="card">
-    <h2>Remaining Pick Ticket Units</h2>
+    <h2>Remaining Units Not Scanned</h2>
     <table>
       <thead>
         <tr>
@@ -46,6 +54,9 @@
           <th>UPC</th>
           <th>SKU</th>
           <th>Description</th>
+          <th>Style</th>
+          <th>Color</th>
+          <th>Size</th>
           <th class="right">Qty</th>
         </tr>
       </thead>
@@ -56,10 +67,13 @@
             <td class="mono">{{ row.upc }}</td>
             <td class="mono">{{ row.sku }}</td>
             <td>{{ row.description }}</td>
+            <td>{{ row.style or '—' }}</td>
+            <td>{{ row.color or '—' }}</td>
+            <td>{{ row.size or '—' }}</td>
             <td class="right num-cell">{{ row.qty }}</td>
           </tr>
         {% else %}
-          <tr><td colspan="5" class="muted">No remaining units.</td></tr>
+          <tr><td colspan="8" class="muted">No remaining units.</td></tr>
         {% endfor %}
       </tbody>
     </table>

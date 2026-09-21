@@ -25,20 +25,28 @@ def line_live_allocated(line: OrderLine) -> int:
     )
 
 
+def line_short(line: OrderLine) -> int:
+    return max(int(line.qty_short or 0), 0)
+
+
 def line_remaining(line: OrderLine) -> int:
-    return max(int(line.qty_ordered) - int(line.qty_shipped or 0) - line_live_allocated(line), 0)
+    return max(
+        int(line.qty_ordered) - int(line.qty_shipped or 0) - line_short(line) - line_live_allocated(line),
+        0,
+    )
 
 
 def order_quantities(order: Order) -> dict:
     lines = OrderLine.query.filter_by(order_id=order.id).order_by(OrderLine.id).all()
     ordered = sum(int(line.qty_ordered) for line in lines)
     shipped = sum(int(line.qty_shipped or 0) for line in lines)
+    short = sum(line_short(line) for line in lines)
     currently = 0
     remaining = 0
     upc_rows = []
     for line in lines:
         live = line_live_allocated(line)
-        rem = max(int(line.qty_ordered) - int(line.qty_shipped or 0) - live, 0)
+        rem = max(int(line.qty_ordered) - int(line.qty_shipped or 0) - line_short(line) - live, 0)
         currently += live
         remaining += rem
         upc_rows.append(
@@ -51,6 +59,7 @@ def order_quantities(order: Order) -> dict:
                 "size": None,
                 "ordered_qty": int(line.qty_ordered),
                 "shipped_qty": int(line.qty_shipped or 0),
+                "short_qty": line_short(line),
                 "allocated_qty": live,
                 "remaining_qty": rem,
                 "line": line,
@@ -59,6 +68,7 @@ def order_quantities(order: Order) -> dict:
     return {
         "ordered": ordered,
         "shipped": shipped,
+        "short": short,
         "currently_allocated": currently,
         "remaining": remaining,
         "lines": lines,

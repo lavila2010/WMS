@@ -76,6 +76,9 @@ REPLACEMENT_UNAVAILABLE_MESSAGE = (
 class AllocationStatus:
     ACTIVE = "ACTIVE"
     RELEASED = "RELEASED"
+    MISSING = "MISSING"
+    ALL = [ACTIVE, RELEASED, MISSING]
+    LIVE = [ACTIVE]
 
 
 class CartonStatus:
