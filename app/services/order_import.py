@@ -106,6 +106,18 @@ def _plain_text(value) -> str:
 
 def normalize_order_number(value) -> str:
     """Keep the raw client order number as text (no forced uniqueness)."""
+    return normalize_order_upc(value)
+
+
+def normalize_order_upc(value) -> str:
+    """Preserve UPC as text, including literal tokens such as ``NONE``."""
+    if _is_blank(value):
+        return ""
+    text = str(value).strip()
+    if not text:
+        return ""
+    if text.lower() in {"none", "nan", "nat"}:
+        return text
     return normalize_upc(value)
 
 
@@ -393,7 +405,7 @@ def analyze(source, filename: str, client: Client, division: Division, user=None
             customer = _plain_text(series[mapped["customer"]])
             address = _plain_text(series[mapped["customeraddress"]])
             phone = _plain_text(series[mapped["customerphone"]]) if "customerphone" in mapped else ""
-            upc = normalize_upc(series[mapped["upc"]])
+            upc = normalize_order_upc(series[mapped["upc"]])
             qty, qty_error = _parse_qty(series[mapped["qty"]])
             carrier = _plain_text(series[mapped["carrier"]]) if "carrier" in mapped else ""
             service = (
