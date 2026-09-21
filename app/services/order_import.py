@@ -649,7 +649,7 @@ def batch_progress(batch: ImportBatch) -> dict:
     elif start and batch.status == ImportBatchStatus.PROCESSING:
         duration_seconds = max(0, int((datetime.utcnow() - start).total_seconds()))
     reason = batch.error_message or batch.message
-    return {
+    payload = {
         "batch_id": batch.id,
         "status": batch.status,
         "filename": batch.filename,
@@ -676,6 +676,9 @@ def batch_progress(batch: ImportBatch) -> dict:
         "started_at": batch.started_at.isoformat() + "Z" if batch.started_at else None,
         "completed_at": batch.completed_at.isoformat() + "Z" if batch.completed_at else None,
     }
+    from .import_execution import attach_execution_status
+
+    return attach_execution_status(payload, batch)
 
 
 def _row_as_dict(row: OrderImportRow) -> dict:
@@ -876,6 +879,9 @@ def process_import_batch(
             batch.rows_imported = already
             if batch.orders_expected:
                 batch.progress_percent = min(99, int(100 * already / batch.orders_expected))
+            from .import_execution import notify_progress
+
+            notify_progress(batch)
             db.session.commit()
             metrics["chunks"] += 1
             chunks_done += 1
@@ -969,6 +975,7 @@ def begin_processing(batch_id: int, *, user, run: str = "async") -> ImportBatch:
         ImportBatchStatus.VALIDATED,
         ImportBatchStatus.PROCESSING,
         started_at=now,
+        last_progress_at=now,
         progress_percent=0,
         error_message=None,
     )

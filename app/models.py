@@ -238,6 +238,8 @@ class ImportBatch(db.Model):
     order_lines_expected = db.Column(db.Integer, nullable=False, default=0)
     orders_created = db.Column(db.Integer, nullable=False, default=0)
     order_lines_created = db.Column(db.Integer, nullable=False, default=0)
+    last_progress_at = db.Column(db.DateTime)
+    last_executor = db.Column(db.String(32))
     started_at = db.Column(db.DateTime)
     completed_at = db.Column(db.DateTime)
     failed_at = db.Column(db.DateTime)
@@ -538,6 +540,24 @@ class Document(db.Model):
     created_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"))
     created_by_username = db.Column(db.String(64))
     created_at = db.Column(db.DateTime, default=_utcnow, nullable=False)
+
+
+class WorkerHeartbeat(db.Model):
+    __tablename__ = "worker_heartbeats"
+    __table_args__ = (
+        db.UniqueConstraint("worker_name", "instance_id", name="uq_worker_heartbeat_instance"),
+        db.Index("ix_worker_heartbeats_seen", "worker_type", "last_seen_at"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    worker_name = db.Column(db.String(64), nullable=False)
+    worker_type = db.Column(db.String(32), nullable=False, default="import")
+    instance_id = db.Column(db.String(128), nullable=False)
+    last_seen_at = db.Column(db.DateTime, nullable=False, default=_utcnow)
+    status = db.Column(db.String(20), nullable=False, default="ONLINE")
+    current_batch_id = db.Column(db.Integer, db.ForeignKey("import_batches.id"))
+    created_at = db.Column(db.DateTime, default=_utcnow, nullable=False)
+    updated_at = db.Column(db.DateTime, default=_utcnow, onupdate=_utcnow, nullable=False)
 
 
 class Invoice(db.Model):
