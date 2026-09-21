@@ -50,23 +50,47 @@
 <div class="empty-state">Select a client to manage pick tickets</div>
 {% else %}
 <div class="card">
-  <h2>Eligible allocated orders</h2>
+  <h2>Eligible Orders for Pick Ticket</h2>
   <table>
-    <thead><tr><th>WMS Order</th><th>Client Order</th><th>Customer</th><th></th></tr></thead>
+    <thead>
+      <tr>
+        <th>WMS Order</th>
+        <th>Client Order</th>
+        <th>Customer</th>
+        <th class="right">Ordered</th>
+        <th class="right">Allocated for Current Wave</th>
+        <th class="right">Remaining</th>
+        <th>Allocation Type</th>
+        <th>Approval Status</th>
+        <th>Action</th>
+      </tr>
+    </thead>
     <tbody>
-      {% for o in eligible %}
+      {% for row in eligible %}
+        {% set o = row.order %}
         <tr>
           <td class="mono">{{ o.wms_order_id }}</td>
           <td class="mono">{{ o.client_order_number }}</td>
           <td>{{ o.customer or '—' }}</td>
+          <td class="right num-cell">{{ row.ordered }}</td>
+          <td class="right num-cell">{{ row.allocated_current_wave }}</td>
+          <td class="right num-cell">{{ row.remaining }}</td>
+          <td>{{ row.allocation_type }}</td>
+          <td>{{ row.approval_status }}</td>
           <td class="right">
             {% if can('PICK_TICKET_GENERATE') %}
-            <form method="post" action="{{ url_for('orders.generate_pick_ticket', order_id=o.id) }}">{% include "_csrf.html" %}<button type="submit">Create Pick Ticket</button></form>
+            <form method="post" action="{{ url_for('orders.generate_pick_ticket', order_id=o.id) }}">
+              {% include "_csrf.html" %}
+              <input type="hidden" name="client_id" value="{{ scope.client_id or '' }}" />
+              <input type="hidden" name="division_id" value="{{ scope.division_id or '' }}" />
+              <input type="hidden" name="warehouse_id" value="{{ scope.warehouse_id or '' }}" />
+              <button type="submit">Create Pick Ticket</button>
+            </form>
             {% endif %}
           </td>
         </tr>
       {% else %}
-        <tr><td colspan="4" class="muted">No fully allocated orders waiting for a ticket.</td></tr>
+        <tr><td colspan="9" class="muted">No fully allocated or approved partial orders are waiting for a Pick Ticket.</td></tr>
       {% endfor %}
     </tbody>
   </table>

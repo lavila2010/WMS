@@ -401,19 +401,13 @@ def pick_tickets():
     sort = request.args.get("sort", "created").strip() or "created"
     direction = request.args.get("dir", "desc").strip() or "desc"
     if ctx["scope"]["client_id"]:
-        from ..services.fulfillment import pick_ticket_eligible
+        from ..services.pick_tickets import list_eligible_pick_ticket_orders
 
-        candidates = (
-            apply_operational_order_visibility(
-                Order.query.filter(
-                    Order.client_id == ctx["scope"]["client_id"],
-                    Order.status.notin_([OrderStatus.CLOSED, OrderStatus.CANCELLED]),
-                )
-            )
-            .order_by(Order.created_at.desc())
-            .all()
+        eligible = list_eligible_pick_ticket_orders(
+            client_id=ctx["scope"]["client_id"],
+            division_id=ctx["scope"]["division_id"],
+            warehouse_id=ctx["scope"]["warehouse_id"],
         )
-        eligible = [order for order in candidates if pick_ticket_eligible(order)]
         tickets = list_pick_tickets(
             client_id=ctx["scope"]["client_id"],
             division_id=ctx["scope"]["division_id"],
@@ -455,7 +449,14 @@ def generate_pick_ticket(order_id):
         ticket = create_pick_ticket(order)
     except PickTicketError as exc:
         flash(str(exc), "error")
-        return redirect(url_for("orders.pick_tickets", client_id=order.client_id))
+        return redirect(
+            url_for(
+                "orders.pick_tickets",
+                client_id=order.client_id,
+                division_id=order.division_id,
+                warehouse_id=order.warehouse_id,
+            )
+        )
     flash(f"Pick ticket {ticket.pick_ticket_number} created.", "success")
     return redirect(url_for("orders.pick_ticket_preview", ticket_id=ticket.id))
 

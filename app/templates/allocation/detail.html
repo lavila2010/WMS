@@ -27,6 +27,9 @@
   {% if can_approve and can('PARTIAL_ALLOCATION_APPROVE') %}
     <a class="btn" href="{{ url_for('allocation.approve_partial', order_id=order.id) }}">Approve Partial Allocation</a>
   {% endif %}
+  {% if pick_ticket_ready and can('PICK_TICKET_VIEW') %}
+    <a class="btn btn-secondary" href="{{ url_for('orders.pick_tickets', client_id=pick_tickets_args.client_id, division_id=pick_tickets_args.division_id, warehouse_id=pick_tickets_args.warehouse_id) }}">Go to Pick Tickets</a>
+  {% endif %}
   <p class="muted">Ordered {{ qty.ordered }} · Shipped {{ qty.shipped }} · Allocated {{ qty.currently_allocated }} · Remaining {{ qty.remaining }}</p>
 </div>
 

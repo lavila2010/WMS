@@ -17,11 +17,11 @@ from ..constants import (
 from ..extensions import db
 from ..models import Allocation, InventoryUnit, Order, OrderLine, PickTicket, PickTicketPrintEvent
 from ..services.fulfillment import (
+    current_wave_allocation_count,
     current_wave_approved,
+    current_wave_unticketed_allocations,
     order_quantities,
     pick_ticket_eligible,
-    refresh_order_status,
-    unticketed_allocations,
 )
 from ..services.order_visibility import apply_operational_order_visibility
 from .document_pdf import (
@@ -126,7 +126,7 @@ def create_pick_ticket(order: Order) -> PickTicket:
     ).scalar_one_or_none()
     if locked is None:
         raise PickTicketError("Order not found.")
-    pending = unticketed_allocations(locked)
+    pending = current_wave_unticketed_allocations(locked)
     if not pending:
         existing = (
             PickTicket.query.filter_by(order_id=locked.id)
@@ -433,6 +433,41 @@ def list_pick_tickets(
                 "units": int(units or 0),
                 "locations": int(locations or 0),
                 "status": derived_status,
+            }
+        )
+    return rows
+
+
+def list_eligible_pick_ticket_orders(*, client_id: int, division_id=None, warehouse_id=None) -> list[dict]:
+    """Orders waiting for a Pick Ticket: fully allocated OR approved partial current wave.
+
+    Does not filter by Order.status == ALLOCATED. Closed/cancelled are excluded first,
+    then pick_ticket_eligible() is applied.
+    """
+    query = apply_operational_order_visibility(
+        Order.query.filter(
+            Order.client_id == int(client_id),
+            Order.status.notin_([OrderStatus.CLOSED, OrderStatus.CANCELLED]),
+        )
+    )
+    if division_id:
+        query = query.filter(Order.division_id == int(division_id))
+    if warehouse_id:
+        query = query.filter(Order.warehouse_id == int(warehouse_id))
+    rows = []
+    for order in query.order_by(Order.created_at.desc()).all():
+        qty = order_quantities(order)
+        if not pick_ticket_eligible(order, qty):
+            continue
+        full = qty["remaining"] == 0
+        rows.append(
+            {
+                "order": order,
+                "ordered": qty["ordered"],
+                "allocated_current_wave": current_wave_allocation_count(order),
+                "remaining": qty["remaining"],
+                "allocation_type": "FULL" if full else "PARTIAL APPROVED",
+                "approval_status": "—" if full else "PARTIAL APPROVED",
             }
         )
     return rows

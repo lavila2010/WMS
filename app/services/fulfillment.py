@@ -85,9 +85,14 @@ def is_partially_allocated_wave(order: Order, qty: dict | None = None) -> bool:
     return qty["currently_allocated"] > 0 and qty["remaining"] > 0
 
 
+def current_wave_number(order: Order) -> int:
+    return int(order.current_wave_number or 0)
+
+
 def current_wave_approved(order: Order) -> bool:
-    wave = int(order.current_wave_number or 0)
-    return wave > 0 and order.partial_approved_wave == wave
+    wave = current_wave_number(order)
+    approved = int(order.partial_approved_wave or 0)
+    return wave > 0 and approved == wave
 
 
 def pick_ticket_eligible(order: Order, qty: dict | None = None) -> bool:
@@ -96,7 +101,7 @@ def pick_ticket_eligible(order: Order, qty: dict | None = None) -> bool:
         return False
     if qty["currently_allocated"] <= 0:
         return False
-    unticketed = unticketed_allocation_count(order)
+    unticketed = unticketed_allocation_count(order, wave=current_wave_number(order) or None)
     if unticketed <= 0:
         return False
     if qty["remaining"] == 0:
@@ -104,18 +109,51 @@ def pick_ticket_eligible(order: Order, qty: dict | None = None) -> bool:
     return current_wave_approved(order)
 
 
-def unticketed_allocations(order: Order) -> list[Allocation]:
-    return (
-        Allocation.query.filter_by(order_id=order.id, status=AllocationStatus.ACTIVE, pick_ticket_id=None)
-        .order_by(Allocation.id)
-        .all()
-    )
-
-
-def unticketed_allocation_count(order: Order) -> int:
-    return Allocation.query.filter_by(
+def _unticketed_query(order: Order, *, wave: int | None = None):
+    query = Allocation.query.filter_by(
         order_id=order.id, status=AllocationStatus.ACTIVE, pick_ticket_id=None
-    ).count()
+    )
+    if wave:
+        query = query.filter(Allocation.wave_number == int(wave))
+    return query
+
+
+def unticketed_allocations(order: Order, *, wave: int | None = None) -> list[Allocation]:
+    return _unticketed_query(order, wave=wave).order_by(Allocation.id).all()
+
+
+def current_wave_unticketed_allocations(order: Order) -> list[Allocation]:
+    return unticketed_allocations(order, wave=current_wave_number(order) or None)
+
+
+def unticketed_allocation_count(order: Order, *, wave: int | None = None) -> int:
+    return _unticketed_query(order, wave=wave).count()
+
+
+def current_wave_allocation_count(order: Order) -> int:
+    wave = current_wave_number(order)
+    query = Allocation.query.filter_by(order_id=order.id, status=AllocationStatus.ACTIVE)
+    if wave:
+        query = query.filter(Allocation.wave_number == wave)
+    return query.count()
+
+
+def pick_ticket_handoff_diagnostic(order: Order) -> dict:
+    """Admin-safe snapshot for partial-approval → Pick Ticket debugging. No customer PII."""
+    qty = order_quantities(order)
+    wave = current_wave_number(order)
+    return {
+        "wms_order_id": order.wms_order_id,
+        "status": order.status,
+        "ordered": qty["ordered"],
+        "shipped": qty["shipped"],
+        "currently_allocated": qty["currently_allocated"],
+        "remaining": qty["remaining"],
+        "current_wave_number": wave,
+        "partial_approved_wave": order.partial_approved_wave,
+        "unticketed_allocation_count": unticketed_allocation_count(order, wave=wave or None),
+        "pick_ticket_eligible": pick_ticket_eligible(order, qty),
+    }
 
 
 def open_ticket_for_order(order: Order):

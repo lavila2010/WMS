@@ -227,3 +227,18 @@ def _register_cli(app):
                 f"recovered={row.get('recovered')} reason={row.get('reason')} "
                 f"progress={row.get('progress_percent')}"
             )
+
+    @app.cli.command("pick-ticket-eligibility")
+    @click.argument("wms_order_id")
+    def pick_ticket_eligibility_cmd(wms_order_id):
+        """Print allocation → Pick Ticket handoff fields. No customer PII."""
+        from .models import Order
+        from .services.fulfillment import pick_ticket_handoff_diagnostic
+
+        order = Order.query.filter_by(wms_order_id=wms_order_id).one_or_none()
+        if order is None:
+            click.echo(f"Order {wms_order_id} was not found.")
+            return
+        snapshot = pick_ticket_handoff_diagnostic(order)
+        for key, value in snapshot.items():
+            click.echo(f"{key}={value}")

@@ -23,6 +23,14 @@ from ..services.tenant import accessible_clients, require_entity_client, user_ca
 bp = Blueprint("allocation", __name__, url_prefix="/allocation")
 
 
+def _pick_tickets_filter_args(order: Order) -> dict:
+    return {
+        "client_id": order.client_id,
+        "division_id": order.division_id,
+        "warehouse_id": order.warehouse_id,
+    }
+
+
 def _allocation_rows(orders):
     rows = []
     for order in orders:
@@ -164,6 +172,7 @@ def detail(order_id):
     require_entity_client(current_user, order)
     allocations = Allocation.query.filter_by(order_id=order.id, status=AllocationStatus.ACTIVE).all()
     qty = order_quantities(order)
+    ticket_ok = pick_ticket_eligible(order, qty)
     return render_template(
         "allocation/detail.html",
         order=order,
@@ -171,7 +180,9 @@ def detail(order_id):
         lines=qty["lines"],
         qty=qty,
         shortages=[row for row in qty["upc_rows"] if row["remaining_qty"] > 0],
-        can_approve=qty["currently_allocated"] > 0 and qty["remaining"] > 0 and not pick_ticket_eligible(order, qty),
+        can_approve=qty["currently_allocated"] > 0 and qty["remaining"] > 0 and not ticket_ok,
+        pick_ticket_ready=ticket_ok,
+        pick_tickets_args=_pick_tickets_filter_args(order),
     )
 
 
@@ -208,9 +219,20 @@ def approve_partial(order_id):
         except AllocationError as exc:
             flash(str(exc), "error")
             return redirect(url_for("allocation.detail", order_id=order_id))
-        flash("Partial allocation approved. A pick ticket may now be created for allocated units.", "success")
+        flash(
+            "Partial allocation approved. Pick Ticket can now be generated for the current allocated units.",
+            "success",
+        )
+        order = db.session.get(Order, order_id)
+        if current_user.has_permission("PICK_TICKET_VIEW"):
+            return redirect(url_for("orders.pick_tickets", **_pick_tickets_filter_args(order)))
         return redirect(url_for("allocation.detail", order_id=order_id))
-    return render_template("allocation/approve_partial.html", order=order, qty=qty)
+    return render_template(
+        "allocation/approve_partial.html",
+        order=order,
+        qty=qty,
+        pick_tickets_args=_pick_tickets_filter_args(order),
+    )
 
 
 @bp.route("/release/<int:allocation_id>", methods=["POST"])

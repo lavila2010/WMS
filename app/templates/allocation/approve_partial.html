@@ -21,6 +21,9 @@
       {% include "_csrf.html" %}
       <button type="submit">Approve Partial Allocation</button>
     </form>
+    {% if can('PICK_TICKET_VIEW') %}
+      <a class="btn btn-secondary" href="{{ url_for('orders.pick_tickets', client_id=pick_tickets_args.client_id, division_id=pick_tickets_args.division_id, warehouse_id=pick_tickets_args.warehouse_id) }}">Go to Pick Tickets</a>
+    {% endif %}
   </div>
 </div>
 {% endblock %}
