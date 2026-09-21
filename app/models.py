@@ -4,7 +4,16 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from .constants import AllocationStatus, CartonStatus, OrderStatus, PickTicketStatus, Role, UnitStatus
+from .constants import (
+    AllocationStatus,
+    CartonStatus,
+    OrderStatus,
+    PickTicketStatus,
+    Role,
+    ShippingLabelStatus,
+    ShippingStatus,
+    UnitStatus,
+)
 from .extensions import db
 
 
@@ -354,6 +363,9 @@ class Order(db.Model):
         ),
         db.Index("ix_orders_import_batch", "import_batch_id"),
         db.Index("ix_orders_client_number", "client_id", "client_order_number"),
+        db.Index("ix_orders_shipping_status", "shipping_status"),
+        db.Index("ix_orders_closed_at", "closed_at"),
+        db.Index("ix_orders_client_div_closed", "client_id", "division_id", "closed_at"),
     )
 
     id = db.Column(db.Integer, primary_key=True)
@@ -380,6 +392,7 @@ class Order(db.Model):
     closed_at = db.Column(db.DateTime)
     closed_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"))
     closed_by_username = db.Column(db.String(64))
+    shipping_status = db.Column(db.String(24), nullable=False, default=ShippingStatus.NOT_READY)
 
     lines = db.relationship("OrderLine", backref="order", cascade="all, delete-orphan")
     client = db.relationship("Client")
@@ -490,7 +503,11 @@ class PickTicketPrintEvent(db.Model):
 
 class Carton(db.Model):
     __tablename__ = "cartons"
-    __table_args__ = (db.UniqueConstraint("order_id", "carton_number", name="uq_carton_order_number"),)
+    __table_args__ = (
+        db.UniqueConstraint("order_id", "carton_number", name="uq_carton_order_number"),
+        db.Index("ix_cartons_tracking_number", "tracking_number"),
+        db.Index("ix_cartons_order_label", "order_id", "shipping_label_status"),
+    )
 
     id = db.Column(db.Integer, primary_key=True)
     client_id = db.Column(db.Integer, db.ForeignKey("clients.id"), nullable=False)
@@ -505,6 +522,15 @@ class Carton(db.Model):
     previous_weight = db.Column(db.Float)
     reweigh_required = db.Column(db.Boolean, nullable=False, default=False)
     status = db.Column(db.String(20), nullable=False, default=CartonStatus.OPEN)
+    tracking_number = db.Column(db.String(64))
+    tracking_carrier = db.Column(db.String(16))
+    tracking_entered_at = db.Column(db.DateTime)
+    tracking_entered_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+    tracking_validated_at = db.Column(db.DateTime)
+    tracking_validated_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+    shipping_label_status = db.Column(
+        db.String(16), nullable=False, default=ShippingLabelStatus.PENDING
+    )
     created_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"))
     created_by_username = db.Column(db.String(64))
     closed_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"))

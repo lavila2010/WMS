@@ -1,0 +1,108 @@
+{% extends "orders/_layout.html" %}
+{% block title %}End of Day{% endblock %}
+{% block orders_content %}
+<div class="card">
+  <form method="get" class="inline-form">
+    <label>Date
+      <input type="date" name="date" value="{{ day }}" />
+    </label>
+    <label>Client
+      <select name="client_id">
+        <option value="">{{ 'All clients' if current_user.is_admin() else 'All authorized' }}</option>
+        {% for c in options.clients %}
+          <option value="{{ c.id }}" {{ 'selected' if scope.client_id == c.id }}>{{ c.client_code }} — {{ c.name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Division
+      <select name="division_id">
+        <option value="">All divisions</option>
+        {% for d in options.divisions %}
+          <option value="{{ d.id }}" {{ 'selected' if scope.division_id == d.id }}>{{ d.code }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Warehouse
+      <select name="warehouse_id">
+        <option value="">All warehouses</option>
+        {% for w in options.warehouses %}
+          <option value="{{ w.id }}" {{ 'selected' if scope.warehouse_id == w.id }}>{{ w.warehouse_code }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Carrier
+      <input name="carrier" value="{{ carrier }}" />
+    </label>
+    <label>Closed By
+      <input name="closed_by" value="{{ closed_by }}" />
+    </label>
+    <label>Shipping Status
+      <select name="shipping_status">
+        <option value="">All</option>
+        {% for s in shipping_statuses %}
+          <option value="{{ s }}" {{ 'selected' if shipping_status == s }}>{{ s }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <button type="submit">Apply</button>
+    {% if can('END_OF_DAY_EXPORT') %}
+    <a class="btn-secondary btn" href="{{ url_for('orders.end_of_day_export', date=day, client_id=scope.client_id or None, division_id=scope.division_id or None, warehouse_id=scope.warehouse_id or None, carrier=carrier or None, closed_by=closed_by or None, shipping_status=shipping_status or None) }}">Export End of Day Excel</a>
+    {% endif %}
+  </form>
+  <p class="hint">Operational date uses America/New_York. Default date is {{ default_day }}.</p>
+</div>
+
+<div class="kpis">
+  <div class="kpi"><div class="num">{{ kpis.total_orders }}</div><div class="label">Total Orders</div></div>
+  <div class="kpi"><div class="num">{{ kpis.total_units }}</div><div class="label">Total Units</div></div>
+  <div class="kpi"><div class="num">{{ kpis.total_cartons }}</div><div class="label">Total Cartons</div></div>
+  <div class="kpi"><div class="num">{{ kpis.total_weight }}</div><div class="label">Total Weight</div></div>
+  <div class="kpi"><div class="num">{{ kpis.tracking_complete }}</div><div class="label">Tracking Complete</div></div>
+  <div class="kpi"><div class="num">{{ kpis.pending_tracking }}</div><div class="label">Pending Tracking</div></div>
+</div>
+
+<div class="card">
+  <h2>Closed {{ day }}</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Client</th>
+        <th>Division</th>
+        <th>Warehouse</th>
+        <th>WMS Order ID</th>
+        <th>Client Order Number</th>
+        <th>Pick Ticket</th>
+        <th>Customer</th>
+        <th class="right">Units</th>
+        <th class="right">Cartons</th>
+        <th class="right">Weight</th>
+        <th>Shipping Status</th>
+        <th>Closed Time</th>
+        <th>Closed By</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in rows %}
+        {% set o = row.order %}
+        <tr>
+          <td>{{ o.client.client_code }}</td>
+          <td>{{ o.division.code }}</td>
+          <td>{{ o.warehouse.warehouse_code }}</td>
+          <td class="mono"><a href="{{ url_for('orders.shipping_detail', order_id=o.id) }}">{{ o.wms_order_id }}</a></td>
+          <td class="mono">{{ o.client_order_number }}</td>
+          <td class="mono">{{ row.ticket }}</td>
+          <td>{{ o.customer or '—' }}</td>
+          <td class="right num-cell">{{ row.shipped }}</td>
+          <td class="right num-cell">{{ row.carton_count }}</td>
+          <td class="right num-cell">{{ row.total_weight }}</td>
+          <td><span class="badge badge-{{ row.shipping_status }}">{{ row.shipping_status }}</span></td>
+          <td class="muted">{{ row.closed_local.strftime('%H:%M:%S') if row.closed_local else '—' }}</td>
+          <td>{{ o.closed_by_username or '—' }}</td>
+        </tr>
+      {% else %}
+        <tr><td colspan="13" class="muted">No orders closed on this operational date.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

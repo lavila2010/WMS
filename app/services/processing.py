@@ -15,6 +15,8 @@ from ..constants import (
     LedgerType,
     OrderStatus,
     PickTicketStatus,
+    ShippingLabelStatus,
+    ShippingStatus,
     UnitStatus,
 )
 from ..extensions import db
@@ -33,6 +35,7 @@ from ..models import (
 from .documents import persist_closure_pdf
 from .inventory_ledger import LedgerError, transition_unit
 from .order_visibility import order_is_operational
+from .packing_list import persist_packing_list_pdf
 from .pick_tickets import desired_ticket_status, sync_ticket_status
 
 LOCK_MESSAGE = "Order is currently being processed by another user."
@@ -511,6 +514,10 @@ def close_order(order: Order, user: User):
     order.closed_at = datetime.utcnow()
     order.closed_by_user_id = user.id
     order.closed_by_username = user.username
+    order.shipping_status = ShippingStatus.PENDING_TRACKING
+    for carton in Carton.query.filter_by(order_id=order.id):
+        if not carton.shipping_label_status:
+            carton.shipping_label_status = ShippingLabelStatus.PENDING
     release_lock(order, user, force=True)
     invoice = Invoice(
         invoice_number=f"INV-{order.wms_order_id}",
@@ -565,7 +572,18 @@ def close_order(order: Order, user: User):
         created_by_username=user.username,
     )
     db.session.add(document)
+    packing_doc = Document(
+        client_id=order.client_id,
+        order_id=order.id,
+        type="PACKING_LIST",
+        filename=f"{order.wms_order_id}-packing-list.pdf",
+        storage_key=f"pending-packing-{order.id}",
+        created_by_user_id=user.id,
+        created_by_username=user.username,
+    )
+    db.session.add(packing_doc)
     db.session.commit()
     document = persist_closure_pdf(order)
+    persist_packing_list_pdf(order)
     db.session.commit()
     return document

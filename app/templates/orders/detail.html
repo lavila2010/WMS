@@ -4,6 +4,7 @@
 <div class="page-header">
   <div class="section-title">
     <h1>Order {{ order.wms_order_id }}</h1>
+    <span class="badge badge-{{ order.shipping_status }}">{{ order.shipping_status }}</span>
     <span class="badge badge-{{ order.status }}">{{ order.status }}</span>
   </div>
   <p class="sub">
@@ -46,6 +47,23 @@
 
 <div class="card">
   <div class="btn-row">
+    {% if order.status == 'CLOSED' %}
+      {% if closure %}
+        <a class="btn-secondary btn" href="{{ url_for('orders.order_document', document_id=closure.id) }}" target="_blank" rel="noopener">View Closure Report</a>
+        {% if can('DOCUMENT_REPRINT') %}
+        <form method="post" action="{{ url_for('orders.print_order_document', document_id=closure.id) }}">{% include "_csrf.html" %}<button class="btn-secondary" type="submit">Reprint Closure Report</button></form>
+        {% endif %}
+      {% endif %}
+      {% if packing %}
+        <a class="btn-secondary btn" href="{{ url_for('orders.order_document', document_id=packing.id) }}" target="_blank" rel="noopener">View Packing List</a>
+        {% if can('DOCUMENT_REPRINT') %}
+        <form method="post" action="{{ url_for('orders.print_order_document', document_id=packing.id) }}">{% include "_csrf.html" %}<button class="btn-secondary" type="submit">Reprint Packing List</button></form>
+        {% endif %}
+      {% endif %}
+      {% if can('SHIPPING_VIEW') %}
+        <a class="btn-secondary btn" href="{{ url_for('orders.shipping_detail', order_id=order.id) }}">Shipping & Tracking</a>
+      {% endif %}
+    {% endif %}
     <a class="btn-secondary btn" href="{{ url_for('orders.index', client_id=order.client_id) }}">Back to Orders</a>
   </div>
 </div>

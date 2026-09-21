@@ -14,6 +14,12 @@
     <a href="{{ url_for('processing.open_pdf', document_id=pdf_id) }}" target="_blank" rel="noopener">Open PDF</a>
   </p>
   {% endif %}
+  {% if packing_id %}
+  <div class="btn-row" style="margin-bottom:1rem;">
+    <a class="btn-secondary btn" href="{{ url_for('processing.open_pdf', document_id=packing_id) }}" target="_blank" rel="noopener">View Packing List</a>
+    <form method="post" action="{{ url_for('processing.print_pdf', document_id=packing_id) }}">{% include "_csrf.html" %}<button class="btn-secondary" type="submit">Print Packing List</button></form>
+  </div>
+  {% endif %}
   <form method="post" action="{{ url_for('processing.find') }}" class="inline-form">
     {% include "_csrf.html" %}
     <label>Pick Ticket Number
