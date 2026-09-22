@@ -48,6 +48,13 @@ from ..services.order_import import (
     template_bytes,
 )
 from ..services.order_visibility import apply_operational_order_visibility
+from ..services.shipping_report import (
+    ShippingReportAccessError,
+    ShippingReportSelectionError,
+    export_shipping_report,
+    list_shipping_report_page,
+    report_filter_choices,
+)
 from ..services.tenant import accessible_clients, require_entity_client, user_can_access_client
 
 bp = Blueprint("orders", __name__, url_prefix="/orders")
@@ -63,11 +70,16 @@ def _scope():
     if client_id and not user_can_access_client(current_user, client_id):
         abort(404)
     accessible_ids = [c.id for c in clients] or [-1]
-    warehouses = []
     if client_id:
-        warehouses = Warehouse.query.filter_by(client_id=client_id).order_by(Warehouse.warehouse_symbol).all()
-        if warehouse_id and not any(w.id == warehouse_id for w in warehouses):
-            warehouse_id = None
+        warehouses = Warehouse.query.filter_by(client_id=client_id).order_by(Warehouse.warehouse_code).all()
+    else:
+        warehouses = (
+            Warehouse.query.filter(Warehouse.client_id.in_(accessible_ids))
+            .order_by(Warehouse.warehouse_code)
+            .all()
+        )
+    if warehouse_id and not any(w.id == warehouse_id for w in warehouses):
+        warehouse_id = None
     if current_user.is_admin():
         divisions = Division.query.order_by(Division.code).all()
     else:
@@ -626,6 +638,94 @@ def shipping_confirm(order_id):
         db.session.rollback()
         flash(str(exc), "error")
     return redirect(url_for("orders.shipping_detail", order_id=order.id))
+
+
+def _shipping_report_args():
+    keys = (
+        "client_id",
+        "division_id",
+        "warehouse_id",
+        "order_status",
+        "shipping_status",
+        "carrier",
+        "created_from",
+        "created_to",
+        "closed_from",
+        "closed_to",
+        "q",
+        "page",
+        "per_page",
+    )
+    return {key: request.values.get(key) for key in keys if request.values.get(key)}
+
+
+@bp.route("/shipping-report")
+@permission_required("SHIPPING_REPORT_VIEW")
+def shipping_report():
+    ctx = _scope()
+    filters = {
+        "client_id": ctx["scope"]["client_id"],
+        "division_id": ctx["scope"]["division_id"],
+        "warehouse_id": ctx["scope"]["warehouse_id"],
+        "order_status": request.args.get("order_status", "").strip(),
+        "shipping_status": request.args.get("shipping_status", "").strip(),
+        "carrier": request.args.get("carrier", "").strip(),
+        "created_from": request.args.get("created_from", "").strip(),
+        "created_to": request.args.get("created_to", "").strip(),
+        "closed_from": request.args.get("closed_from", "").strip(),
+        "closed_to": request.args.get("closed_to", "").strip(),
+        "q": request.args.get("q", "").strip(),
+    }
+    try:
+        page_data = list_shipping_report_page(
+            current_user,
+            filters,
+            page=request.args.get("page", 1),
+            per_page=request.args.get("per_page", 50),
+        )
+    except ShippingReportAccessError:
+        abort(404)
+    return _page(
+        "orders/shipping_report.html",
+        "shipping_report",
+        rows=page_data["rows"],
+        page=page_data["page"],
+        pages=page_data["pages"],
+        total=page_data["total"],
+        per_page=page_data["per_page"],
+        per_page_options=page_data["per_page_options"],
+        q=filters["q"],
+        order_status=filters["order_status"],
+        shipping_status=filters["shipping_status"],
+        carrier=filters["carrier"],
+        created_from=filters["created_from"],
+        created_to=filters["created_to"],
+        closed_from=filters["closed_from"],
+        closed_to=filters["closed_to"],
+        **report_filter_choices(),
+    )
+
+
+@bp.route("/shipping-report/export", methods=["POST"])
+@permission_required("SHIPPING_REPORT_EXPORT")
+def shipping_report_export():
+    order_ids = request.form.getlist("order_ids", type=int)
+    redirect_args = _shipping_report_args()
+    try:
+        data, filename, _stats = export_shipping_report(current_user, order_ids)
+        db.session.commit()
+    except ShippingReportSelectionError as exc:
+        flash(str(exc), "error")
+        return redirect(url_for("orders.shipping_report", **redirect_args))
+    except ShippingReportAccessError:
+        db.session.rollback()
+        abort(404)
+    return send_file(
+        io.BytesIO(data),
+        as_attachment=True,
+        download_name=filename,
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
 
 
 @bp.route("/end-of-day")

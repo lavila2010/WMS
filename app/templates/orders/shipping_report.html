@@ -1,0 +1,172 @@
+{% extends "orders/_layout.html" %}
+{% block title %}Shipping Report{% endblock %}
+{% block orders_content %}
+<div class="card">
+  <form method="get" class="inline-form" id="shipping-report-filters">
+    <label>Client
+      <select name="client_id">
+        <option value="">{{ 'All clients' if current_user.is_admin() else 'All authorized' }}</option>
+        {% for c in options.clients %}
+          <option value="{{ c.id }}" {{ 'selected' if scope.client_id == c.id }}>{{ c.client_code }} — {{ c.name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Division
+      <select name="division_id">
+        <option value="">All divisions</option>
+        {% for d in options.divisions %}
+          <option value="{{ d.id }}" {{ 'selected' if scope.division_id == d.id }}>{{ d.code }} — {{ d.name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Warehouse
+      <select name="warehouse_id">
+        <option value="">All warehouses</option>
+        {% for w in options.warehouses %}
+          <option value="{{ w.id }}" {{ 'selected' if scope.warehouse_id == w.id }}>{{ w.warehouse_code }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Order Status
+      <select name="order_status">
+        <option value="">All</option>
+        {% for s in order_statuses %}
+          <option value="{{ s }}" {{ 'selected' if order_status == s }}>{{ s }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Shipping Status
+      <select name="shipping_status">
+        <option value="">All</option>
+        {% for s in shipping_statuses %}
+          <option value="{{ s }}" {{ 'selected' if shipping_status == s }}>{{ s }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Carrier
+      <select name="carrier">
+        <option value="">All</option>
+        {% for c in carriers %}
+          <option value="{{ c }}" {{ 'selected' if carrier == c }}>{{ c }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Created Date From
+      <input type="date" name="created_from" value="{{ created_from }}" />
+    </label>
+    <label>Created Date To
+      <input type="date" name="created_to" value="{{ created_to }}" />
+    </label>
+    <label>Closed Date From
+      <input type="date" name="closed_from" value="{{ closed_from }}" />
+    </label>
+    <label>Closed Date To
+      <input type="date" name="closed_to" value="{{ closed_to }}" />
+    </label>
+    <label>Search
+      <input name="q" value="{{ q }}" placeholder="WMS Order ID, Client Order #, Customer, Pick Ticket, Tracking" />
+    </label>
+    <label>Per page
+      <select name="per_page" onchange="this.form.submit()">
+        {% for opt in per_page_options %}
+          <option value="{{ opt }}" {{ 'selected' if per_page == opt }}>{{ opt }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <button type="submit">Apply</button>
+  </form>
+</div>
+
+<form method="post" action="{{ url_for('orders.shipping_report_export') }}" id="shipping-report-export">
+  {% include "_csrf.html" %}
+  {% for key in ['client_id','division_id','warehouse_id','order_status','shipping_status','carrier','created_from','created_to','closed_from','closed_to','q','page','per_page'] %}
+    {% if request.args.get(key) %}
+      <input type="hidden" name="{{ key }}" value="{{ request.args.get(key) }}" />
+    {% endif %}
+  {% endfor %}
+  <div class="card">
+    <div class="btn-row">
+      <label><input type="checkbox" id="select-all-visible" /> Select All Visible</label>
+      {% if can('SHIPPING_REPORT_EXPORT') %}
+        <button type="submit">Export Selected Orders</button>
+      {% endif %}
+      <button type="button" class="btn btn-secondary" id="clear-selection">Clear Selection</button>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>Select</th>
+          <th>Client</th>
+          <th>Order #</th>
+          <th>Customer Name</th>
+          <th>Order Label</th>
+          <th>Division</th>
+          <th>Warehouse</th>
+          <th>Order Status</th>
+          <th>Shipping Status</th>
+          <th class="right">Ordered Units</th>
+          <th class="right">Shipped Units</th>
+          <th class="right">Short Units</th>
+          <th class="right">Cartons</th>
+          <th>Carrier</th>
+          <th>Tracking Summary</th>
+          <th>Created Date</th>
+          <th>Closed Date</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+          <tr>
+            <td><input type="checkbox" name="order_ids" value="{{ row.order_id }}" class="order-check" /></td>
+            <td>{{ row.client or '—' }}</td>
+            <td class="mono">{{ row.order_number }}</td>
+            <td>{{ row.customer or '—' }}</td>
+            <td>{{ row.order_label }}</td>
+            <td>{{ row.division or '—' }}</td>
+            <td class="mono">{{ row.warehouse or '—' }}</td>
+            <td><span class="badge badge-{{ row.order_status }}">{{ row.order_status }}</span></td>
+            <td><span class="badge badge-{{ row.shipping_status }}">{{ row.shipping_status }}</span></td>
+            <td class="right num-cell">{{ row.ordered }}</td>
+            <td class="right num-cell">{{ row.shipped }}</td>
+            <td class="right num-cell">{{ row.short }}</td>
+            <td class="right num-cell">{{ row.cartons }}</td>
+            <td>{{ row.carrier or '—' }}</td>
+            <td class="mono">{{ row.tracking_summary or '—' }}</td>
+            <td class="muted">{{ row.created_date or '—' }}</td>
+            <td class="muted">{{ row.closed_date or '—' }}</td>
+          </tr>
+        {% else %}
+          <tr><td colspan="17" class="muted">No operational orders match the selected filters.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <div class="pager">
+      <span class="muted">{{ total }} orders · page {{ page }} of {{ pages }}</span>
+      {% if page > 1 %}
+        <a class="btn btn-secondary" href="{{ url_for('orders.shipping_report', client_id=scope.client_id or None, division_id=scope.division_id or None, warehouse_id=scope.warehouse_id or None, order_status=order_status or None, shipping_status=shipping_status or None, carrier=carrier or None, created_from=created_from or None, created_to=created_to or None, closed_from=closed_from or None, closed_to=closed_to or None, q=q or None, page=page-1, per_page=per_page) }}">Previous</a>
+      {% endif %}
+      {% if page < pages %}
+        <a class="btn btn-secondary" href="{{ url_for('orders.shipping_report', client_id=scope.client_id or None, division_id=scope.division_id or None, warehouse_id=scope.warehouse_id or None, order_status=order_status or None, shipping_status=shipping_status or None, carrier=carrier or None, created_from=created_from or None, created_to=created_to or None, closed_from=closed_from or None, closed_to=closed_to or None, q=q or None, page=page+1, per_page=per_page) }}">Next</a>
+      {% endif %}
+    </div>
+  </div>
+</form>
+<script>
+(function () {
+  var all = document.getElementById('select-all-visible');
+  var clearBtn = document.getElementById('clear-selection');
+  function boxes() { return document.querySelectorAll('.order-check'); }
+  if (all) {
+    all.addEventListener('change', function () {
+      boxes().forEach(function (box) { box.checked = all.checked; });
+    });
+  }
+  if (clearBtn) {
+    clearBtn.addEventListener('click', function () {
+      boxes().forEach(function (box) { box.checked = false; });
+      if (all) all.checked = false;
+    });
+  }
+})();
+</script>
+{% endblock %}

@@ -21,6 +21,8 @@ PERMISSIONS = [
     ("SHIPPING_VIEW", "View shipping and tracking", "Orders"),
     ("SHIPPING_EDIT", "Enter and correct carton tracking", "Orders"),
     ("SHIPPING_CONFIRM", "Validate and confirm shipping", "Orders"),
+    ("SHIPPING_REPORT_VIEW", "View the Shipping Report", "Orders"),
+    ("SHIPPING_REPORT_EXPORT", "Export the Shipping Report Excel", "Orders"),
     ("END_OF_DAY_VIEW", "View End of Day closed orders", "Orders"),
     ("END_OF_DAY_EXPORT", "Export End of Day Excel", "Orders"),
     ("ALLOCATION_VIEW", "View allocation", "Allocation"),
