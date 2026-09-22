@@ -25,7 +25,16 @@ TZ = ZoneInfo(EOD_TIMEZONE)
 PER_PAGE_OPTIONS = (25, 50, 100)
 DEFAULT_PER_PAGE = 50
 WORKSHEET_NAME = "Shipping Report"
-REPORT_WIDTH = 16
+REPORT_WIDTH = 17
+
+FULFILLMENT_PARTIALLY = "PARTIALLY FULFILLED"
+FULFILLMENT_CLOSED_COMPLETE = "CLOSED COMPLETE"
+FULFILLMENT_CLOSED_SHORT = "CLOSED SHORT"
+FULFILLMENT_STATUSES = [
+    FULFILLMENT_PARTIALLY,
+    FULFILLMENT_CLOSED_COMPLETE,
+    FULFILLMENT_CLOSED_SHORT,
+]
 
 ORDER_INFO_HEADERS = [
     "Client",
@@ -37,6 +46,7 @@ ORDER_INFO_HEADERS = [
     "Carrier",
     "Shipping Service",
     "Order Status",
+    "Fulfillment Status",
     "Shipping Status",
     "Ordered",
     "Shipped",
@@ -121,6 +131,14 @@ def display_status(value: str | None) -> str:
     return (value or "").replace("_", " ")
 
 
+def fulfillment_status(order) -> str:
+    if getattr(order, "status", None) == OrderStatus.CLOSED:
+        return FULFILLMENT_CLOSED_SHORT if getattr(order, "short_closed", False) else FULFILLMENT_CLOSED_COMPLETE
+    if getattr(order, "status", None) == OrderStatus.PARTIALLY_FULFILLED:
+        return FULFILLMENT_PARTIALLY
+    return display_status(getattr(order, "status", None))
+
+
 def order_label(initials: str | None, client_order_number: str | None, customer: str | None) -> str:
     parts = [str(initials or "").strip(), str(client_order_number or "").strip()]
     name = str(customer or "").strip()
@@ -149,6 +167,7 @@ def _apply_filters(query, filters: dict, *, accessible_client_ids, admin: bool):
     division_id = filters.get("division_id")
     warehouse_id = filters.get("warehouse_id")
     order_status = (filters.get("order_status") or "").strip()
+    fulfillment = (filters.get("fulfillment_status") or "").strip()
     shipping_status = (filters.get("shipping_status") or "").strip()
     carrier = (filters.get("carrier") or "").strip()
     q = (filters.get("q") or "").strip()
@@ -163,6 +182,12 @@ def _apply_filters(query, filters: dict, *, accessible_client_ids, admin: bool):
         query = query.filter(Order.warehouse_id == int(warehouse_id))
     if order_status in OrderStatus.ALL:
         query = query.filter(Order.status == order_status)
+    if fulfillment == FULFILLMENT_PARTIALLY:
+        query = query.filter(Order.status == OrderStatus.PARTIALLY_FULFILLED)
+    elif fulfillment == FULFILLMENT_CLOSED_COMPLETE:
+        query = query.filter(Order.status == OrderStatus.CLOSED, Order.short_closed.is_(False))
+    elif fulfillment == FULFILLMENT_CLOSED_SHORT:
+        query = query.filter(Order.status == OrderStatus.CLOSED, Order.short_closed.is_(True))
     if shipping_status in ShippingStatus.ALL:
         query = query.filter(Order.shipping_status == shipping_status)
     if carrier:
@@ -300,6 +325,7 @@ def list_shipping_report_page(user, filters: dict | None = None, *, page=1, per_
                 "division": order.division.name if order.division else "",
                 "warehouse": order.warehouse.warehouse_code if order.warehouse else "",
                 "order_status": order.status,
+                "fulfillment_status": fulfillment_status(order),
                 "shipping_status": order.shipping_status,
                 "ordered": qty["ordered"],
                 "shipped": qty["shipped"],
@@ -483,6 +509,7 @@ def load_shipping_report_blocks(user, order_ids) -> list[dict]:
                 "carrier": order.carrier or "",
                 "shipping_service": order.shipping_service or "",
                 "order_status": display_status(order.status),
+                "fulfillment_status": fulfillment_status(order),
                 "shipping_status": display_status(order.shipping_status),
                 "ordered": qty["ordered"],
                 "shipped": qty["shipped"],
@@ -548,6 +575,7 @@ def build_shipping_report_workbook(blocks: list[dict]) -> bytes:
             block["carrier"],
             block["shipping_service"],
             block["order_status"],
+            block["fulfillment_status"],
             block["shipping_status"],
             block["ordered"],
             block["shipped"],
@@ -558,7 +586,7 @@ def build_shipping_report_workbook(blocks: list[dict]) -> bytes:
         ]
         for col, value in enumerate(values, 1):
             cell = ws.cell(row, col, value)
-            if col in {11, 12, 13, 14} and value != "":
+            if col in {12, 13, 14, 15} and value != "":
                 cell.number_format = "0"
             cell.font = FONT_BASE
             cell.fill = FILL_WHITE
@@ -610,7 +638,7 @@ def build_shipping_report_workbook(blocks: list[dict]) -> bytes:
             row += 1
         row += 1
 
-    widths = [18, 14, 22, 20, 14, 16, 12, 16, 16, 20, 10, 10, 10, 10, 14, 14]
+    widths = [18, 14, 22, 20, 14, 16, 12, 16, 16, 18, 20, 10, 10, 10, 10, 14, 14]
     for index, width in enumerate(widths, 1):
         ws.column_dimensions[get_column_letter(index)].width = width
     buffer = BytesIO()
@@ -648,6 +676,7 @@ def export_shipping_report(user, order_ids) -> tuple[bytes, str, dict]:
 def report_filter_choices():
     return {
         "order_statuses": OrderStatus.ALL,
+        "fulfillment_statuses": FULFILLMENT_STATUSES,
         "shipping_statuses": ShippingStatus.ALL,
         "carriers": TrackingCarrier.ALL,
         "per_page_options": PER_PAGE_OPTIONS,

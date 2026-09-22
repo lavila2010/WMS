@@ -103,6 +103,22 @@ class LedgerType:
     ISSUE_RESOLVED = "ISSUE_RESOLVED"
     MISSING_CONFIRMED = "MISSING_CONFIRMED"
     UNIT_DECOMMISSIONED = "UNIT_DECOMMISSIONED"
+    ALL = [
+        IMPORT,
+        ADJUSTMENT,
+        RESERVE,
+        UNRESERVE,
+        PACK,
+        UNPACK,
+        SHIP,
+        RETURN,
+        TRANSFER_IN,
+        TRANSFER_OUT,
+        ISSUE_HOLD,
+        ISSUE_RESOLVED,
+        MISSING_CONFIRMED,
+        UNIT_DECOMMISSIONED,
+    ]
 
 
 class InventoryIssueType:

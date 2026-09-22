@@ -24,11 +24,15 @@ from app.services.processing import (
 )
 from app.services.shipping import save_carton_tracking
 from app.services.shipping_report import (
+    FULFILLMENT_CLOSED_COMPLETE,
+    FULFILLMENT_CLOSED_SHORT,
+    FULFILLMENT_PARTIALLY,
     ORDER_INFO_HEADERS,
     PRODUCT_HEADERS,
     WORKSHEET_NAME,
     ShippingReportAccessError,
     export_shipping_report,
+    fulfillment_status,
     load_shipping_report_blocks,
     order_label,
 )
@@ -182,6 +186,7 @@ def test_01_route_loads(app, db, admin_user, admin_client):
     assert 'name="q"' in html
     assert "Ordered Units" in html
     assert "Tracking Summary" in html
+    assert "Fulfillment Status" in html
     assert 'option value="50" selected' in html
     assert "25" in html and "100" in html
 
@@ -311,8 +316,8 @@ def test_15_16_17_18_19_20_21_22_export_layout(app, db, admin_user, admin_client
     soho_row = _find_row(ws, "CEL - 100 - Soho NY")
     madison_row = _find_row(ws, "CEL - 101 - Madison Ave")
     assert soho_row < madison_row
-    headers = [ws.cell(soho_row + 1, col).value for col in range(1, 17)]
-    values = [ws.cell(soho_row + 2, col).value for col in range(1, 17)]
+    headers = [ws.cell(soho_row + 1, col).value for col in range(1, 18)]
+    values = [ws.cell(soho_row + 2, col).value for col in range(1, 18)]
     assert headers == ORDER_INFO_HEADERS
     assert values[0] == "CEL"
     assert values[1] == "100"
@@ -430,10 +435,12 @@ def test_36_37_closed_short_excludes_missing(app, db, admin_user):
     data, _, stats = export_shipping_report(admin_user, [order.id])
     ws = _workbook(data).active
     label_row = _find_row(ws, "CEL - 15 - Short Store")
-    values = [ws.cell(label_row + 2, col).value for col in range(1, 17)]
-    assert values[10] == 2
-    assert values[11] == 1
+    values = [ws.cell(label_row + 2, col).value for col in range(1, 18)]
+    assert values[8] == "CLOSED"
+    assert values[9] == FULFILLMENT_CLOSED_SHORT
+    assert values[11] == 2
     assert values[12] == 1
+    assert values[13] == 1
     products = [row for row in _sheet_values(ws) if row[0] == "UPC-A"]
     assert len(products) == 1
     assert products[0][6] == 1
@@ -567,3 +574,96 @@ def test_newest_first_and_blank_customer_label(app, db, admin_user, admin_client
     assert "CEL - 101 -" not in html
     data, _, _ = export_shipping_report(admin_user, [newer.id])
     assert _workbook(data).active["A1"].value == "CEL - 101"
+
+
+def _partial_seven(admin_user, db, number="101"):
+    w = _world(db)
+    _stock(w["celine"], w["cel_ny"], "UPC-A", 10)
+    order = _import_order(
+        admin_user,
+        w["celine"],
+        w["cel_ecom"],
+        [_line(order=str(number), upc="UPC-A", qty=10, customer="Madison Ave")],
+    )
+    for unit in InventoryUnit.query.filter_by(upc="UPC-A").limit(3):
+        unit.status = "SHIPPED"
+    db.session.commit()
+    allocate_order(Order.query.get(order.id), user=admin_user)
+    approve_partial_allocation(Order.query.get(order.id), user=admin_user)
+    create_pick_ticket(Order.query.get(order.id))
+    acquire_lock(Order.query.get(order.id), admin_user)
+    _pack_scans(admin_user, Order.query.get(order.id), ["UPC-A"] * 7, weight=3.3, dims=(12, 10, 8))
+    close_order(Order.query.get(order.id), admin_user)
+    order = Order.query.get(order.id)
+    carton = Carton.query.filter_by(order_id=order.id).order_by(Carton.id).first()
+    save_carton_tracking(order, carton, tracking_number="1ZPARTIAL001", carrier="UPS", user=admin_user)
+    db.session.commit()
+    return w, Order.query.get(order.id), Carton.query.get(carton.id)
+
+
+def test_fulfillment_closed_and_partial(app, db, admin_user, admin_client):
+    w, soho = _soho_order(db, admin_user)
+    _, partial, carton = _partial_seven(admin_user, db, "101")
+    html = admin_client.get("/orders/shipping-report").get_data(as_text=True)
+    assert "CEL - 100 - Soho NY" in html
+    assert "CEL - 101 - Madison Ave" in html
+    assert "CLOSED COMPLETE" in html
+    assert "PARTIALLY FULFILLED" in html
+    assert "Fulfillment Status" in html
+    assert soho.status == OrderStatus.CLOSED
+    assert soho.short_closed is False
+    assert fulfillment_status(soho) == FULFILLMENT_CLOSED_COMPLETE
+    assert partial.status == OrderStatus.PARTIALLY_FULFILLED
+    assert fulfillment_status(partial) == FULFILLMENT_PARTIALLY
+
+    complete_html = admin_client.get(
+        "/orders/shipping-report?fulfillment_status=CLOSED%20COMPLETE"
+    ).get_data(as_text=True)
+    assert "CEL - 100 - Soho NY" in complete_html
+    assert "CEL - 101 - Madison Ave" not in complete_html
+    partial_html = admin_client.get(
+        "/orders/shipping-report?fulfillment_status=PARTIALLY%20FULFILLED"
+    ).get_data(as_text=True)
+    assert "CEL - 101 - Madison Ave" in partial_html
+    assert "CEL - 100 - Soho NY" not in partial_html
+
+    data, _, _ = export_shipping_report(admin_user, [partial.id])
+    ws = _workbook(data).active
+    label_row = _find_row(ws, "CEL - 101 - Madison Ave")
+    headers = [ws.cell(label_row + 1, col).value for col in range(1, 18)]
+    values = [ws.cell(label_row + 2, col).value for col in range(1, 18)]
+    assert headers == ORDER_INFO_HEADERS
+    assert values[8] == "PARTIALLY FULFILLED"
+    assert values[9] == FULFILLMENT_PARTIALLY
+    assert values[11] == 10
+    assert values[12] == 7
+    assert values[13] == 0
+    text = "\n".join(str(row[0].value or "") for row in ws.iter_rows(min_col=1, max_col=1))
+    assert carton.carton_number in text
+    assert "1ZPARTIAL001" in text
+    products = [row for row in _sheet_values(ws) if row[0] == "UPC-A"]
+    assert products and products[0][6] == 7
+    assert "CLOSED" not in values[8] or values[8] == "PARTIALLY FULFILLED"
+
+
+def test_fulfillment_closed_short_filter(app, db, admin_user, admin_client):
+    w = _world(db)
+    _stock(w["celine"], w["cel_ny"], "UPC-A", 2)
+    order = _import_order(admin_user, w["celine"], w["cel_ecom"], [_line(order="15", upc="UPC-A", qty=2, customer="Short Store")])
+    allocate_order(order, user=admin_user)
+    create_pick_ticket(Order.query.get(order.id))
+    acquire_lock(Order.query.get(order.id), admin_user)
+    _pack_scans(admin_user, Order.query.get(order.id), ["UPC-A"], weight=2.0, dims=(10, 8, 6))
+    close_order_short(Order.query.get(order.id), admin_user, confirmed=True)
+    order = Order.query.get(order.id)
+    assert fulfillment_status(order) == FULFILLMENT_CLOSED_SHORT
+    html = admin_client.get("/orders/shipping-report?fulfillment_status=CLOSED%20SHORT").get_data(as_text=True)
+    assert "CEL - 15 - Short Store" in html
+    data, _, _ = export_shipping_report(admin_user, [order.id])
+    ws = _workbook(data).active
+    label_row = _find_row(ws, "CEL - 15 - Short Store")
+    values = [ws.cell(label_row + 2, col).value for col in range(1, 18)]
+    assert values[9] == FULFILLMENT_CLOSED_SHORT
+    assert values[11] == 2
+    assert values[12] == 1
+    assert values[13] == 1
