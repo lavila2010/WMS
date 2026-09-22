@@ -316,8 +316,8 @@ def test_15_16_17_18_19_20_21_22_export_layout(app, db, admin_user, admin_client
     soho_row = _find_row(ws, "CEL - 100 - Soho NY")
     madison_row = _find_row(ws, "CEL - 101 - Madison Ave")
     assert soho_row < madison_row
-    headers = [ws.cell(soho_row + 1, col).value for col in range(1, 17)]
-    values = [ws.cell(soho_row + 2, col).value for col in range(1, 17)]
+    headers = [ws.cell(soho_row + 1, col).value for col in range(1, 18)]
+    values = [ws.cell(soho_row + 2, col).value for col in range(1, 18)]
     assert headers == ORDER_INFO_HEADERS
     assert values[0] == "CEL"
     assert values[1] == "100"
@@ -435,10 +435,12 @@ def test_36_37_closed_short_excludes_missing(app, db, admin_user):
     data, _, stats = export_shipping_report(admin_user, [order.id])
     ws = _workbook(data).active
     label_row = _find_row(ws, "CEL - 15 - Short Store")
-    values = [ws.cell(label_row + 2, col).value for col in range(1, 17)]
-    assert values[10] == 2
-    assert values[11] == 1
+    values = [ws.cell(label_row + 2, col).value for col in range(1, 18)]
+    assert values[8] == "CLOSED"
+    assert values[9] == FULFILLMENT_CLOSED_SHORT
+    assert values[11] == 2
     assert values[12] == 1
+    assert values[13] == 1
     products = [row for row in _sheet_values(ws) if row[0] == "UPC-A"]
     assert len(products) == 1
     assert products[0][6] == 1

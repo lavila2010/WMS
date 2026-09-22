@@ -139,7 +139,7 @@ def test_05_06_upc_and_ship_filter(app, db, admin_user, admin_client):
     assert "SHIP" in html
     assert order.wms_order_id in html
     data, _, _ = export_transactions_xlsx(admin_user, {"upc": "UPC-A", "type": "SHIP"})
-    types = {row[11].value for row in load_workbook(BytesIO(data)).active.iter_rows(min_row=2, min_col=12, max_col=12)}
+    types = {row[11] for row in load_workbook(BytesIO(data)).active.iter_rows(min_row=2, values_only=True)}
     assert types == {"SHIP"}
 
 
@@ -207,7 +207,7 @@ def test_12_14_18_export_all_over_500(app, db, admin_user, admin_client):
     wb = load_workbook(BytesIO(resp.data))
     assert wb.sheetnames == ["Transactions"]
     assert wb.active.max_row == 521
-    types = {row[11].value for row in wb.active.iter_rows(min_row=2, min_col=12, max_col=12)}
+    types = {row[11] for row in wb.active.iter_rows(min_row=2, values_only=True)}
     assert types == {"SHIP"}
 
 
@@ -226,8 +226,8 @@ def test_15_16_17_export_matches_filters(app, db, admin_user):
         },
     )
     ws = load_workbook(BytesIO(data)).active
-    warehouses = {row[2].value for row in ws.iter_rows(min_row=2, min_col=3, max_col=3)}
-    clients = {row[1].value for row in ws.iter_rows(min_row=2, min_col=2, max_col=2)}
+    warehouses = {row[2] for row in ws.iter_rows(min_row=2, values_only=True)}
+    clients = {row[1] for row in ws.iter_rows(min_row=2, values_only=True)}
     assert "01-CEL-NJ" not in warehouses
     assert clients <= {"01-CEL"}
     assert count >= 1
