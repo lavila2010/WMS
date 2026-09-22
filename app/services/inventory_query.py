@@ -6,7 +6,7 @@ from sqlalchemy import String, case, cast, func, or_
 
 from ..constants import UnitStatus
 from ..extensions import db
-from ..models import ImportBatch, InventoryTransaction, InventoryUnit
+from ..models import ImportBatch, InventoryUnit
 from .inventory_visibility import apply_operational_visibility, operational_batch_clause
 
 
@@ -174,6 +174,29 @@ def search_units(
     return query.order_by(InventoryUnit.location.asc(), InventoryUnit.id.asc()).limit(limit).all()
 
 
+def ledger_query(
+    *,
+    client_id=None,
+    warehouse_id=None,
+    client_ids=None,
+    upc=None,
+    transaction_type=None,
+    date_from=None,
+    date_to=None,
+):
+    from .inventory_transactions import ledger_query as _ledger_query
+
+    return _ledger_query(
+        client_id=client_id,
+        warehouse_id=warehouse_id,
+        client_ids=client_ids,
+        upc=upc,
+        transaction_type=transaction_type,
+        date_from=date_from,
+        date_to=date_to,
+    )
+
+
 def ledger_rows(
     *,
     client_id=None,
@@ -185,26 +208,18 @@ def ledger_rows(
     date_to=None,
     limit=500,
 ):
-    query = InventoryTransaction.query
-    if client_id:
-        query = query.filter(InventoryTransaction.client_id == client_id)
-    elif client_ids is not None:
-        query = query.filter(InventoryTransaction.client_id.in_(client_ids or [-1]))
-    if warehouse_id:
-        query = query.filter(InventoryTransaction.warehouse_id == warehouse_id)
-    if upc:
-        query = query.filter(InventoryTransaction.upc == upc.strip())
-    if transaction_type:
-        query = query.filter(InventoryTransaction.transaction_type == transaction_type.strip().upper())
-    if date_from:
-        query = query.filter(InventoryTransaction.created_at >= date_from)
-    if date_to:
-        query = query.filter(InventoryTransaction.created_at < date_to)
-    return (
-        query.order_by(InventoryTransaction.created_at.desc(), InventoryTransaction.id.desc())
-        .limit(limit)
-        .all()
+    query = ledger_query(
+        client_id=client_id,
+        warehouse_id=warehouse_id,
+        client_ids=client_ids,
+        upc=upc,
+        transaction_type=transaction_type,
+        date_from=date_from,
+        date_to=date_to,
     )
+    if limit is not None:
+        query = query.limit(int(limit))
+    return query.all()
 
 
 def bulk_client_upc_descriptions(client_id: int, upcs) -> dict[str, str]:

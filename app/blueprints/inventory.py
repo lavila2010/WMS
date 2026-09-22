@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import io
-from datetime import datetime, timedelta
 
 import pandas as pd
 from flask import (
@@ -19,7 +18,7 @@ from flask import (
 from flask_login import current_user
 
 from ..auth import permission_required
-from ..constants import UnitStatus
+from ..constants import LedgerType, UnitStatus
 from ..extensions import db
 from ..models import Client, ImportBatch, InventoryUnit, Warehouse
 from ..services.inventory_import import (
@@ -40,6 +39,12 @@ from ..services.inventory_import import (
 )
 from ..services import inventory_query as iq
 from ..services.inventory_query import show_zero_enabled
+from ..services.inventory_transactions import (
+    TransactionAccessError,
+    export_transactions_csv_rows,
+    export_transactions_xlsx,
+    list_transaction_page,
+)
 from ..services.inventory_visibility import apply_operational_visibility
 from ..services.tenant import accessible_clients, user_can_access_client
 
@@ -403,66 +408,96 @@ def location_view():
     return _page("inventory/location.html", "search", upc=upc, location=location, units=units)
 
 
-@bp.route("/transactions")
-@permission_required("INVENTORY_VIEW")
-def transactions():
-    ctx = _scope()
-    filters = {
+def _transaction_filters(ctx):
+    return {
+        "client_id": ctx["scope"]["client_id"],
+        "warehouse_id": ctx["scope"]["warehouse_id"],
         "upc": request.args.get("upc", "").strip(),
         "type": request.args.get("type", "").strip(),
         "date_from": request.args.get("date_from", "").strip(),
         "date_to": request.args.get("date_to", "").strip(),
     }
-    date_from = datetime.strptime(filters["date_from"], "%Y-%m-%d") if filters["date_from"] else None
-    date_to = (
-        datetime.strptime(filters["date_to"], "%Y-%m-%d") + timedelta(days=1)
-        if filters["date_to"]
-        else None
+
+
+@bp.route("/transactions")
+@permission_required("INVENTORY_VIEW")
+def transactions():
+    ctx = _scope()
+    filters = _transaction_filters(ctx)
+    try:
+        page_data = list_transaction_page(
+            current_user,
+            filters,
+            page=request.args.get("page", 1),
+            per_page=request.args.get("per_page", 100),
+        )
+    except TransactionAccessError:
+        abort(404)
+    return _page(
+        "inventory/transactions.html",
+        "transactions",
+        filters=filters,
+        rows=page_data["rows"],
+        movements=page_data["rows"],
+        page=page_data["page"],
+        pages=page_data["pages"],
+        total=page_data["total"],
+        per_page=page_data["per_page"],
+        per_page_options=page_data["per_page_options"],
+        ledger_types=LedgerType.ALL,
     )
-    movements = iq.ledger_rows(
-        client_id=ctx["scope"]["client_id"],
-        warehouse_id=ctx["scope"]["warehouse_id"],
-        client_ids=ctx["client_ids"],
-        upc=filters["upc"] or None,
-        transaction_type=filters["type"] or None,
-        date_from=date_from,
-        date_to=date_to,
-    )
-    return _page("inventory/transactions.html", "transactions", filters=filters, movements=movements)
 
 
 @bp.route("/transactions.csv")
 @permission_required("INVENTORY_EXPORT")
 def transactions_csv():
     ctx = _scope()
-    movements = iq.ledger_rows(
-        client_id=ctx["scope"]["client_id"],
-        warehouse_id=ctx["scope"]["warehouse_id"],
-        client_ids=ctx["client_ids"],
-        upc=request.args.get("upc") or None,
-        transaction_type=request.args.get("type") or None,
-    )
+    try:
+        rows = list(export_transactions_csv_rows(current_user, _transaction_filters(ctx)))
+    except TransactionAccessError:
+        abort(404)
     frame = pd.DataFrame(
         [
             {
-                "created_at": m.created_at,
-                "unit_id": m.inventory_unit_id,
-                "upc": m.upc,
-                "client_id": m.client_id,
-                "warehouse_id": m.warehouse_id,
-                "location": m.location,
-                "type": m.transaction_type,
-                "from_status": m.from_status,
-                "to_status": m.to_status,
-                "reference": m.reference,
+                "created_at": row["timestamp"],
+                "unit_id": row["unit_id"],
+                "upc": row["upc"],
+                "client": row["client"],
+                "warehouse": row["warehouse"],
+                "location": row["location"],
+                "type": row["transaction"],
+                "from_status": row["from_status"],
+                "to_status": row["to_status"],
+                "wms_order_id": row["wms_order_id"],
+                "client_order_number": row["client_order_number"],
+                "customer": row["customer"],
+                "carton_number": row["carton_number"],
+                "tracking_number": row["tracking_number"],
+                "reference": row["reference"],
             }
-            for m in movements
+            for row in rows
         ]
     )
     buffer = io.BytesIO()
     frame.to_csv(buffer, index=False)
     buffer.seek(0)
     return send_file(buffer, as_attachment=True, download_name="inventory_transactions.csv", mimetype="text/csv")
+
+
+@bp.route("/transactions.xlsx")
+@permission_required("INVENTORY_EXPORT")
+def transactions_xlsx():
+    ctx = _scope()
+    try:
+        data, filename, _count = export_transactions_xlsx(current_user, _transaction_filters(ctx))
+    except TransactionAccessError:
+        abort(404)
+    return send_file(
+        io.BytesIO(data),
+        as_attachment=True,
+        download_name=filename,
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
 
 
 @bp.route("/export.xlsx")

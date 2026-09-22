@@ -35,6 +35,14 @@
         {% endfor %}
       </select>
     </label>
+    <label>Fulfillment Status
+      <select name="fulfillment_status">
+        <option value="">All</option>
+        {% for s in fulfillment_statuses %}
+          <option value="{{ s }}" {{ 'selected' if fulfillment_status == s }}>{{ s }}</option>
+        {% endfor %}
+      </select>
+    </label>
     <label>Shipping Status
       <select name="shipping_status">
         <option value="">All</option>
@@ -79,7 +87,7 @@
 
 <form method="post" action="{{ url_for('orders.shipping_report_export') }}" id="shipping-report-export">
   {% include "_csrf.html" %}
-  {% for key in ['client_id','division_id','warehouse_id','order_status','shipping_status','carrier','created_from','created_to','closed_from','closed_to','q','page','per_page'] %}
+  {% for key in ['client_id','division_id','warehouse_id','order_status','fulfillment_status','shipping_status','carrier','created_from','created_to','closed_from','closed_to','q','page','per_page'] %}
     {% if request.args.get(key) %}
       <input type="hidden" name="{{ key }}" value="{{ request.args.get(key) }}" />
     {% endif %}
@@ -103,6 +111,7 @@
           <th>Division</th>
           <th>Warehouse</th>
           <th>Order Status</th>
+          <th>Fulfillment Status</th>
           <th>Shipping Status</th>
           <th class="right">Ordered Units</th>
           <th class="right">Shipped Units</th>
@@ -125,6 +134,7 @@
             <td>{{ row.division or '—' }}</td>
             <td class="mono">{{ row.warehouse or '—' }}</td>
             <td><span class="badge badge-{{ row.order_status }}">{{ row.order_status }}</span></td>
+            <td>{{ row.fulfillment_status or '—' }}</td>
             <td><span class="badge badge-{{ row.shipping_status }}">{{ row.shipping_status }}</span></td>
             <td class="right num-cell">{{ row.ordered }}</td>
             <td class="right num-cell">{{ row.shipped }}</td>
@@ -136,17 +146,17 @@
             <td class="muted">{{ row.closed_date or '—' }}</td>
           </tr>
         {% else %}
-          <tr><td colspan="17" class="muted">No operational orders match the selected filters.</td></tr>
+          <tr><td colspan="18" class="muted">No operational orders match the selected filters.</td></tr>
         {% endfor %}
       </tbody>
     </table>
     <div class="pager">
       <span class="muted">{{ total }} orders · page {{ page }} of {{ pages }}</span>
       {% if page > 1 %}
-        <a class="btn btn-secondary" href="{{ url_for('orders.shipping_report', client_id=scope.client_id or None, division_id=scope.division_id or None, warehouse_id=scope.warehouse_id or None, order_status=order_status or None, shipping_status=shipping_status or None, carrier=carrier or None, created_from=created_from or None, created_to=created_to or None, closed_from=closed_from or None, closed_to=closed_to or None, q=q or None, page=page-1, per_page=per_page) }}">Previous</a>
+        <a class="btn btn-secondary" href="{{ url_for('orders.shipping_report', client_id=scope.client_id or None, division_id=scope.division_id or None, warehouse_id=scope.warehouse_id or None, order_status=order_status or None, fulfillment_status=fulfillment_status or None, shipping_status=shipping_status or None, carrier=carrier or None, created_from=created_from or None, created_to=created_to or None, closed_from=closed_from or None, closed_to=closed_to or None, q=q or None, page=page-1, per_page=per_page) }}">Previous</a>
       {% endif %}
       {% if page < pages %}
-        <a class="btn btn-secondary" href="{{ url_for('orders.shipping_report', client_id=scope.client_id or None, division_id=scope.division_id or None, warehouse_id=scope.warehouse_id or None, order_status=order_status or None, shipping_status=shipping_status or None, carrier=carrier or None, created_from=created_from or None, created_to=created_to or None, closed_from=closed_from or None, closed_to=closed_to or None, q=q or None, page=page+1, per_page=per_page) }}">Next</a>
+        <a class="btn btn-secondary" href="{{ url_for('orders.shipping_report', client_id=scope.client_id or None, division_id=scope.division_id or None, warehouse_id=scope.warehouse_id or None, order_status=order_status or None, fulfillment_status=fulfillment_status or None, shipping_status=shipping_status or None, carrier=carrier or None, created_from=created_from or None, created_to=created_to or None, closed_from=closed_from or None, closed_to=closed_to or None, q=q or None, page=page+1, per_page=per_page) }}">Next</a>
       {% endif %}
     </div>
   </div>

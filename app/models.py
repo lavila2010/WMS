@@ -466,6 +466,13 @@ class InventoryTransaction(db.Model):
     __table_args__ = (
         db.Index("ix_txn_import_batch", "import_batch_id"),
         db.Index("ix_txn_cwu", "client_id", "warehouse_id", "upc"),
+        db.Index(
+            "ix_txn_cw_type_created",
+            "client_id",
+            "warehouse_id",
+            "transaction_type",
+            "created_at",
+        ),
     )
 
     id = db.Column(db.Integer, primary_key=True)
