@@ -693,7 +693,6 @@ def shipping_report():
         pages=page_data["pages"],
         total=page_data["total"],
         per_page=page_data["per_page"],
-        per_page_options=page_data["per_page_options"],
         q=filters["q"],
         order_status=filters["order_status"],
         shipping_status=filters["shipping_status"],

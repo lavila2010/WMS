@@ -160,10 +160,8 @@ def _find_row(ws, text):
 
 def _export(client, order_ids, path="/"):
     payload = form_data(client, {}, path=path)
-    items = list(payload.items())
-    for oid in order_ids:
-        items.append(("order_ids", str(oid)))
-    return client.post("/orders/shipping-report/export", data=items)
+    payload["order_ids"] = [str(oid) for oid in order_ids]
+    return client.post("/orders/shipping-report/export", data=payload)
 
 
 def test_01_route_loads(app, db, admin_user, admin_client):
@@ -224,9 +222,8 @@ def test_04_05_authorized_orders_and_hidden_clients(app, db, admin_user, admin_c
     cel = _simple_closed(db, admin_user, w, "100", "Soho NY")
     dio = _simple_closed(db, admin_user, w, "DIO-1", "Paris", upc="UPC-D", division=w["dio_ecom"], warehouse=w["dio_ny"])
     html = admin_client.get("/orders/shipping-report").get_data(as_text=True)
-    assert cel.wms_order_id in html
-    assert dio.wms_order_id in html
     assert "CEL - 100 - Soho NY" in html
+    assert "DIO - DIO-1 - Paris" in html
     create_user(
         "cel-user",
         perms=["SHIPPING_REPORT_VIEW", "SHIPPING_REPORT_EXPORT"],
@@ -235,8 +232,8 @@ def test_04_05_authorized_orders_and_hidden_clients(app, db, admin_user, admin_c
     limited = app.test_client()
     login(limited, "cel-user")
     html = limited.get("/orders/shipping-report").get_data(as_text=True)
-    assert cel.wms_order_id in html
-    assert dio.wms_order_id not in html
+    assert "CEL - 100 - Soho NY" in html
+    assert "DIO - DIO-1 - Paris" not in html
     assert "Paris" not in html
 
 
@@ -251,29 +248,30 @@ def test_06_07_08_filters(app, db, admin_user, admin_client):
     dio = _simple_closed(db, admin_user, w, "DIO-1", "Paris", upc="UPC-D", division=w["dio_ecom"], warehouse=w["dio_ny"])
 
     client_html = admin_client.get(f"/orders/shipping-report?client_id={w['celine'].id}").get_data(as_text=True)
-    assert ecom.wms_order_id in client_html
-    assert dio.wms_order_id not in client_html
+    assert "CEL - 100 - Soho NY" in client_html
+    assert "Paris" not in client_html
 
     div_html = admin_client.get(f"/orders/shipping-report?division_id={retail.id}").get_data(as_text=True)
-    assert rtl.wms_order_id in div_html
-    assert ecom.wms_order_id not in div_html
+    assert "CEL - 200 - Retail Store" in div_html
+    assert "Soho NY" not in div_html
 
     wh_html = admin_client.get(f"/orders/shipping-report?warehouse_id={w['cel_nj'].id}").get_data(as_text=True)
-    assert nj.wms_order_id in wh_html
-    assert ecom.wms_order_id not in wh_html
+    assert "CEL - 300 - New Jersey" in wh_html
+    assert "Soho NY" not in wh_html
 
 
 def test_09_10_11_12_search(app, db, admin_user, admin_client):
     w, order = _soho_order(db, admin_user)
     ticket = PickTicket.query.filter_by(order_id=order.id).one()
-    assert order.wms_order_id in admin_client.get(f"/orders/shipping-report?q={order.wms_order_id}").get_data(as_text=True)
-    assert "Soho NY" in admin_client.get("/orders/shipping-report?q=100").get_data(as_text=True)
-    assert order.wms_order_id in admin_client.get("/orders/shipping-report?q=Soho").get_data(as_text=True)
-    assert order.wms_order_id in admin_client.get("/orders/shipping-report?q=1Z999AAA001").get_data(as_text=True)
+    label = "CEL - 100 - Soho NY"
+    assert label in admin_client.get(f"/orders/shipping-report?q={order.wms_order_id}").get_data(as_text=True)
+    assert label in admin_client.get("/orders/shipping-report?q=100").get_data(as_text=True)
+    assert label in admin_client.get("/orders/shipping-report?q=Soho").get_data(as_text=True)
+    assert label in admin_client.get("/orders/shipping-report?q=1Z999AAA001").get_data(as_text=True)
     assert ticket.pick_ticket_number
-    assert order.wms_order_id in admin_client.get(f"/orders/shipping-report?q={ticket.pick_ticket_number}").get_data(as_text=True)
+    assert label in admin_client.get(f"/orders/shipping-report?q={ticket.pick_ticket_number}").get_data(as_text=True)
     miss = admin_client.get("/orders/shipping-report?q=NO-SUCH-TRACK").get_data(as_text=True)
-    assert order.wms_order_id not in miss
+    assert label not in miss
 
 
 def test_13_14_multiselect_and_select_all_visible(app, db, admin_user, admin_client):
@@ -560,9 +558,11 @@ def test_44_openpyxl_reopen(app, db, admin_user, admin_client):
 def test_newest_first_and_blank_customer_label(app, db, admin_user, admin_client):
     w = _world(db)
     older = _simple_closed(db, admin_user, w, "100", "Older")
-    newer = _import_order(admin_user, w["celine"], w["cel_ecom"], [_line(order="101", customer="")])
+    newer = _import_order(admin_user, w["celine"], w["cel_ecom"], [_line(order="101", customer="Placeholder")])
+    newer.customer = ""
+    db.session.commit()
     html = admin_client.get("/orders/shipping-report").get_data(as_text=True)
-    assert html.index(newer.wms_order_id) < html.index(older.wms_order_id)
+    assert html.index("CEL - 101") < html.index("CEL - 100 - Older")
     assert "CEL - 101" in html
     assert "CEL - 101 -" not in html
     data, _, _ = export_shipping_report(admin_user, [newer.id])
