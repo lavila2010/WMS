@@ -24,6 +24,7 @@ from ..extensions import db
 from ..models import Carton, Division, Document, ImportBatch, Order, OrderLine, PickTicket, Warehouse
 from ..services.documents import get_store
 from ..services.end_of_day import (
+    FULFILLMENT_STATUSES,
     build_eod_rows,
     closed_orders_query,
     eod_kpis,
@@ -730,37 +731,57 @@ def shipping_report_export():
     )
 
 
+def _eod_filters(ctx):
+    return {
+        "day": parse_eod_date(request.args.get("date")),
+        "carrier": request.args.get("carrier", "").strip(),
+        "closed_by": request.args.get("closed_by", "").strip(),
+        "shipping_status": request.args.get("shipping_status", "").strip(),
+        "fulfillment_status": request.args.get("fulfillment_status", "").strip(),
+        "order_status": request.args.get("order_status", "").strip(),
+        "client_id": ctx["scope"]["client_id"],
+        "division_id": ctx["scope"]["division_id"],
+        "warehouse_id": ctx["scope"]["warehouse_id"],
+    }
+
+
+def _eod_query(ctx, filters):
+    return closed_orders_query(
+        day=filters["day"],
+        client_id=filters["client_id"],
+        division_id=filters["division_id"],
+        warehouse_id=filters["warehouse_id"],
+        carrier=filters["carrier"],
+        closed_by=filters["closed_by"],
+        shipping_status=filters["shipping_status"],
+        fulfillment_status_filter=filters["fulfillment_status"],
+        order_status=filters["order_status"],
+        accessible_client_ids=[c.id for c in ctx["clients"]],
+        admin=current_user.is_admin(),
+        user=current_user,
+    )
+
+
 @bp.route("/end-of-day")
 @permission_required("END_OF_DAY_VIEW")
 def end_of_day():
     ctx = _scope()
-    day = parse_eod_date(request.args.get("date"))
-    carrier = request.args.get("carrier", "").strip()
-    closed_by = request.args.get("closed_by", "").strip()
-    shipping_status = request.args.get("shipping_status", "").strip()
-    query = closed_orders_query(
-        day=day,
-        client_id=ctx["scope"]["client_id"],
-        division_id=ctx["scope"]["division_id"],
-        warehouse_id=ctx["scope"]["warehouse_id"],
-        carrier=carrier,
-        closed_by=closed_by,
-        shipping_status=shipping_status,
-        accessible_client_ids=[c.id for c in ctx["clients"]],
-        admin=current_user.is_admin(),
-    )
-    rows = build_eod_rows(query.all())
-    db.session.commit()
+    filters = _eod_filters(ctx)
+    rows = build_eod_rows(_eod_query(ctx, filters).all(), day=filters["day"])
     return _page(
         "orders/end_of_day.html",
         "eod",
         rows=rows,
         kpis=eod_kpis(rows),
-        day=day.isoformat(),
-        carrier=carrier,
-        closed_by=closed_by,
-        shipping_status=shipping_status,
+        day=filters["day"].isoformat(),
+        carrier=filters["carrier"],
+        closed_by=filters["closed_by"],
+        shipping_status=filters["shipping_status"],
+        fulfillment_status=filters["fulfillment_status"],
+        order_status=filters["order_status"],
         shipping_statuses=ShippingStatus.ALL,
+        fulfillment_statuses=FULFILLMENT_STATUSES,
+        order_statuses=[OrderStatus.CLOSED, OrderStatus.PARTIALLY_FULFILLED],
         default_day=operational_today().isoformat(),
     )
 
@@ -769,24 +790,13 @@ def end_of_day():
 @permission_required("END_OF_DAY_EXPORT")
 def end_of_day_export():
     ctx = _scope()
-    day = parse_eod_date(request.args.get("date"))
-    query = closed_orders_query(
-        day=day,
-        client_id=ctx["scope"]["client_id"],
-        division_id=ctx["scope"]["division_id"],
-        warehouse_id=ctx["scope"]["warehouse_id"],
-        carrier=request.args.get("carrier", "").strip(),
-        closed_by=request.args.get("closed_by", "").strip(),
-        shipping_status=request.args.get("shipping_status", "").strip(),
-        accessible_client_ids=[c.id for c in ctx["clients"]],
-        admin=current_user.is_admin(),
-    )
-    rows = build_eod_rows(query.all())
-    data = export_eod_excel(rows, client_id=ctx["scope"]["client_id"])
+    filters = _eod_filters(ctx)
+    rows = build_eod_rows(_eod_query(ctx, filters).all(), day=filters["day"])
+    data = export_eod_excel(rows, client_id=filters["client_id"], day=filters["day"])
     return send_file(
         io.BytesIO(data),
         as_attachment=True,
-        download_name=f"end-of-day-{day.isoformat()}.xlsx",
+        download_name=f"end-of-day-{filters['day'].isoformat()}.xlsx",
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
 

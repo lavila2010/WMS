@@ -16,7 +16,17 @@ from sqlalchemy.orm import joinedload
 from ..auth import record_audit
 from ..constants import EOD_TIMEZONE, OrderStatus, ShippingStatus, TrackingCarrier
 from ..extensions import db
-from ..models import Carton, CartonContent, InventoryUnit, Order, OrderLine, PickTicket
+from ..models import Carton, Order, PickTicket
+from .carton_manifest import (
+    FULFILLMENT_CLOSED_COMPLETE,
+    FULFILLMENT_CLOSED_SHORT,
+    FULFILLMENT_PARTIALLY,
+    FULFILLMENT_STATUSES,
+    display_status,
+    fulfillment_status,
+    line_totals,
+    load_carton_manifests,
+)
 from .order_visibility import apply_operational_order_visibility
 from .tenant import user_can_access_client
 
@@ -27,14 +37,7 @@ DEFAULT_PER_PAGE = 50
 WORKSHEET_NAME = "Shipping Report"
 REPORT_WIDTH = 17
 
-FULFILLMENT_PARTIALLY = "PARTIALLY FULFILLED"
-FULFILLMENT_CLOSED_COMPLETE = "CLOSED COMPLETE"
-FULFILLMENT_CLOSED_SHORT = "CLOSED SHORT"
-FULFILLMENT_STATUSES = [
-    FULFILLMENT_PARTIALLY,
-    FULFILLMENT_CLOSED_COMPLETE,
-    FULFILLMENT_CLOSED_SHORT,
-]
+# Fulfillment labels live in carton_manifest and are re-exported for callers.
 
 ORDER_INFO_HEADERS = [
     "Client",
@@ -125,18 +128,6 @@ def to_ny(dt: datetime | None) -> datetime | None:
 def format_report_date(dt: datetime | None) -> str:
     local = to_ny(dt)
     return local.strftime("%Y-%m-%d") if local else ""
-
-
-def display_status(value: str | None) -> str:
-    return (value or "").replace("_", " ")
-
-
-def fulfillment_status(order) -> str:
-    if getattr(order, "status", None) == OrderStatus.CLOSED:
-        return FULFILLMENT_CLOSED_SHORT if getattr(order, "short_closed", False) else FULFILLMENT_CLOSED_COMPLETE
-    if getattr(order, "status", None) == OrderStatus.PARTIALLY_FULFILLED:
-        return FULFILLMENT_PARTIALLY
-    return display_status(getattr(order, "status", None))
 
 
 def order_label(initials: str | None, client_order_number: str | None, customer: str | None) -> str:
@@ -245,27 +236,7 @@ def shipping_report_query(user, filters: dict | None = None):
 
 
 def _line_totals(order_ids: list[int]) -> dict[int, dict[str, int]]:
-    totals: dict[int, dict[str, int]] = {}
-    if not order_ids:
-        return totals
-    rows = (
-        db.session.query(
-            OrderLine.order_id,
-            func.coalesce(func.sum(OrderLine.qty_ordered), 0),
-            func.coalesce(func.sum(OrderLine.qty_shipped), 0),
-            func.coalesce(func.sum(OrderLine.qty_short), 0),
-        )
-        .filter(OrderLine.order_id.in_(order_ids))
-        .group_by(OrderLine.order_id)
-        .all()
-    )
-    for order_id, ordered, shipped, short in rows:
-        totals[int(order_id)] = {
-            "ordered": int(ordered or 0),
-            "shipped": int(shipped or 0),
-            "short": int(short or 0),
-        }
-    return totals
+    return line_totals(order_ids)
 
 
 def _carton_summaries(order_ids: list[int]) -> dict[int, dict]:
@@ -347,64 +318,6 @@ def list_shipping_report_page(user, filters: dict | None = None, *, page=1, per_
     }
 
 
-def _fmt_number(value, *, decimals=None):
-    if value is None:
-        return ""
-    if decimals is None:
-        return str(int(value))
-    text = f"{float(value):.{decimals}f}"
-    return text.rstrip("0").rstrip(".") if "." in text else text
-
-
-def _fmt_dim(value):
-    if value is None:
-        return ""
-    number = float(value)
-    if number.is_integer():
-        return str(int(number))
-    return f"{number:g}"
-
-
-def carton_header_text(carton: Carton, pick_ticket_number: str | None) -> str:
-    tracking = (carton.tracking_number or "").strip()
-    carrier = (carton.tracking_carrier or "").strip()
-    weight = _fmt_number(carton.weight, decimals=1)
-    weight_unit = carton.weight_unit or "lb"
-    length = _fmt_dim(carton.length)
-    width = _fmt_dim(carton.width)
-    height = _fmt_dim(carton.height)
-    dim_unit = carton.dimension_unit or "in"
-    if length and width and height:
-        dimensions = f"{length} x {width} x {height} {dim_unit}"
-    else:
-        dimensions = ""
-    weight_text = f"{weight} {weight_unit}".strip() if weight else ""
-    return " | ".join(
-        [
-            f"Carton {carton.carton_number}",
-            f"Pick Ticket: {pick_ticket_number or ''}",
-            f"Carrier: {carrier}",
-            f"Tracking: {tracking}",
-            f"Weight: {weight_text}".rstrip(),
-            f"Dimensions: {dimensions}".rstrip(),
-            f"Status: {carton.status or ''}",
-        ]
-    )
-
-
-def _product_key(unit: InventoryUnit | None, upc: str):
-    if unit is None:
-        return (upc or "", "", "", "", "", "")
-    return (
-        unit.upc or upc or "",
-        unit.sku or "",
-        unit.description or "",
-        unit.style or "",
-        unit.color or "",
-        unit.size or "",
-    )
-
-
 def _authorize_selected_orders(user, order_ids) -> list[Order]:
     wanted = _unique_order_ids(order_ids)
     if not wanted:
@@ -432,69 +345,13 @@ def _authorize_selected_orders(user, order_ids) -> list[Order]:
 def load_shipping_report_blocks(user, order_ids) -> list[dict]:
     orders = _authorize_selected_orders(user, order_ids)
     order_ids = [order.id for order in orders]
-    line_totals = _line_totals(order_ids)
-    tickets = (
-        db.session.query(PickTicket.id, PickTicket.order_id, PickTicket.pick_ticket_number)
-        .filter(PickTicket.order_id.in_(order_ids))
-        .all()
-        if order_ids
-        else []
-    )
-    ticket_by_id = {int(row.id): row.pick_ticket_number for row in tickets}
-    cartons = (
-        Carton.query.filter(Carton.order_id.in_(order_ids)).order_by(Carton.id.asc()).all()
-        if order_ids
-        else []
-    )
-    cartons_by_order: dict[int, list[Carton]] = defaultdict(list)
-    carton_ids = []
-    for carton in cartons:
-        cartons_by_order[carton.order_id].append(carton)
-        carton_ids.append(carton.id)
-    contents = (
-        db.session.query(CartonContent, InventoryUnit)
-        .outerjoin(InventoryUnit, InventoryUnit.id == CartonContent.inventory_unit_id)
-        .filter(CartonContent.carton_id.in_(carton_ids))
-        .all()
-        if carton_ids
-        else []
-    )
-    products_by_carton: dict[int, dict[tuple, dict]] = defaultdict(dict)
-    for content, unit in contents:
-        key = _product_key(unit, content.upc)
-        bucket = products_by_carton[content.carton_id]
-        row = bucket.get(key)
-        if row is None:
-            bucket[key] = {
-                "upc": key[0],
-                "sku": key[1],
-                "description": key[2],
-                "style": key[3],
-                "color": key[4],
-                "size": key[5],
-                "qty": 1,
-            }
-        else:
-            row["qty"] += 1
+    totals = _line_totals(order_ids)
+    manifests = load_carton_manifests(order_ids)
 
     blocks = []
     for order in orders:
-        qty = line_totals.get(order.id, {"ordered": 0, "shipped": 0, "short": 0})
-        order_cartons = cartons_by_order.get(order.id, [])
-        carton_blocks = []
-        for carton in order_cartons:
-            products = list(products_by_carton.get(carton.id, {}).values())
-            products.sort(key=lambda row: (row["upc"], row["sku"], row["description"]))
-            carton_blocks.append(
-                {
-                    "carton": carton,
-                    "header": carton_header_text(carton, ticket_by_id.get(carton.pick_ticket_id)),
-                    "products": products,
-                    "pick_ticket_number": ticket_by_id.get(carton.pick_ticket_id) or "",
-                    "tracking_number": (carton.tracking_number or "").strip(),
-                    "tracking_carrier": (carton.tracking_carrier or "").strip(),
-                }
-            )
+        qty = totals.get(order.id, {"ordered": 0, "shipped": 0, "short": 0})
+        carton_blocks = manifests.get(order.id, [])
         initials = order.client.initials if order.client else ""
         blocks.append(
             {
@@ -514,7 +371,7 @@ def load_shipping_report_blocks(user, order_ids) -> list[dict]:
                 "ordered": qty["ordered"],
                 "shipped": qty["shipped"],
                 "short": qty["short"],
-                "carton_count": len(order_cartons),
+                "carton_count": len(carton_blocks),
                 "created_date": format_report_date(order.created_at),
                 "closed_date": format_report_date(order.closed_at),
                 "cartons": carton_blocks,

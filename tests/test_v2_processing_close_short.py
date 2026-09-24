@@ -270,15 +270,19 @@ def test_end_of_day_shows_short_quantity(app, db, admin_user):
     from openpyxl import load_workbook
 
     book = load_workbook(filename=BytesIO(data))
-    headers = [cell.value for cell in book["Orders"][1]]
-    assert "Short Units" in headers
-    assert "Short Close" in headers
-    assert "Short Reason" in headers
-    values = [cell.value for cell in book["Orders"][2]]
-    short_idx = headers.index("Short Units")
-    shipped_idx = headers.index("Shipped Units")
-    assert values[short_idx] == 1
-    assert values[shipped_idx] == 1
+    assert book.sheetnames == ["End of Day"]
+    values = None
+    for row in book["End of Day"].iter_rows(values_only=True):
+        if row and row[0] == "Client":
+            continue
+        if row and row[3] == order.wms_order_id:
+            values = row
+            break
+    assert values is not None
+    assert values[11] == 2
+    assert values[12] == 1
+    assert values[13] == 1
+    assert values[9] == "CLOSED SHORT"
 
 
 def test_concurrent_short_close_and_scan_cannot_double_process(app, db, admin_user):

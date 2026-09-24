@@ -312,7 +312,8 @@ def test_eod_a_through_i(app, db, admin_user, admin_client):
 
     today_html = admin_client.get("/orders/end-of-day").get_data(as_text=True)
     assert "America/New_York" in today_html
-    assert "Total Orders" in today_html
+    assert "Total Orders Processed" in today_html
+    assert "Fulfillment Status" in today_html
 
     rows = build_eod_rows(closed_orders_query(day=parse_eod_date(None), admin=True).all())
     assert all(r["order"].status == OrderStatus.CLOSED for r in rows)
@@ -333,18 +334,15 @@ def test_eod_a_through_i(app, db, admin_user, admin_client):
 
     data = export_eod_excel(rows)
     book = load_workbook(filename=BytesIO(data))
-    assert book.sheetnames[:2] == ["Orders", "Cartons"]
-    orders_sheet = book["Orders"]
-    cartons_sheet = book["Cartons"]
-    headers = [cell.value for cell in orders_sheet[1]]
-    assert "WMS Order ID" in headers
-    assert "Shipping Status" in headers
-    assert "Pick Ticket" in headers
-    carton_headers = [cell.value for cell in cartons_sheet[1]]
-    assert "Tracking Number" in carton_headers
-    assert "Tracking Status" in carton_headers
-    assert orders_sheet.max_row - 1 == len(rows)
+    assert book.sheetnames == ["End of Day"]
+    sheet = book["End of Day"]
+    text = "\n".join(str(cell.value or "") for row in sheet.iter_rows() for cell in row)
+    assert "WMS Order ID" in text
+    assert "Fulfillment Status" in text
+    assert "Shipping Status" in text
+    assert "Carton " in text
+    assert "Tracking:" in text
     assert AuditEvent.query.filter_by(event_type="END_OF_DAY_EXPORTED").count() >= 1
     kpis = eod_kpis(rows)
     assert kpis["total_orders"] == len(rows)
-    assert kpis["pending_tracking"] + kpis["tracking_complete"] == len(rows)
+    assert kpis["closed_complete"] + kpis["closed_short"] + kpis["partially_fulfilled"] == len(rows)
