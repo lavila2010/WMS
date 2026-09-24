@@ -102,14 +102,15 @@ def _close_complete(admin_user, world, number, qty=10, customer="Complete Co", u
     )
     allocate_order(order, user=admin_user)
     create_pick_ticket(Order.query.get(order.id))
-    cartons = _pack_splits(admin_user, Order.query.get(order.id), [4, 3, 3], upc=upc)
-    closed = close_order(Order.query.get(order.id), admin_user)
-    closed = Order.query.get(closed.id)
+    order_id = order.id
+    _pack_splits(admin_user, Order.query.get(order_id), [4, 3, 3], upc=upc)
+    close_order(Order.query.get(order_id), admin_user)
+    closed = Order.query.get(order_id)
     cartons = Carton.query.filter_by(order_id=closed.id).order_by(Carton.id).all()
     for carton, tracking in zip(cartons, ["1ZCOMP001", "1ZCOMP002", "1ZCOMP003"]):
         save_carton_tracking(closed, carton, tracking_number=tracking, carrier="UPS", user=admin_user)
     _stamp(closed, cartons, _midday())
-    return Order.query.get(closed.id), Carton.query.filter_by(order_id=closed.id).order_by(Carton.id).all()
+    return Order.query.get(order_id), Carton.query.filter_by(order_id=order_id).order_by(Carton.id).all()
 
 
 def _close_short(admin_user, world, number, ordered=10, packed=8, customer="Short Co", upc="UPC-S"):
