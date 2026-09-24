@@ -1,0 +1,76 @@
+{% extends "orders/_layout.html" %}
+{% block title %}Update Pick Ticket{% endblock %}
+{% block orders_content %}
+<div class="card">
+  <form method="get" class="inline-form">
+    <label>Pick Ticket Number
+      <input name="pick_ticket_number" value="{{ number }}" placeholder="01-CEL-100-01-01" />
+    </label>
+    <button type="submit">Open</button>
+  </form>
+</div>
+{% if error %}<div class="box errbox">{{ error }}</div>{% endif %}
+{% if ticket %}
+<div class="card">
+  <h2>{{ ticket.pick_ticket_number }} · Revision {{ ticket.revision_number }}</h2>
+  <p class="sub">
+    Status {{ ticket.status }} ·
+    WMS {{ ticket.order.wms_order_id if ticket.order else '—' }} ·
+    Client order {{ ticket.order.client_order_number if ticket.order else '—' }} ·
+    {{ ticket.order.status if ticket.order else '' }}
+  </p>
+</div>
+<div class="card">
+  <h2>Ticket units</h2>
+  <table>
+    <thead><tr><th>Location</th><th>UPC</th><th>SKU</th><th>Description</th><th>Style</th><th>Color</th><th>Size</th><th>Qty</th><th>Unit Status</th></tr></thead>
+    <tbody>
+      {% for row in units %}
+        <tr>
+          <td>{{ row.location }}</td>
+          <td class="mono">{{ row.upc }}</td>
+          <td>{{ row.sku or '—' }}</td>
+          <td>{{ row.description or '—' }}</td>
+          <td>{{ row.style or '—' }}</td>
+          <td>{{ row.color or '—' }}</td>
+          <td>{{ row.size or '—' }}</td>
+          <td class="right">{{ row.qty }}</td>
+          <td><span class="badge badge-{{ row.status }}">{{ row.status }}</span></td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+<div class="card">
+  <h2>Substitute unit</h2>
+  <form method="get" class="inline-form">
+    <input type="hidden" name="pick_ticket_number" value="{{ ticket.pick_ticket_number }}" />
+    <label>UPC <input name="upc" value="{{ selected_upc }}" /></label>
+    <button type="submit">Find on ticket</button>
+  </form>
+  {% if selected_upc %}
+    <form method="post">
+      {% include "_csrf.html" %}
+      <input type="hidden" name="pick_ticket_number" value="{{ ticket.pick_ticket_number }}" />
+      <input type="hidden" name="upc" value="{{ selected_upc }}" />
+      <input type="hidden" name="action" value="replace" />
+      <label>Problematic unit
+        <select name="unit_id">
+          {% for row in units if row.upc == selected_upc and row.status == 'RESERVED' %}
+            <option value="{{ row.unit.id }}" {{ 'selected' if selected_unit_id == row.unit.id }}>{{ row.location }} · {{ row.unit.id }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Replacement
+        <select name="replacement_id">
+          {% for unit in candidates %}
+            <option value="{{ unit.id }}">{{ unit.location }} · {{ unit.upc }} · {{ unit.sku or '' }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <button type="submit">Replace unit</button>
+    </form>
+  {% endif %}
+</div>
+{% endif %}
+{% endblock %}

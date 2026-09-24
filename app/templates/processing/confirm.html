@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Confirm Order{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div class="section-title">
+    <h1>Confirm Order</h1>
+    <span class="badge badge-ALLOCATED">FULLY ALLOCATED</span>
+  </div>
+  <p class="sub">Confirm Pick Ticket, pack units into cartons, close the order and generate final documentation</p>
+</div>
+
+<div class="card">
+  <div class="kv-grid">
+    <div class="kv"><span>Pick Ticket</span><strong class="mono">{{ snap.pick_ticket }}</strong></div>
+    <div class="kv"><span>Order</span><strong class="mono">{{ snap.order_number }}</strong></div>
+    <div class="kv"><span>Client</span><strong>{{ snap.client }}</strong></div>
+    <div class="kv"><span>Warehouse</span><strong>{{ snap.warehouse }}</strong></div>
+    <div class="kv"><span>Order Type</span><strong>{{ snap.order_type }}</strong></div>
+    <div class="kv"><span>Customer</span><strong>{{ snap.customer }}</strong></div>
+    <div class="kv"><span>Carrier</span><strong>{{ snap.carrier }}</strong></div>
+    <div class="kv"><span>Shipping Service</span><strong>{{ snap.shipping_service }}</strong></div>
+    <div class="kv"><span>Total Units</span><strong class="num-cell">{{ snap.total_units }}</strong></div>
+    <div class="kv"><span>Allocated Units</span><strong class="num-cell">{{ snap.allocated_units }}</strong></div>
+    <div class="kv"><span>Locations</span><strong class="num-cell">{{ snap.locations }}</strong></div>
+    <div class="kv"><span>Status</span><strong><span class="badge badge-{{ snap.status }}">{{ snap.status }}</span></strong></div>
+  </div>
+  <div class="btn-row" style="margin-top:1rem;">
+    <a class="btn btn-secondary" href="{{ url_for('processing.index') }}">Cancel</a>
+    <form method="post" action="{{ url_for('processing.confirm', order_id=order.id) }}">
+      {% include "_csrf.html" %}
+      <button type="submit">OK - Confirm Order</button>
+    </form>
+  </div>
+</div>
+{% endblock %}

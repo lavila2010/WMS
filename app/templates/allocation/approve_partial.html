@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Approve Partial Allocation{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Approve Partial Allocation</h1>
+  <p class="sub">{{ order.wms_order_id }}</p>
+</div>
+<div class="card">
+  <p>This Order is only partially allocated. Approval will allow a Pick Ticket to be created for the currently allocated units. Remaining units will stay open for future allocation.</p>
+  <table>
+    <tbody>
+      <tr><th>Ordered Units</th><td class="num-cell">{{ qty.ordered }}</td></tr>
+      <tr><th>Already Shipped</th><td class="num-cell">{{ qty.shipped }}</td></tr>
+      <tr><th>Currently Allocated</th><td class="num-cell">{{ qty.currently_allocated }}</td></tr>
+      <tr><th>Remaining To Allocate</th><td class="num-cell">{{ qty.remaining }}</td></tr>
+    </tbody>
+  </table>
+  <div class="btn-row">
+    <a class="btn btn-secondary" href="{{ url_for('allocation.detail', order_id=order.id) }}">Cancel</a>
+    <form method="post" action="{{ url_for('allocation.approve_partial', order_id=order.id) }}">
+      {% include "_csrf.html" %}
+      <button type="submit">Approve Partial Allocation</button>
+    </form>
+    {% if can('PICK_TICKET_VIEW') %}
+      <a class="btn btn-secondary" href="{{ url_for('orders.pick_tickets', client_id=pick_tickets_args.client_id, division_id=pick_tickets_args.division_id, warehouse_id=pick_tickets_args.warehouse_id) }}">Go to Pick Tickets</a>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

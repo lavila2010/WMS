@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% block title %}Order Reports{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Order Reports</h1>
+  <p class="sub">Search closed orders. Documents are generated from the database source of truth.</p>
+</div>
+
+<div class="card">
+  <form method="get" action="{{ request.path }}">
+    <div class="grid">
+      <label>Order Number<input name="order_number" value="{{ filters.order_number }}" /></label>
+      <label>Customer<input name="customer" value="{{ filters.customer }}" /></label>
+      <label>Carrier<input name="carrier" value="{{ filters.carrier }}" /></label>
+      <label>Client
+        <select name="client_id">
+          <option value="">{{ 'All' if current_user.is_admin() else 'Select' }}</option>
+          {% for c in options.clients %}<option value="{{ c.id }}" {{ 'selected' if scope.client_id == c.id }}>{{ c.client_code }}</option>{% endfor %}
+        </select>
+      </label>
+      <label>Warehouse
+        <select name="warehouse_id">
+          <option value="">All</option>
+          {% for w in options.warehouses %}<option value="{{ w.id }}" {{ 'selected' if scope.warehouse_id == w.id }}>{{ w.warehouse_code }}</option>{% endfor %}
+        </select>
+      </label>
+      <label>Division
+        <select name="division_id">
+          <option value="">All</option>
+          {% for d in options.divisions %}<option value="{{ d.id }}" {{ 'selected' if scope.division_id == d.id }}>{{ d.code }}</option>{% endfor %}
+        </select>
+      </label>
+      <label>Closed From<input type="date" name="date_from" value="{{ filters.date_from }}" /></label>
+      <label>Closed To<input type="date" name="date_to" value="{{ filters.date_to }}" /></label>
+      <label>Closed By<input name="closed_by" value="{{ filters.closed_by }}" /></label>
+    </div>
+    <div class="btn-row">
+      <button type="submit">Search</button>
+      <a class="btn-secondary btn" href="{{ request.path }}">Clear</a>
+      {% if can('REPORTS_EXPORT') %}
+        <a class="btn-secondary btn" href="{{ url_for('reports.export_completed', client_id=scope.client_id or None, warehouse_id=scope.warehouse_id or None, division_id=scope.division_id or None, carrier=filters.carrier, closed_by=filters.closed_by, date_from=filters.date_from, date_to=filters.date_to) }}">Completed Orders Excel</a>
+      {% endif %}
+    </div>
+  </form>
+</div>
+
+<div class="card">
+  <h2>Results ({{ orders|length }})</h2>
+  <table>
+    <thead>
+      <tr><th>WMS Order</th><th>Invoice</th><th>Client</th><th>WH</th><th>Division</th>
+      <th>Customer</th><th>Carrier</th><th>Closed By</th><th>Status</th><th>Documents</th></tr>
+    </thead>
+    <tbody>
+      {% for o in orders %}
+        <tr>
+          <td class="mono"><a href="{{ url_for('orders.detail', order_id=o.id) }}">{{ o.wms_order_id }}</a></td>
+          <td class="mono">{{ o.invoice.invoice_number if o.invoice else '—' }}</td>
+          <td>{{ o.client.client_code if o.client else '—' }}</td>
+          <td>{{ o.warehouse.warehouse_code if o.warehouse else '—' }}</td>
+          <td>{{ o.division.code if o.division else '—' }}</td>
+          <td>{{ o.customer or '—' }}</td>
+          <td>{{ o.carrier or '—' }}</td>
+          <td>{{ o.closed_by_username or '—' }}</td>
+          <td><span class="badge badge-{{ o.status }}">{{ o.status }}</span></td>
+          <td>
+            {% if can('DOCUMENT_REPRINT') %}
+            <form method="post" action="{{ url_for('reports.closure', order_id=o.id) }}">{% include "_csrf.html" %}<button type="submit">Closure PDF</button></form>
+            {% else %}<span class="muted">view only</span>{% endif %}
+          </td>
+        </tr>
+      {% else %}
+        <tr><td colspan="10" class="muted">No matching orders.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="card">
+  <h2>Recent documents</h2>
+  <table>
+    <thead><tr><th>When</th><th>Type</th><th>File</th><th></th></tr></thead>
+    <tbody>
+      {% for d in documents %}
+        <tr>
+          <td class="muted">{{ d.created_at.strftime('%m-%d %H:%M') }}</td>
+          <td>{{ d.type }}</td>
+          <td class="mono">{{ d.filename }}</td>
+          <td class="right">{% if can('DOCUMENT_REPRINT') %}<a class="btn-secondary btn" href="{{ url_for('reports.download', document_id=d.id) }}">Download</a>{% else %}<span class="muted">—</span>{% endif %}</td>
+        </tr>
+      {% else %}
+        <tr><td colspan="4" class="muted">No documents generated yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

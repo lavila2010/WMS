@@ -1,0 +1,92 @@
+{% extends "orders/_layout.html" %}
+{% block title %}Shipping & Tracking{% endblock %}
+{% block orders_content %}
+<div class="card">
+  <form method="get" class="inline-form">
+    <label>Client
+      <select name="client_id">
+        <option value="">{{ 'All clients' if current_user.is_admin() else 'All authorized' }}</option>
+        {% for c in options.clients %}
+          <option value="{{ c.id }}" {{ 'selected' if scope.client_id == c.id }}>{{ c.client_code }} — {{ c.name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Division
+      <select name="division_id">
+        <option value="">All divisions</option>
+        {% for d in options.divisions %}
+          <option value="{{ d.id }}" {{ 'selected' if scope.division_id == d.id }}>{{ d.code }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Warehouse
+      <select name="warehouse_id">
+        <option value="">All warehouses</option>
+        {% for w in options.warehouses %}
+          <option value="{{ w.id }}" {{ 'selected' if scope.warehouse_id == w.id }}>{{ w.warehouse_code }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Closed Date
+      <input type="date" name="closed_date" value="{{ closed_date }}" />
+    </label>
+    <label>Shipping Status
+      <select name="shipping_status">
+        <option value="">All</option>
+        {% for s in shipping_statuses %}
+          <option value="{{ s }}" {{ 'selected' if shipping_status == s }}>{{ s }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Carrier
+      <select name="carrier">
+        <option value="">All</option>
+        {% for c in carriers %}
+          <option value="{{ c }}" {{ 'selected' if carrier == c }}>{{ c }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Search
+      <input name="q" value="{{ q }}" placeholder="WMS ID, order #, ticket, customer, tracking" />
+    </label>
+    <button type="submit">Apply</button>
+  </form>
+</div>
+
+<div class="card">
+  <h2>Closed orders</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>WMS Order ID</th>
+        <th>Client Order #</th>
+        <th>Pick Ticket</th>
+        <th>Client</th>
+        <th>Customer</th>
+        <th>Carrier</th>
+        <th>Shipping Status</th>
+        <th>Closed</th>
+        <th>Action</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in rows %}
+        {% set o = row.order %}
+        <tr>
+          <td class="mono">{{ o.wms_order_id }}</td>
+          <td class="mono">{{ o.client_order_number }}</td>
+          <td class="mono">{{ row.ticket }}</td>
+          <td>{{ o.client.client_code if o.client else '—' }}</td>
+          <td>{{ o.customer or '—' }}</td>
+          <td>{{ o.carrier or '—' }}</td>
+          <td><span class="badge badge-{{ o.shipping_status }}">{{ o.shipping_status }}</span></td>
+          <td class="muted">{{ o.closed_at.strftime('%Y-%m-%d %H:%M') if o.closed_at else '—' }}</td>
+          <td><a class="btn-secondary btn" href="{{ url_for('orders.shipping_detail', order_id=o.id) }}">Open</a></td>
+        </tr>
+      {% else %}
+        <tr><td colspan="9" class="muted">No closed orders match the selected filters.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

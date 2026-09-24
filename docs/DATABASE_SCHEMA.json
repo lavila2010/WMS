@@ -1,0 +1,7074 @@
+{
+  "generated_at": "2026-09-20T06:32:11Z",
+  "inspection": "read-only",
+  "status": "DATABASE_SCHEMA_PARTIAL",
+  "init_db": "flask --app wsgi init-db = db.create_all() + seed_permissions()",
+  "connection": {
+    "ok": true,
+    "database_name": "wms",
+    "postgresql_version": "PostgreSQL 16.15 (Ubuntu 16.15-0ubuntu0.24.04.1) on x86_64-pc-linux-gnu, compiled by gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0, 64-bit",
+    "current_schema": "public",
+    "host_class": "local",
+    "credentials_omitted": true,
+    "connection_uri_omitted": true
+  },
+  "table_count_live": 26,
+  "table_count_models": 23,
+  "wms_tables": [
+    "users",
+    "permissions",
+    "user_permissions",
+    "audit_events",
+    "clients",
+    "warehouses",
+    "divisions",
+    "order_types",
+    "orders",
+    "order_lines",
+    "inventory_units",
+    "allocations",
+    "pick_tickets",
+    "pick_ticket_print_events",
+    "boxes",
+    "box_contents",
+    "documents",
+    "import_batches",
+    "order_exceptions",
+    "inventory_exceptions",
+    "invoices",
+    "transactions",
+    "inventory_movements"
+  ],
+  "missing_wms_tables": [],
+  "leftover_non_wms_tables": [
+    "Item",
+    "Location",
+    "_prisma_migrations"
+  ],
+  "counts": {
+    "users": 2,
+    "admins": 1,
+    "permissions": 25,
+    "user_permissions": 9,
+    "clients": 2,
+    "warehouses": 3,
+    "divisions": 5,
+    "order_types": 7,
+    "orders": 13,
+    "order_lines": 15,
+    "inventory_units": 15,
+    "allocations": 12,
+    "pick_tickets": 3,
+    "pick_ticket_print_events": 1,
+    "cartons_boxes": 5,
+    "box_contents": 7,
+    "audit_events": 35,
+    "documents": 2,
+    "import_batches": 2,
+    "invoices": 1,
+    "transactions": 77,
+    "inventory_movements": 35,
+    "order_exceptions": 0,
+    "inventory_exceptions": 1
+  },
+  "counts_all_tables": {
+    "Item": 4,
+    "Location": 2,
+    "_prisma_migrations": 1,
+    "allocations": 12,
+    "audit_events": 35,
+    "box_contents": 7,
+    "boxes": 5,
+    "clients": 2,
+    "divisions": 5,
+    "documents": 2,
+    "import_batches": 2,
+    "inventory_exceptions": 1,
+    "inventory_movements": 35,
+    "inventory_units": 15,
+    "invoices": 1,
+    "order_exceptions": 0,
+    "order_lines": 15,
+    "order_types": 7,
+    "orders": 13,
+    "permissions": 25,
+    "pick_ticket_print_events": 1,
+    "pick_tickets": 3,
+    "transactions": 77,
+    "user_permissions": 9,
+    "users": 2,
+    "warehouses": 3
+  },
+  "admin": {
+    "username": "leandro",
+    "exists": true,
+    "role": "ADMIN",
+    "active": true,
+    "must_change_password": false,
+    "permission_count": 25,
+    "password_hash_omitted": true
+  },
+  "critical_checks": {
+    "inventory_scoped_client_warehouse": {
+      "client_id_not_null": true,
+      "warehouse_id_not_null": true,
+      "client_fk": true,
+      "warehouse_fk": true,
+      "pass": true
+    },
+    "inventory_unit_does_not_require_order_type": {
+      "order_type_id_present": true,
+      "order_type_id_nullable": true,
+      "deprecated_compatibility_column": true,
+      "pass": true
+    },
+    "processing_lock_columns": {
+      "processing_user_id": true,
+      "processing_username": true,
+      "processing_started_at": true,
+      "processing_lock_id": true
+    },
+    "orders_closed_at": true,
+    "box_carton_fields": {
+      "dimension_unit": true,
+      "weight_unit": true,
+      "reweigh_required": true
+    },
+    "divisions_table": true,
+    "orders_division_id": true,
+    "order_types_channel": true,
+    "kpi_indexes": {
+      "ix_orders_created_at": true,
+      "ix_orders_division_id": true,
+      "ix_order_lines_order_id": true,
+      "ix_order_types_channel": true
+    },
+    "rbac_tables": {
+      "users": true,
+      "permissions": true,
+      "user_permissions": true,
+      "audit_events": true
+    }
+  },
+  "comparison": {
+    "tables_in_models_missing_in_db": [],
+    "tables_in_db_not_in_models": [
+      "Item",
+      "Location",
+      "_prisma_migrations"
+    ],
+    "columns_missing_in_db": {},
+    "extra_db_columns": {},
+    "nullable_mismatches": [
+      {
+        "table": "boxes",
+        "column": "reweigh_required",
+        "model_nullable": false,
+        "db_nullable": true
+      }
+    ],
+    "foreign_keys_missing_in_db": [
+      {
+        "table": "orders",
+        "column": "processing_user_id",
+        "target": "users.id"
+      }
+    ],
+    "extra_db_foreign_keys": [],
+    "unique_constraints_missing_in_db": [],
+    "python_side_defaults_without_db_default_count": 53,
+    "python_side_defaults_note": "SQLAlchemy create_all typically does not emit PostgreSQL DEFAULT for Python callables/literals. Application code supplies values on INSERT. Not treated as a missing-column failure."
+  },
+  "mismatches": [
+    {
+      "kind": "extra_table",
+      "detail": "Live database contains leftover Prisma tables `Item`, `Location`, `_prisma_migrations` that are not SQLAlchemy models and are unused by Flask WMS."
+    },
+    {
+      "kind": "missing_foreign_key",
+      "table": "orders",
+      "column": "processing_user_id",
+      "model": "users.id",
+      "detail": "Model declares FK orders.processing_user_id \u2192 users.id. Live column exists as INTEGER (added by ensure_processing_columns) without REFERENCES."
+    },
+    {
+      "kind": "nullable_mismatch",
+      "table": "boxes",
+      "column": "reweigh_required",
+      "model_nullable": false,
+      "db_nullable": true,
+      "detail": "Model is NOT NULL; live column is BOOLEAN DEFAULT FALSE and nullable because the additive ALTER omitted NOT NULL."
+    }
+  ],
+  "live_tables": {
+    "_prisma_migrations": {
+      "purpose": "Present in live database.",
+      "row_count": 1,
+      "primary_key": [
+        "id"
+      ],
+      "primary_key_name": "_prisma_migrations_pkey",
+      "foreign_keys": [],
+      "unique_constraints": [],
+      "indexes": [],
+      "columns": [
+        {
+          "name": "id",
+          "type": "VARCHAR(36)",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "checksum",
+          "type": "VARCHAR(64)",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "finished_at",
+          "type": "TIMESTAMP",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "migration_name",
+          "type": "VARCHAR(255)",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "logs",
+          "type": "TEXT",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "rolled_back_at",
+          "type": "TIMESTAMP",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "started_at",
+          "type": "TIMESTAMP",
+          "nullable": false,
+          "default": "now()",
+          "autoincrement": false
+        },
+        {
+          "name": "applied_steps_count",
+          "type": "INTEGER",
+          "nullable": false,
+          "default": "0",
+          "autoincrement": false
+        }
+      ]
+    },
+    "users": {
+      "purpose": "Authenticated operators; RBAC identity (ADMIN/USER).",
+      "row_count": 2,
+      "primary_key": [
+        "id"
+      ],
+      "primary_key_name": "users_pkey",
+      "foreign_keys": [
+        {
+          "name": "users_created_by_user_id_fkey",
+          "columns": [
+            "created_by_user_id"
+          ],
+          "referred_table": "users",
+          "referred_columns": [
+            "id"
+          ],
+          "targets": [
+            "users.id"
+          ]
+        },
+        {
+          "name": "users_updated_by_user_id_fkey",
+          "columns": [
+            "updated_by_user_id"
+          ],
+          "referred_table": "users",
+          "referred_columns": [
+            "id"
+          ],
+          "targets": [
+            "users.id"
+          ]
+        }
+      ],
+      "unique_constraints": [],
+      "indexes": [
+        {
+          "name": "ix_users_username",
+          "columns": [
+            "username"
+          ],
+          "unique": true
+        }
+      ],
+      "columns": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "nullable": false,
+          "default": "nextval('\"public\".users_id_seq'::regclass)",
+          "autoincrement": true
+        },
+        {
+          "name": "username",
+          "type": "VARCHAR(64)",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "password_hash",
+          "type": "VARCHAR(255)",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "full_name",
+          "type": "VARCHAR(255)",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "email",
+          "type": "VARCHAR(255)",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "role",
+          "type": "VARCHAR(16)",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "active",
+          "type": "BOOLEAN",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "must_change_password",
+          "type": "BOOLEAN",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "failed_login_count",
+          "type": "INTEGER",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "locked_until",
+          "type": "TIMESTAMP",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "last_login_at",
+          "type": "TIMESTAMP",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "created_at",
+          "type": "TIMESTAMP",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "created_by_user_id",
+          "type": "INTEGER",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "updated_at",
+          "type": "TIMESTAMP",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "updated_by_user_id",
+          "type": "INTEGER",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        }
+      ]
+    },
+    "user_permissions": {
+      "purpose": "Per-user granted permissions (ADMIN bypasses this).",
+      "row_count": 9,
+      "primary_key": [
+        "id"
+      ],
+      "primary_key_name": "user_permissions_pkey",
+      "foreign_keys": [
+        {
+          "name": "user_permissions_created_by_user_id_fkey",
+          "columns": [
+            "created_by_user_id"
+          ],
+          "referred_table": "users",
+          "referred_columns": [
+            "id"
+          ],
+          "targets": [
+            "users.id"
+          ]
+        },
+        {
+          "name": "user_permissions_permission_id_fkey",
+          "columns": [
+            "permission_id"
+          ],
+          "referred_table": "permissions",
+          "referred_columns": [
+            "id"
+          ],
+          "targets": [
+            "permissions.id"
+          ]
+        },
+        {
+          "name": "user_permissions_user_id_fkey",
+          "columns": [
+            "user_id"
+          ],
+          "referred_table": "users",
+          "referred_columns": [
+            "id"
+          ],
+          "targets": [
+            "users.id"
+          ]
+        }
+      ],
+      "unique_constraints": [
+        {
+          "name": "uq_user_permission",
+          "columns": [
+            "user_id",
+            "permission_id"
+          ]
+        }
+      ],
+      "indexes": [
+        {
+          "name": "uq_user_permission",
+          "columns": [
+            "user_id",
+            "permission_id"
+          ],
+          "unique": true
+        }
+      ],
+      "columns": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "nullable": false,
+          "default": "nextval('\"public\".user_permissions_id_seq'::regclass)",
+          "autoincrement": true
+        },
+        {
+          "name": "user_id",
+          "type": "INTEGER",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "permission_id",
+          "type": "INTEGER",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "granted",
+          "type": "BOOLEAN",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "created_at",
+          "type": "TIMESTAMP",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "created_by_user_id",
+          "type": "INTEGER",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        }
+      ]
+    },
+    "permissions": {
+      "purpose": "Canonical permission catalog (code/module).",
+      "row_count": 25,
+      "primary_key": [
+        "id"
+      ],
+      "primary_key_name": "permissions_pkey",
+      "foreign_keys": [],
+      "unique_constraints": [],
+      "indexes": [
+        {
+          "name": "ix_permissions_code",
+          "columns": [
+            "code"
+          ],
+          "unique": true
+        }
+      ],
+      "columns": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "nullable": false,
+          "default": "nextval('\"public\".permissions_id_seq'::regclass)",
+          "autoincrement": true
+        },
+        {
+          "name": "code",
+          "type": "VARCHAR(64)",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "description",
+          "type": "VARCHAR(255)",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "module",
+          "type": "VARCHAR(64)",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        }
+      ]
+    },
+    "audit_events": {
+      "purpose": "Append-only human-action audit log.",
+      "row_count": 35,
+      "primary_key": [
+        "id"
+      ],
+      "primary_key_name": "audit_events_pkey",
+      "foreign_keys": [
+        {
+          "name": "audit_events_user_id_fkey",
+          "columns": [
+            "user_id"
+          ],
+          "referred_table": "users",
+          "referred_columns": [
+            "id"
+          ],
+          "targets": [
+            "users.id"
+          ]
+        }
+      ],
+      "unique_constraints": [],
+      "indexes": [
+        {
+          "name": "ix_audit_events_created_at",
+          "columns": [
+            "created_at"
+          ],
+          "unique": false
+        },
+        {
+          "name": "ix_audit_events_event_type",
+          "columns": [
+            "event_type"
+          ],
+          "unique": false
+        }
+      ],
+      "columns": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "nullable": false,
+          "default": "nextval('\"public\".audit_events_id_seq'::regclass)",
+          "autoincrement": true
+        },
+        {
+          "name": "user_id",
+          "type": "INTEGER",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "username",
+          "type": "VARCHAR(64)",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "event_type",
+          "type": "VARCHAR(48)",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "module",
+          "type": "VARCHAR(48)",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "entity_type",
+          "type": "VARCHAR(48)",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "entity_id",
+          "type": "VARCHAR(64)",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "ip_address",
+          "type": "VARCHAR(64)",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "detail",
+          "type": "TEXT",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "created_at",
+          "type": "TIMESTAMP",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        }
+      ]
+    },
+    "clients": {
+      "purpose": "Commercial clients that own warehouses, divisions, and orders.",
+      "row_count": 2,
+      "primary_key": [
+        "id"
+      ],
+      "primary_key_name": "clients_pkey",
+      "foreign_keys": [],
+      "unique_constraints": [],
+      "indexes": [
+        {
+          "name": "ix_clients_code",
+          "columns": [
+            "code"
+          ],
+          "unique": true
+        }
+      ],
+      "columns": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "nullable": false,
+          "default": "nextval('\"public\".clients_id_seq'::regclass)",
+          "autoincrement": true
+        },
+        {
+          "name": "code",
+          "type": "VARCHAR(32)",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "name",
+          "type": "VARCHAR(255)",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "active",
+          "type": "BOOLEAN",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "created_at",
+          "type": "TIMESTAMP",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        }
+      ]
+    },
+    "warehouses": {
+      "purpose": "Physical warehouses scoped to a client.",
+      "row_count": 3,
+      "primary_key": [
+        "id"
+      ],
+      "primary_key_name": "warehouses_pkey",
+      "foreign_keys": [
+        {
+          "name": "warehouses_client_id_fkey",
+          "columns": [
+            "client_id"
+          ],
+          "referred_table": "clients",
+          "referred_columns": [
+            "id"
+          ],
+          "targets": [
+            "clients.id"
+          ]
+        }
+      ],
+      "unique_constraints": [
+        {
+          "name": "uq_warehouse_client_code",
+          "columns": [
+            "client_id",
+            "code"
+          ]
+        }
+      ],
+      "indexes": [
+        {
+          "name": "ix_warehouses_code",
+          "columns": [
+            "code"
+          ],
+          "unique": false
+        },
+        {
+          "name": "uq_warehouse_client_code",
+          "columns": [
+            "client_id",
+            "code"
+          ],
+          "unique": true
+        }
+      ],
+      "columns": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "nullable": false,
+          "default": "nextval('\"public\".warehouses_id_seq'::regclass)",
+          "autoincrement": true
+        },
+        {
+          "name": "client_id",
+          "type": "INTEGER",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "code",
+          "type": "VARCHAR(32)",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "name",
+          "type": "VARCHAR(255)",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "active",
+          "type": "BOOLEAN",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "created_at",
+          "type": "TIMESTAMP",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        }
+      ]
+    },
+    "Location": {
+      "purpose": "Present in live database.",
+      "row_count": 2,
+      "primary_key": [
+        "id"
+      ],
+      "primary_key_name": "Location_pkey",
+      "foreign_keys": [],
+      "unique_constraints": [],
+      "indexes": [
+        {
+          "name": "Location_code_key",
+          "columns": [
+            "code"
+          ],
+          "unique": true
+        }
+      ],
+      "columns": [
+        {
+          "name": "id",
+          "type": "TEXT",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "code",
+          "type": "TEXT",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "name",
+          "type": "TEXT",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "createdAt",
+          "type": "TIMESTAMP",
+          "nullable": false,
+          "default": "CURRENT_TIMESTAMP",
+          "autoincrement": false
+        },
+        {
+          "name": "updatedAt",
+          "type": "TIMESTAMP",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        }
+      ]
+    },
+    "Item": {
+      "purpose": "Present in live database.",
+      "row_count": 4,
+      "primary_key": [
+        "id"
+      ],
+      "primary_key_name": "Item_pkey",
+      "foreign_keys": [
+        {
+          "name": "Item_locationId_fkey",
+          "columns": [
+            "locationId"
+          ],
+          "referred_table": "Location",
+          "referred_columns": [
+            "id"
+          ],
+          "targets": [
+            "Location.id"
+          ]
+        }
+      ],
+      "unique_constraints": [],
+      "indexes": [
+        {
+          "name": "Item_sku_key",
+          "columns": [
+            "sku"
+          ],
+          "unique": true
+        }
+      ],
+      "columns": [
+        {
+          "name": "id",
+          "type": "TEXT",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "sku",
+          "type": "TEXT",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "name",
+          "type": "TEXT",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "description",
+          "type": "TEXT",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "quantity",
+          "type": "INTEGER",
+          "nullable": false,
+          "default": "0",
+          "autoincrement": false
+        },
+        {
+          "name": "locationId",
+          "type": "TEXT",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "createdAt",
+          "type": "TIMESTAMP",
+          "nullable": false,
+          "default": "CURRENT_TIMESTAMP",
+          "autoincrement": false
+        },
+        {
+          "name": "updatedAt",
+          "type": "TIMESTAMP",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        }
+      ]
+    },
+    "order_types": {
+      "purpose": "Order channel/type per client (ECOMMERCE/RETAIL/WHOLESALE).",
+      "row_count": 7,
+      "primary_key": [
+        "id"
+      ],
+      "primary_key_name": "order_types_pkey",
+      "foreign_keys": [
+        {
+          "name": "order_types_client_id_fkey",
+          "columns": [
+            "client_id"
+          ],
+          "referred_table": "clients",
+          "referred_columns": [
+            "id"
+          ],
+          "targets": [
+            "clients.id"
+          ]
+        }
+      ],
+      "unique_constraints": [
+        {
+          "name": "uq_order_type_client_code",
+          "columns": [
+            "client_id",
+            "code"
+          ]
+        }
+      ],
+      "indexes": [
+        {
+          "name": "ix_order_types_channel",
+          "columns": [
+            "channel"
+          ],
+          "unique": false
+        },
+        {
+          "name": "ix_order_types_code",
+          "columns": [
+            "code"
+          ],
+          "unique": false
+        },
+        {
+          "name": "uq_order_type_client_code",
+          "columns": [
+            "client_id",
+            "code"
+          ],
+          "unique": true
+        }
+      ],
+      "columns": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "nullable": false,
+          "default": "nextval('\"public\".order_types_id_seq'::regclass)",
+          "autoincrement": true
+        },
+        {
+          "name": "client_id",
+          "type": "INTEGER",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "code",
+          "type": "VARCHAR(32)",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "name",
+          "type": "VARCHAR(255)",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "active",
+          "type": "BOOLEAN",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "created_at",
+          "type": "TIMESTAMP",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "channel",
+          "type": "VARCHAR(16)",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        }
+      ]
+    },
+    "import_batches": {
+      "purpose": "Inventory and order import history.",
+      "row_count": 2,
+      "primary_key": [
+        "id"
+      ],
+      "primary_key_name": "import_batches_pkey",
+      "foreign_keys": [
+        {
+          "name": "import_batches_created_by_user_id_fkey",
+          "columns": [
+            "created_by_user_id"
+          ],
+          "referred_table": "users",
+          "referred_columns": [
+            "id"
+          ],
+          "targets": [
+            "users.id"
+          ]
+        }
+      ],
+      "unique_constraints": [],
+      "indexes": [],
+      "columns": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "nullable": false,
+          "default": "nextval('\"public\".import_batches_id_seq'::regclass)",
+          "autoincrement": true
+        },
+        {
+          "name": "type",
+          "type": "VARCHAR(20)",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "filename",
+          "type": "VARCHAR(255)",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "row_count",
+          "type": "INTEGER",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "rows_submitted",
+          "type": "INTEGER",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "rows_imported",
+          "type": "INTEGER",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "rows_updated",
+          "type": "INTEGER",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "rows_rejected",
+          "type": "INTEGER",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "warnings_count",
+          "type": "INTEGER",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "clients",
+          "type": "VARCHAR(512)",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "warehouses",
+          "type": "VARCHAR(512)",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "status",
+          "type": "VARCHAR(20)",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "message",
+          "type": "TEXT",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "detail",
+          "type": "TEXT",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "created_by",
+          "type": "VARCHAR(128)",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "created_by_user_id",
+          "type": "INTEGER",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "created_by_username",
+          "type": "VARCHAR(64)",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "created_at",
+          "type": "TIMESTAMP",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        }
+      ]
+    },
+    "orders": {
+      "purpose": "Customer orders; uniqueness Client+Warehouse+OrderType+OrderNumber.",
+      "row_count": 13,
+      "primary_key": [
+        "id"
+      ],
+      "primary_key_name": "orders_pkey",
+      "foreign_keys": [
+        {
+          "name": "orders_client_id_fkey",
+          "columns": [
+            "client_id"
+          ],
+          "referred_table": "clients",
+          "referred_columns": [
+            "id"
+          ],
+          "targets": [
+            "clients.id"
+          ]
+        },
+        {
+          "name": "orders_closed_by_user_id_fkey",
+          "columns": [
+            "closed_by_user_id"
+          ],
+          "referred_table": "users",
+          "referred_columns": [
+            "id"
+          ],
+          "targets": [
+            "users.id"
+          ]
+        },
+        {
+          "name": "orders_division_id_fkey",
+          "columns": [
+            "division_id"
+          ],
+          "referred_table": "divisions",
+          "referred_columns": [
+            "id"
+          ],
+          "targets": [
+            "divisions.id"
+          ]
+        },
+        {
+          "name": "orders_import_batch_id_fkey",
+          "columns": [
+            "import_batch_id"
+          ],
+          "referred_table": "import_batches",
+          "referred_columns": [
+            "id"
+          ],
+          "targets": [
+            "import_batches.id"
+          ]
+        },
+        {
+          "name": "orders_order_type_id_fkey",
+          "columns": [
+            "order_type_id"
+          ],
+          "referred_table": "order_types",
+          "referred_columns": [
+            "id"
+          ],
+          "targets": [
+            "order_types.id"
+          ]
+        },
+        {
+          "name": "orders_validated_by_user_id_fkey",
+          "columns": [
+            "validated_by_user_id"
+          ],
+          "referred_table": "users",
+          "referred_columns": [
+            "id"
+          ],
+          "targets": [
+            "users.id"
+          ]
+        },
+        {
+          "name": "orders_warehouse_id_fkey",
+          "columns": [
+            "warehouse_id"
+          ],
+          "referred_table": "warehouses",
+          "referred_columns": [
+            "id"
+          ],
+          "targets": [
+            "warehouses.id"
+          ]
+        }
+      ],
+      "unique_constraints": [
+        {
+          "name": "uq_order_scope_number",
+          "columns": [
+            "client_id",
+            "warehouse_id",
+            "order_type_id",
+            "order_number"
+          ]
+        }
+      ],
+      "indexes": [
+        {
+          "name": "ix_orders_client_id",
+          "columns": [
+            "client_id"
+          ],
+          "unique": false
+        },
+        {
+          "name": "ix_orders_created_at",
+          "columns": [
+            "created_at"
+          ],
+          "unique": false
+        },
+        {
+          "name": "ix_orders_division_id",
+          "columns": [
+            "division_id"
+          ],
+          "unique": false
+        },
+        {
+          "name": "ix_orders_order_number",
+          "columns": [
+            "order_number"
+          ],
+          "unique": false
+        },
+        {
+          "name": "ix_orders_order_type_id",
+          "columns": [
+            "order_type_id"
+          ],
+          "unique": false
+        },
+        {
+          "name": "ix_orders_processing_lock_id",
+          "columns": [
+            "processing_lock_id"
+          ],
+          "unique": false
+        },
+        {
+          "name": "ix_orders_status",
+          "columns": [
+            "status"
+          ],
+          "unique": false
+        },
+        {
+          "name": "ix_orders_warehouse_id",
+          "columns": [
+            "warehouse_id"
+          ],
+          "unique": false
+        },
+        {
+          "name": "uq_order_scope_number",
+          "columns": [
+            "client_id",
+            "warehouse_id",
+            "order_type_id",
+            "order_number"
+          ],
+          "unique": true
+        }
+      ],
+      "columns": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "nullable": false,
+          "default": "nextval('\"public\".orders_id_seq'::regclass)",
+          "autoincrement": true
+        },
+        {
+          "name": "order_number",
+          "type": "VARCHAR(64)",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "customer",
+          "type": "VARCHAR(255)",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "carrier",
+          "type": "VARCHAR(128)",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "shipping_service",
+          "type": "VARCHAR(128)",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "status",
+          "type": "VARCHAR(20)",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "client_id",
+          "type": "INTEGER",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "warehouse_id",
+          "type": "INTEGER",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "order_type_id",
+          "type": "INTEGER",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "notes",
+          "type": "TEXT",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "import_batch_id",
+          "type": "INTEGER",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "validated_by_user_id",
+          "type": "INTEGER",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "validated_by_username",
+          "type": "VARCHAR(64)",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "closed_by_user_id",
+          "type": "INTEGER",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "closed_by_username",
+          "type": "VARCHAR(64)",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "created_at",
+          "type": "TIMESTAMP",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "updated_at",
+          "type": "TIMESTAMP",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "closed_at",
+          "type": "TIMESTAMP",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "processing_user_id",
+          "type": "INTEGER",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "processing_username",
+          "type": "VARCHAR(64)",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "processing_started_at",
+          "type": "TIMESTAMP",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "division_id",
+          "type": "INTEGER",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "processing_lock_id",
+          "type": "VARCHAR(64)",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        }
+      ]
+    },
+    "inventory_exceptions": {
+      "purpose": "Inventory-import/control exceptions (Client+Warehouse).",
+      "row_count": 1,
+      "primary_key": [
+        "id"
+      ],
+      "primary_key_name": "inventory_exceptions_pkey",
+      "foreign_keys": [
+        {
+          "name": "inventory_exceptions_client_id_fkey",
+          "columns": [
+            "client_id"
+          ],
+          "referred_table": "clients",
+          "referred_columns": [
+            "id"
+          ],
+          "targets": [
+            "clients.id"
+          ]
+        },
+        {
+          "name": "inventory_exceptions_warehouse_id_fkey",
+          "columns": [
+            "warehouse_id"
+          ],
+          "referred_table": "warehouses",
+          "referred_columns": [
+            "id"
+          ],
+          "targets": [
+            "warehouses.id"
+          ]
+        }
+      ],
+      "unique_constraints": [],
+      "indexes": [],
+      "columns": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "nullable": false,
+          "default": "nextval('\"public\".inventory_exceptions_id_seq'::regclass)",
+          "autoincrement": true
+        },
+        {
+          "name": "type",
+          "type": "VARCHAR(48)",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "barcode",
+          "type": "VARCHAR(128)",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "upc",
+          "type": "VARCHAR(64)",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "client_id",
+          "type": "INTEGER",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "warehouse_id",
+          "type": "INTEGER",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "client_code",
+          "type": "VARCHAR(32)",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "warehouse_code",
+          "type": "VARCHAR(32)",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "details",
+          "type": "TEXT",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "status",
+          "type": "VARCHAR(20)",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "created_at",
+          "type": "TIMESTAMP",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        }
+      ]
+    },
+    "inventory_units": {
+      "purpose": "Physical units identified by unique barcode; scoped Client+Warehouse.",
+      "row_count": 15,
+      "primary_key": [
+        "id"
+      ],
+      "primary_key_name": "inventory_units_pkey",
+      "foreign_keys": [
+        {
+          "name": "inventory_units_client_id_fkey",
+          "columns": [
+            "client_id"
+          ],
+          "referred_table": "clients",
+          "referred_columns": [
+            "id"
+          ],
+          "targets": [
+            "clients.id"
+          ]
+        },
+        {
+          "name": "inventory_units_import_batch_id_fkey",
+          "columns": [
+            "import_batch_id"
+          ],
+          "referred_table": "import_batches",
+          "referred_columns": [
+            "id"
+          ],
+          "targets": [
+            "import_batches.id"
+          ]
+        },
+        {
+          "name": "inventory_units_order_id_fkey",
+          "columns": [
+            "order_id"
+          ],
+          "referred_table": "orders",
+          "referred_columns": [
+            "id"
+          ],
+          "targets": [
+            "orders.id"
+          ]
+        },
+        {
+          "name": "inventory_units_order_type_id_fkey",
+          "columns": [
+            "order_type_id"
+          ],
+          "referred_table": "order_types",
+          "referred_columns": [
+            "id"
+          ],
+          "targets": [
+            "order_types.id"
+          ]
+        },
+        {
+          "name": "inventory_units_warehouse_id_fkey",
+          "columns": [
+            "warehouse_id"
+          ],
+          "referred_table": "warehouses",
+          "referred_columns": [
+            "id"
+          ],
+          "targets": [
+            "warehouses.id"
+          ]
+        }
+      ],
+      "unique_constraints": [],
+      "indexes": [
+        {
+          "name": "ix_inventory_units_barcode",
+          "columns": [
+            "barcode"
+          ],
+          "unique": true
+        },
+        {
+          "name": "ix_inventory_units_client_id",
+          "columns": [
+            "client_id"
+          ],
+          "unique": false
+        },
+        {
+          "name": "ix_inventory_units_cwl",
+          "columns": [
+            "client_id",
+            "warehouse_id",
+            "location"
+          ],
+          "unique": false
+        },
+        {
+          "name": "ix_inventory_units_cws",
+          "columns": [
+            "client_id",
+            "warehouse_id",
+            "sku"
+          ],
+          "unique": false
+        },
+        {
+          "name": "ix_inventory_units_cwu",
+          "columns": [
+            "client_id",
+            "warehouse_id",
+            "upc"
+          ],
+          "unique": false
+        },
+        {
+          "name": "ix_inventory_units_sku",
+          "columns": [
+            "sku"
+          ],
+          "unique": false
+        },
+        {
+          "name": "ix_inventory_units_upc",
+          "columns": [
+            "upc"
+          ],
+          "unique": false
+        },
+        {
+          "name": "ix_inventory_units_warehouse_id",
+          "columns": [
+            "warehouse_id"
+          ],
+          "unique": false
+        }
+      ],
+      "columns": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "nullable": false,
+          "default": "nextval('\"public\".inventory_units_id_seq'::regclass)",
+          "autoincrement": true
+        },
+        {
+          "name": "barcode",
+          "type": "VARCHAR(128)",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "upc",
+          "type": "VARCHAR(64)",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "sku",
+          "type": "VARCHAR(64)",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "description",
+          "type": "VARCHAR(255)",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "location",
+          "type": "VARCHAR(64)",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "status",
+          "type": "VARCHAR(20)",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "client_id",
+          "type": "INTEGER",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "warehouse_id",
+          "type": "INTEGER",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "order_type_id",
+          "type": "INTEGER",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "order_id",
+          "type": "INTEGER",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "import_batch_id",
+          "type": "INTEGER",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "created_at",
+          "type": "TIMESTAMP",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "updated_at",
+          "type": "TIMESTAMP",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        }
+      ]
+    },
+    "order_lines": {
+      "purpose": "Ordered SKU quantities on an order.",
+      "row_count": 15,
+      "primary_key": [
+        "id"
+      ],
+      "primary_key_name": "order_lines_pkey",
+      "foreign_keys": [
+        {
+          "name": "order_lines_order_id_fkey",
+          "columns": [
+            "order_id"
+          ],
+          "referred_table": "orders",
+          "referred_columns": [
+            "id"
+          ],
+          "targets": [
+            "orders.id"
+          ]
+        }
+      ],
+      "unique_constraints": [],
+      "indexes": [
+        {
+          "name": "ix_order_lines_order_id",
+          "columns": [
+            "order_id"
+          ],
+          "unique": false
+        }
+      ],
+      "columns": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "nullable": false,
+          "default": "nextval('\"public\".order_lines_id_seq'::regclass)",
+          "autoincrement": true
+        },
+        {
+          "name": "order_id",
+          "type": "INTEGER",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "sku",
+          "type": "VARCHAR(64)",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "description",
+          "type": "VARCHAR(255)",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "quantity",
+          "type": "INTEGER",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        }
+      ]
+    },
+    "order_exceptions": {
+      "purpose": "Order-processing exceptions.",
+      "row_count": 0,
+      "primary_key": [
+        "id"
+      ],
+      "primary_key_name": "order_exceptions_pkey",
+      "foreign_keys": [
+        {
+          "name": "order_exceptions_created_by_user_id_fkey",
+          "columns": [
+            "created_by_user_id"
+          ],
+          "referred_table": "users",
+          "referred_columns": [
+            "id"
+          ],
+          "targets": [
+            "users.id"
+          ]
+        },
+        {
+          "name": "order_exceptions_order_id_fkey",
+          "columns": [
+            "order_id"
+          ],
+          "referred_table": "orders",
+          "referred_columns": [
+            "id"
+          ],
+          "targets": [
+            "orders.id"
+          ]
+        }
+      ],
+      "unique_constraints": [],
+      "indexes": [],
+      "columns": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "nullable": false,
+          "default": "nextval('\"public\".order_exceptions_id_seq'::regclass)",
+          "autoincrement": true
+        },
+        {
+          "name": "order_id",
+          "type": "INTEGER",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "barcode",
+          "type": "VARCHAR(128)",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "type",
+          "type": "VARCHAR(48)",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "message",
+          "type": "TEXT",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "resolved",
+          "type": "BOOLEAN",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "created_by_user_id",
+          "type": "INTEGER",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "created_by_username",
+          "type": "VARCHAR(64)",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "created_at",
+          "type": "TIMESTAMP",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        }
+      ]
+    },
+    "invoices": {
+      "purpose": "One invoice per closed order.",
+      "row_count": 1,
+      "primary_key": [
+        "id"
+      ],
+      "primary_key_name": "invoices_pkey",
+      "foreign_keys": [
+        {
+          "name": "invoices_client_id_fkey",
+          "columns": [
+            "client_id"
+          ],
+          "referred_table": "clients",
+          "referred_columns": [
+            "id"
+          ],
+          "targets": [
+            "clients.id"
+          ]
+        },
+        {
+          "name": "invoices_created_by_user_id_fkey",
+          "columns": [
+            "created_by_user_id"
+          ],
+          "referred_table": "users",
+          "referred_columns": [
+            "id"
+          ],
+          "targets": [
+            "users.id"
+          ]
+        },
+        {
+          "name": "invoices_order_id_fkey",
+          "columns": [
+            "order_id"
+          ],
+          "referred_table": "orders",
+          "referred_columns": [
+            "id"
+          ],
+          "targets": [
+            "orders.id"
+          ]
+        },
+        {
+          "name": "invoices_order_type_id_fkey",
+          "columns": [
+            "order_type_id"
+          ],
+          "referred_table": "order_types",
+          "referred_columns": [
+            "id"
+          ],
+          "targets": [
+            "order_types.id"
+          ]
+        },
+        {
+          "name": "invoices_warehouse_id_fkey",
+          "columns": [
+            "warehouse_id"
+          ],
+          "referred_table": "warehouses",
+          "referred_columns": [
+            "id"
+          ],
+          "targets": [
+            "warehouses.id"
+          ]
+        }
+      ],
+      "unique_constraints": [
+        {
+          "name": "uq_invoice_order",
+          "columns": [
+            "order_id"
+          ]
+        }
+      ],
+      "indexes": [
+        {
+          "name": "ix_invoices_invoice_number",
+          "columns": [
+            "invoice_number"
+          ],
+          "unique": true
+        },
+        {
+          "name": "uq_invoice_order",
+          "columns": [
+            "order_id"
+          ],
+          "unique": true
+        }
+      ],
+      "columns": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "nullable": false,
+          "default": "nextval('\"public\".invoices_id_seq'::regclass)",
+          "autoincrement": true
+        },
+        {
+          "name": "invoice_number",
+          "type": "VARCHAR(64)",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "order_id",
+          "type": "INTEGER",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "client_id",
+          "type": "INTEGER",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "warehouse_id",
+          "type": "INTEGER",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "order_type_id",
+          "type": "INTEGER",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "customer",
+          "type": "VARCHAR(255)",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "carrier",
+          "type": "VARCHAR(128)",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "shipping_service",
+          "type": "VARCHAR(128)",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "total_units",
+          "type": "INTEGER",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "total_boxes",
+          "type": "INTEGER",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "total_weight",
+          "type": "DOUBLE PRECISION",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "status",
+          "type": "VARCHAR(20)",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "created_at",
+          "type": "TIMESTAMP",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "created_by",
+          "type": "VARCHAR(128)",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "created_by_user_id",
+          "type": "INTEGER",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "created_by_username",
+          "type": "VARCHAR(64)",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        }
+      ]
+    },
+    "allocations": {
+      "purpose": "Barcode-level assignment of an inventory unit to an order.",
+      "row_count": 12,
+      "primary_key": [
+        "id"
+      ],
+      "primary_key_name": "allocations_pkey",
+      "foreign_keys": [
+        {
+          "name": "allocations_inventory_unit_id_fkey",
+          "columns": [
+            "inventory_unit_id"
+          ],
+          "referred_table": "inventory_units",
+          "referred_columns": [
+            "id"
+          ],
+          "targets": [
+            "inventory_units.id"
+          ]
+        },
+        {
+          "name": "allocations_order_id_fkey",
+          "columns": [
+            "order_id"
+          ],
+          "referred_table": "orders",
+          "referred_columns": [
+            "id"
+          ],
+          "targets": [
+            "orders.id"
+          ]
+        },
+        {
+          "name": "allocations_order_line_id_fkey",
+          "columns": [
+            "order_line_id"
+          ],
+          "referred_table": "order_lines",
+          "referred_columns": [
+            "id"
+          ],
+          "targets": [
+            "order_lines.id"
+          ]
+        }
+      ],
+      "unique_constraints": [],
+      "indexes": [
+        {
+          "name": "ix_allocations_barcode",
+          "columns": [
+            "barcode"
+          ],
+          "unique": false
+        },
+        {
+          "name": "ix_allocations_unit_status",
+          "columns": [
+            "inventory_unit_id",
+            "status"
+          ],
+          "unique": false
+        }
+      ],
+      "columns": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "nullable": false,
+          "default": "nextval('\"public\".allocations_id_seq'::regclass)",
+          "autoincrement": true
+        },
+        {
+          "name": "order_id",
+          "type": "INTEGER",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "order_line_id",
+          "type": "INTEGER",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "inventory_unit_id",
+          "type": "INTEGER",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "barcode",
+          "type": "VARCHAR(128)",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "status",
+          "type": "VARCHAR(20)",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "created_at",
+          "type": "TIMESTAMP",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        }
+      ]
+    },
+    "boxes": {
+      "purpose": "Cartons packed during order processing.",
+      "row_count": 5,
+      "primary_key": [
+        "id"
+      ],
+      "primary_key_name": "boxes_pkey",
+      "foreign_keys": [
+        {
+          "name": "boxes_closed_by_user_id_fkey",
+          "columns": [
+            "closed_by_user_id"
+          ],
+          "referred_table": "users",
+          "referred_columns": [
+            "id"
+          ],
+          "targets": [
+            "users.id"
+          ]
+        },
+        {
+          "name": "boxes_created_by_user_id_fkey",
+          "columns": [
+            "created_by_user_id"
+          ],
+          "referred_table": "users",
+          "referred_columns": [
+            "id"
+          ],
+          "targets": [
+            "users.id"
+          ]
+        },
+        {
+          "name": "boxes_order_id_fkey",
+          "columns": [
+            "order_id"
+          ],
+          "referred_table": "orders",
+          "referred_columns": [
+            "id"
+          ],
+          "targets": [
+            "orders.id"
+          ]
+        }
+      ],
+      "unique_constraints": [],
+      "indexes": [],
+      "columns": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "nullable": false,
+          "default": "nextval('\"public\".boxes_id_seq'::regclass)",
+          "autoincrement": true
+        },
+        {
+          "name": "order_id",
+          "type": "INTEGER",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "box_number",
+          "type": "VARCHAR(64)",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "length_cm",
+          "type": "DOUBLE PRECISION",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "width_cm",
+          "type": "DOUBLE PRECISION",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "height_cm",
+          "type": "DOUBLE PRECISION",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "weight_kg",
+          "type": "DOUBLE PRECISION",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "status",
+          "type": "VARCHAR(20)",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "created_by_user_id",
+          "type": "INTEGER",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "created_by_username",
+          "type": "VARCHAR(64)",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "closed_by_user_id",
+          "type": "INTEGER",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "closed_by_username",
+          "type": "VARCHAR(64)",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "created_at",
+          "type": "TIMESTAMP",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "closed_at",
+          "type": "TIMESTAMP",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "dimension_unit",
+          "type": "VARCHAR(8)",
+          "nullable": true,
+          "default": "'in'::character varying",
+          "autoincrement": false
+        },
+        {
+          "name": "weight_unit",
+          "type": "VARCHAR(8)",
+          "nullable": true,
+          "default": "'lb'::character varying",
+          "autoincrement": false
+        },
+        {
+          "name": "reweigh_required",
+          "type": "BOOLEAN",
+          "nullable": true,
+          "default": "false",
+          "autoincrement": false
+        }
+      ]
+    },
+    "box_contents": {
+      "purpose": "Units packed into a carton (one unit in at most one box).",
+      "row_count": 7,
+      "primary_key": [
+        "id"
+      ],
+      "primary_key_name": "box_contents_pkey",
+      "foreign_keys": [
+        {
+          "name": "box_contents_box_id_fkey",
+          "columns": [
+            "box_id"
+          ],
+          "referred_table": "boxes",
+          "referred_columns": [
+            "id"
+          ],
+          "targets": [
+            "boxes.id"
+          ]
+        },
+        {
+          "name": "box_contents_inventory_unit_id_fkey",
+          "columns": [
+            "inventory_unit_id"
+          ],
+          "referred_table": "inventory_units",
+          "referred_columns": [
+            "id"
+          ],
+          "targets": [
+            "inventory_units.id"
+          ]
+        }
+      ],
+      "unique_constraints": [
+        {
+          "name": "uq_box_contents_unit",
+          "columns": [
+            "inventory_unit_id"
+          ]
+        }
+      ],
+      "indexes": [
+        {
+          "name": "ix_box_contents_barcode",
+          "columns": [
+            "barcode"
+          ],
+          "unique": false
+        },
+        {
+          "name": "uq_box_contents_unit",
+          "columns": [
+            "inventory_unit_id"
+          ],
+          "unique": true
+        }
+      ],
+      "columns": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "nullable": false,
+          "default": "nextval('\"public\".box_contents_id_seq'::regclass)",
+          "autoincrement": true
+        },
+        {
+          "name": "box_id",
+          "type": "INTEGER",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "inventory_unit_id",
+          "type": "INTEGER",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "barcode",
+          "type": "VARCHAR(128)",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "created_at",
+          "type": "TIMESTAMP",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        }
+      ]
+    },
+    "transactions": {
+      "purpose": "Append-only operational event ledger.",
+      "row_count": 77,
+      "primary_key": [
+        "id"
+      ],
+      "primary_key_name": "transactions_pkey",
+      "foreign_keys": [
+        {
+          "name": "transactions_inventory_unit_id_fkey",
+          "columns": [
+            "inventory_unit_id"
+          ],
+          "referred_table": "inventory_units",
+          "referred_columns": [
+            "id"
+          ],
+          "targets": [
+            "inventory_units.id"
+          ]
+        },
+        {
+          "name": "transactions_order_id_fkey",
+          "columns": [
+            "order_id"
+          ],
+          "referred_table": "orders",
+          "referred_columns": [
+            "id"
+          ],
+          "targets": [
+            "orders.id"
+          ]
+        },
+        {
+          "name": "transactions_user_id_fkey",
+          "columns": [
+            "user_id"
+          ],
+          "referred_table": "users",
+          "referred_columns": [
+            "id"
+          ],
+          "targets": [
+            "users.id"
+          ]
+        }
+      ],
+      "unique_constraints": [],
+      "indexes": [],
+      "columns": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "nullable": false,
+          "default": "nextval('\"public\".transactions_id_seq'::regclass)",
+          "autoincrement": true
+        },
+        {
+          "name": "type",
+          "type": "VARCHAR(48)",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "order_id",
+          "type": "INTEGER",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "inventory_unit_id",
+          "type": "INTEGER",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "barcode",
+          "type": "VARCHAR(128)",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "quantity",
+          "type": "INTEGER",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "detail",
+          "type": "TEXT",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "user_id",
+          "type": "INTEGER",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "username",
+          "type": "VARCHAR(64)",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "created_at",
+          "type": "TIMESTAMP",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        }
+      ]
+    },
+    "inventory_movements": {
+      "purpose": "Inventory status/location movement history.",
+      "row_count": 35,
+      "primary_key": [
+        "id"
+      ],
+      "primary_key_name": "inventory_movements_pkey",
+      "foreign_keys": [
+        {
+          "name": "inventory_movements_client_id_fkey",
+          "columns": [
+            "client_id"
+          ],
+          "referred_table": "clients",
+          "referred_columns": [
+            "id"
+          ],
+          "targets": [
+            "clients.id"
+          ]
+        },
+        {
+          "name": "inventory_movements_created_by_user_id_fkey",
+          "columns": [
+            "created_by_user_id"
+          ],
+          "referred_table": "users",
+          "referred_columns": [
+            "id"
+          ],
+          "targets": [
+            "users.id"
+          ]
+        },
+        {
+          "name": "inventory_movements_inventory_unit_id_fkey",
+          "columns": [
+            "inventory_unit_id"
+          ],
+          "referred_table": "inventory_units",
+          "referred_columns": [
+            "id"
+          ],
+          "targets": [
+            "inventory_units.id"
+          ]
+        },
+        {
+          "name": "inventory_movements_order_id_fkey",
+          "columns": [
+            "order_id"
+          ],
+          "referred_table": "orders",
+          "referred_columns": [
+            "id"
+          ],
+          "targets": [
+            "orders.id"
+          ]
+        },
+        {
+          "name": "inventory_movements_warehouse_id_fkey",
+          "columns": [
+            "warehouse_id"
+          ],
+          "referred_table": "warehouses",
+          "referred_columns": [
+            "id"
+          ],
+          "targets": [
+            "warehouses.id"
+          ]
+        }
+      ],
+      "unique_constraints": [],
+      "indexes": [
+        {
+          "name": "ix_inventory_movements_barcode",
+          "columns": [
+            "barcode"
+          ],
+          "unique": false
+        },
+        {
+          "name": "ix_inventory_movements_client_id",
+          "columns": [
+            "client_id"
+          ],
+          "unique": false
+        },
+        {
+          "name": "ix_inventory_movements_warehouse_id",
+          "columns": [
+            "warehouse_id"
+          ],
+          "unique": false
+        }
+      ],
+      "columns": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "nullable": false,
+          "default": "nextval('\"public\".inventory_movements_id_seq'::regclass)",
+          "autoincrement": true
+        },
+        {
+          "name": "inventory_unit_id",
+          "type": "INTEGER",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "barcode",
+          "type": "VARCHAR(128)",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "upc",
+          "type": "VARCHAR(64)",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "client_id",
+          "type": "INTEGER",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "warehouse_id",
+          "type": "INTEGER",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "movement_type",
+          "type": "VARCHAR(48)",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "from_status",
+          "type": "VARCHAR(20)",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "to_status",
+          "type": "VARCHAR(20)",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "from_location",
+          "type": "VARCHAR(64)",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "to_location",
+          "type": "VARCHAR(64)",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "order_id",
+          "type": "INTEGER",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "actor",
+          "type": "VARCHAR(128)",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "created_by_user_id",
+          "type": "INTEGER",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "created_by_username",
+          "type": "VARCHAR(64)",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "reason",
+          "type": "VARCHAR(255)",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "created_at",
+          "type": "TIMESTAMP",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        }
+      ]
+    },
+    "documents": {
+      "purpose": "Generated PDFs (pick tickets, packing, closure).",
+      "row_count": 2,
+      "primary_key": [
+        "id"
+      ],
+      "primary_key_name": "documents_pkey",
+      "foreign_keys": [
+        {
+          "name": "documents_box_id_fkey",
+          "columns": [
+            "box_id"
+          ],
+          "referred_table": "boxes",
+          "referred_columns": [
+            "id"
+          ],
+          "targets": [
+            "boxes.id"
+          ]
+        },
+        {
+          "name": "documents_created_by_user_id_fkey",
+          "columns": [
+            "created_by_user_id"
+          ],
+          "referred_table": "users",
+          "referred_columns": [
+            "id"
+          ],
+          "targets": [
+            "users.id"
+          ]
+        },
+        {
+          "name": "documents_order_id_fkey",
+          "columns": [
+            "order_id"
+          ],
+          "referred_table": "orders",
+          "referred_columns": [
+            "id"
+          ],
+          "targets": [
+            "orders.id"
+          ]
+        }
+      ],
+      "unique_constraints": [],
+      "indexes": [],
+      "columns": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "nullable": false,
+          "default": "nextval('\"public\".documents_id_seq'::regclass)",
+          "autoincrement": true
+        },
+        {
+          "name": "order_id",
+          "type": "INTEGER",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "box_id",
+          "type": "INTEGER",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "type",
+          "type": "VARCHAR(48)",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "filename",
+          "type": "VARCHAR(255)",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "path",
+          "type": "VARCHAR(512)",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "created_by_user_id",
+          "type": "INTEGER",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "created_by_username",
+          "type": "VARCHAR(64)",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "created_at",
+          "type": "TIMESTAMP",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        }
+      ]
+    },
+    "pick_tickets": {
+      "purpose": "Permanent pick-ticket identity; one per fully allocated order.",
+      "row_count": 3,
+      "primary_key": [
+        "id"
+      ],
+      "primary_key_name": "pick_tickets_pkey",
+      "foreign_keys": [
+        {
+          "name": "pick_tickets_assigned_by_user_id_fkey",
+          "columns": [
+            "assigned_by_user_id"
+          ],
+          "referred_table": "users",
+          "referred_columns": [
+            "id"
+          ],
+          "targets": [
+            "users.id"
+          ]
+        },
+        {
+          "name": "pick_tickets_document_id_fkey",
+          "columns": [
+            "document_id"
+          ],
+          "referred_table": "documents",
+          "referred_columns": [
+            "id"
+          ],
+          "targets": [
+            "documents.id"
+          ]
+        },
+        {
+          "name": "pick_tickets_order_id_fkey",
+          "columns": [
+            "order_id"
+          ],
+          "referred_table": "orders",
+          "referred_columns": [
+            "id"
+          ],
+          "targets": [
+            "orders.id"
+          ]
+        }
+      ],
+      "unique_constraints": [
+        {
+          "name": "pick_tickets_order_id_key",
+          "columns": [
+            "order_id"
+          ]
+        }
+      ],
+      "indexes": [
+        {
+          "name": "ix_pick_tickets_pick_ticket_number",
+          "columns": [
+            "pick_ticket_number"
+          ],
+          "unique": true
+        },
+        {
+          "name": "pick_tickets_order_id_key",
+          "columns": [
+            "order_id"
+          ],
+          "unique": true
+        }
+      ],
+      "columns": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "nullable": false,
+          "default": "nextval('\"public\".pick_tickets_id_seq'::regclass)",
+          "autoincrement": true
+        },
+        {
+          "name": "pick_ticket_number",
+          "type": "VARCHAR(64)",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "order_id",
+          "type": "INTEGER",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "status",
+          "type": "VARCHAR(20)",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "assigned_at",
+          "type": "TIMESTAMP",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "assigned_by_user_id",
+          "type": "INTEGER",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "assigned_by_username",
+          "type": "VARCHAR(64)",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "document_id",
+          "type": "INTEGER",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "created_at",
+          "type": "TIMESTAMP",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "updated_at",
+          "type": "TIMESTAMP",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        }
+      ]
+    },
+    "pick_ticket_print_events": {
+      "purpose": "Print/reprint history for pick tickets.",
+      "row_count": 1,
+      "primary_key": [
+        "id"
+      ],
+      "primary_key_name": "pick_ticket_print_events_pkey",
+      "foreign_keys": [
+        {
+          "name": "pick_ticket_print_events_pick_ticket_id_fkey",
+          "columns": [
+            "pick_ticket_id"
+          ],
+          "referred_table": "pick_tickets",
+          "referred_columns": [
+            "id"
+          ],
+          "targets": [
+            "pick_tickets.id"
+          ]
+        },
+        {
+          "name": "pick_ticket_print_events_user_id_fkey",
+          "columns": [
+            "user_id"
+          ],
+          "referred_table": "users",
+          "referred_columns": [
+            "id"
+          ],
+          "targets": [
+            "users.id"
+          ]
+        }
+      ],
+      "unique_constraints": [],
+      "indexes": [
+        {
+          "name": "ix_pick_ticket_print_events_pick_ticket_id",
+          "columns": [
+            "pick_ticket_id"
+          ],
+          "unique": false
+        },
+        {
+          "name": "ix_pick_ticket_print_events_printed_at",
+          "columns": [
+            "printed_at"
+          ],
+          "unique": false
+        }
+      ],
+      "columns": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "nullable": false,
+          "default": "nextval('\"public\".pick_ticket_print_events_id_seq'::regclass)",
+          "autoincrement": true
+        },
+        {
+          "name": "pick_ticket_id",
+          "type": "INTEGER",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "user_id",
+          "type": "INTEGER",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "username",
+          "type": "VARCHAR(64)",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "printed_at",
+          "type": "TIMESTAMP",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "source",
+          "type": "VARCHAR(20)",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "ip_address",
+          "type": "VARCHAR(64)",
+          "nullable": true,
+          "default": null,
+          "autoincrement": false
+        }
+      ]
+    },
+    "divisions": {
+      "purpose": "Client-scoped commercial division (order attribute, not warehouse).",
+      "row_count": 5,
+      "primary_key": [
+        "id"
+      ],
+      "primary_key_name": "divisions_pkey",
+      "foreign_keys": [
+        {
+          "name": "divisions_client_id_fkey",
+          "columns": [
+            "client_id"
+          ],
+          "referred_table": "clients",
+          "referred_columns": [
+            "id"
+          ],
+          "targets": [
+            "clients.id"
+          ]
+        }
+      ],
+      "unique_constraints": [
+        {
+          "name": "uq_division_client_code",
+          "columns": [
+            "client_id",
+            "code"
+          ]
+        }
+      ],
+      "indexes": [
+        {
+          "name": "ix_divisions_client_id",
+          "columns": [
+            "client_id"
+          ],
+          "unique": false
+        },
+        {
+          "name": "ix_divisions_code",
+          "columns": [
+            "code"
+          ],
+          "unique": false
+        },
+        {
+          "name": "uq_division_client_code",
+          "columns": [
+            "client_id",
+            "code"
+          ],
+          "unique": true
+        }
+      ],
+      "columns": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "nullable": false,
+          "default": "nextval('\"public\".divisions_id_seq'::regclass)",
+          "autoincrement": true
+        },
+        {
+          "name": "client_id",
+          "type": "INTEGER",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "code",
+          "type": "VARCHAR(32)",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "name",
+          "type": "VARCHAR(255)",
+          "nullable": false,
+          "default": null,
+          "autoincrement": false
+        },
+        {
+          "name": "active",
+          "type": "BOOLEAN",
+          "nullable": false,
+          "default": "true",
+          "autoincrement": false
+        },
+        {
+          "name": "created_at",
+          "type": "TIMESTAMP",
+          "nullable": false,
+          "default": "now()",
+          "autoincrement": false
+        }
+      ]
+    }
+  },
+  "model_tables": {
+    "clients": {
+      "purpose": "Commercial clients that own warehouses, divisions, and orders.",
+      "primary_key": [
+        "id"
+      ],
+      "foreign_keys": [],
+      "unique_constraints": [],
+      "indexes": [
+        {
+          "name": "ix_clients_code",
+          "columns": [
+            "code"
+          ],
+          "unique": true
+        }
+      ],
+      "columns": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "nullable": false,
+          "primary_key": true,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "code",
+          "type": "VARCHAR(32)",
+          "nullable": false,
+          "primary_key": false,
+          "unique": true,
+          "index": true,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "name",
+          "type": "VARCHAR(255)",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "active",
+          "type": "BOOLEAN",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": "True"
+        },
+        {
+          "name": "created_at",
+          "type": "DATETIME",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": "_utcnow"
+        }
+      ]
+    },
+    "permissions": {
+      "purpose": "Canonical permission catalog (code/module).",
+      "primary_key": [
+        "id"
+      ],
+      "foreign_keys": [],
+      "unique_constraints": [],
+      "indexes": [
+        {
+          "name": "ix_permissions_code",
+          "columns": [
+            "code"
+          ],
+          "unique": true
+        }
+      ],
+      "columns": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "nullable": false,
+          "primary_key": true,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "code",
+          "type": "VARCHAR(64)",
+          "nullable": false,
+          "primary_key": false,
+          "unique": true,
+          "index": true,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "description",
+          "type": "VARCHAR(255)",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "module",
+          "type": "VARCHAR(64)",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        }
+      ]
+    },
+    "users": {
+      "purpose": "Authenticated operators; RBAC identity (ADMIN/USER).",
+      "primary_key": [
+        "id"
+      ],
+      "foreign_keys": [
+        {
+          "column": "updated_by_user_id",
+          "target": "users.id",
+          "constraint": null
+        },
+        {
+          "column": "created_by_user_id",
+          "target": "users.id",
+          "constraint": null
+        }
+      ],
+      "unique_constraints": [],
+      "indexes": [
+        {
+          "name": "ix_users_username",
+          "columns": [
+            "username"
+          ],
+          "unique": true
+        }
+      ],
+      "columns": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "nullable": false,
+          "primary_key": true,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "username",
+          "type": "VARCHAR(64)",
+          "nullable": false,
+          "primary_key": false,
+          "unique": true,
+          "index": true,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "password_hash",
+          "type": "VARCHAR(255)",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "full_name",
+          "type": "VARCHAR(255)",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "email",
+          "type": "VARCHAR(255)",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "role",
+          "type": "VARCHAR(16)",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": "USER"
+        },
+        {
+          "name": "active",
+          "type": "BOOLEAN",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": "True"
+        },
+        {
+          "name": "must_change_password",
+          "type": "BOOLEAN",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": "True"
+        },
+        {
+          "name": "failed_login_count",
+          "type": "INTEGER",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": "0"
+        },
+        {
+          "name": "locked_until",
+          "type": "DATETIME",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "last_login_at",
+          "type": "DATETIME",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "created_at",
+          "type": "DATETIME",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": "_utcnow"
+        },
+        {
+          "name": "created_by_user_id",
+          "type": "INTEGER",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": "users.id",
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "updated_at",
+          "type": "DATETIME",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": "_utcnow"
+        },
+        {
+          "name": "updated_by_user_id",
+          "type": "INTEGER",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": "users.id",
+          "server_default": null,
+          "python_default": null
+        }
+      ]
+    },
+    "audit_events": {
+      "purpose": "Append-only human-action audit log.",
+      "primary_key": [
+        "id"
+      ],
+      "foreign_keys": [
+        {
+          "column": "user_id",
+          "target": "users.id",
+          "constraint": null
+        }
+      ],
+      "unique_constraints": [],
+      "indexes": [
+        {
+          "name": "ix_audit_events_event_type",
+          "columns": [
+            "event_type"
+          ],
+          "unique": false
+        },
+        {
+          "name": "ix_audit_events_created_at",
+          "columns": [
+            "created_at"
+          ],
+          "unique": false
+        }
+      ],
+      "columns": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "nullable": false,
+          "primary_key": true,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "user_id",
+          "type": "INTEGER",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": "users.id",
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "username",
+          "type": "VARCHAR(64)",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "event_type",
+          "type": "VARCHAR(48)",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "index": true,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "module",
+          "type": "VARCHAR(48)",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "entity_type",
+          "type": "VARCHAR(48)",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "entity_id",
+          "type": "VARCHAR(64)",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "ip_address",
+          "type": "VARCHAR(64)",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "detail",
+          "type": "TEXT",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "created_at",
+          "type": "DATETIME",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "index": true,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": "_utcnow"
+        }
+      ]
+    },
+    "divisions": {
+      "purpose": "Client-scoped commercial division (order attribute, not warehouse).",
+      "primary_key": [
+        "id"
+      ],
+      "foreign_keys": [
+        {
+          "column": "client_id",
+          "target": "clients.id",
+          "constraint": null
+        }
+      ],
+      "unique_constraints": [
+        {
+          "name": "uq_division_client_code",
+          "columns": [
+            "client_id",
+            "code"
+          ]
+        }
+      ],
+      "indexes": [
+        {
+          "name": "ix_divisions_code",
+          "columns": [
+            "code"
+          ],
+          "unique": false
+        },
+        {
+          "name": "ix_divisions_client_id",
+          "columns": [
+            "client_id"
+          ],
+          "unique": false
+        }
+      ],
+      "columns": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "nullable": false,
+          "primary_key": true,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "client_id",
+          "type": "INTEGER",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "index": true,
+          "foreign_key": "clients.id",
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "code",
+          "type": "VARCHAR(32)",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "index": true,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "name",
+          "type": "VARCHAR(255)",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "active",
+          "type": "BOOLEAN",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": "True"
+        },
+        {
+          "name": "created_at",
+          "type": "DATETIME",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": "_utcnow"
+        }
+      ]
+    },
+    "import_batches": {
+      "purpose": "Inventory and order import history.",
+      "primary_key": [
+        "id"
+      ],
+      "foreign_keys": [
+        {
+          "column": "created_by_user_id",
+          "target": "users.id",
+          "constraint": null
+        }
+      ],
+      "unique_constraints": [],
+      "indexes": [],
+      "columns": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "nullable": false,
+          "primary_key": true,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "type",
+          "type": "VARCHAR(20)",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "filename",
+          "type": "VARCHAR(255)",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "row_count",
+          "type": "INTEGER",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": "0"
+        },
+        {
+          "name": "rows_submitted",
+          "type": "INTEGER",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": "0"
+        },
+        {
+          "name": "rows_imported",
+          "type": "INTEGER",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": "0"
+        },
+        {
+          "name": "rows_updated",
+          "type": "INTEGER",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": "0"
+        },
+        {
+          "name": "rows_rejected",
+          "type": "INTEGER",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": "0"
+        },
+        {
+          "name": "warnings_count",
+          "type": "INTEGER",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": "0"
+        },
+        {
+          "name": "clients",
+          "type": "VARCHAR(512)",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "warehouses",
+          "type": "VARCHAR(512)",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "status",
+          "type": "VARCHAR(20)",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": "COMPLETED"
+        },
+        {
+          "name": "message",
+          "type": "TEXT",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "detail",
+          "type": "TEXT",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "created_by",
+          "type": "VARCHAR(128)",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "created_by_user_id",
+          "type": "INTEGER",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": "users.id",
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "created_by_username",
+          "type": "VARCHAR(64)",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "created_at",
+          "type": "DATETIME",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": "_utcnow"
+        }
+      ]
+    },
+    "order_types": {
+      "purpose": "Order channel/type per client (ECOMMERCE/RETAIL/WHOLESALE).",
+      "primary_key": [
+        "id"
+      ],
+      "foreign_keys": [
+        {
+          "column": "client_id",
+          "target": "clients.id",
+          "constraint": null
+        }
+      ],
+      "unique_constraints": [
+        {
+          "name": "uq_order_type_client_code",
+          "columns": [
+            "client_id",
+            "code"
+          ]
+        }
+      ],
+      "indexes": [
+        {
+          "name": "ix_order_types_code",
+          "columns": [
+            "code"
+          ],
+          "unique": false
+        },
+        {
+          "name": "ix_order_types_channel",
+          "columns": [
+            "channel"
+          ],
+          "unique": false
+        }
+      ],
+      "columns": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "nullable": false,
+          "primary_key": true,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "client_id",
+          "type": "INTEGER",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": "clients.id",
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "code",
+          "type": "VARCHAR(32)",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "index": true,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "name",
+          "type": "VARCHAR(255)",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "channel",
+          "type": "VARCHAR(16)",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "index": true,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "active",
+          "type": "BOOLEAN",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": "True"
+        },
+        {
+          "name": "created_at",
+          "type": "DATETIME",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": "_utcnow"
+        }
+      ]
+    },
+    "user_permissions": {
+      "purpose": "Per-user granted permissions (ADMIN bypasses this).",
+      "primary_key": [
+        "id"
+      ],
+      "foreign_keys": [
+        {
+          "column": "permission_id",
+          "target": "permissions.id",
+          "constraint": null
+        },
+        {
+          "column": "user_id",
+          "target": "users.id",
+          "constraint": null
+        },
+        {
+          "column": "created_by_user_id",
+          "target": "users.id",
+          "constraint": null
+        }
+      ],
+      "unique_constraints": [
+        {
+          "name": "uq_user_permission",
+          "columns": [
+            "user_id",
+            "permission_id"
+          ]
+        }
+      ],
+      "indexes": [],
+      "columns": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "nullable": false,
+          "primary_key": true,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "user_id",
+          "type": "INTEGER",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": "users.id",
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "permission_id",
+          "type": "INTEGER",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": "permissions.id",
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "granted",
+          "type": "BOOLEAN",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": "True"
+        },
+        {
+          "name": "created_at",
+          "type": "DATETIME",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": "_utcnow"
+        },
+        {
+          "name": "created_by_user_id",
+          "type": "INTEGER",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": "users.id",
+          "server_default": null,
+          "python_default": null
+        }
+      ]
+    },
+    "warehouses": {
+      "purpose": "Physical warehouses scoped to a client.",
+      "primary_key": [
+        "id"
+      ],
+      "foreign_keys": [
+        {
+          "column": "client_id",
+          "target": "clients.id",
+          "constraint": null
+        }
+      ],
+      "unique_constraints": [
+        {
+          "name": "uq_warehouse_client_code",
+          "columns": [
+            "client_id",
+            "code"
+          ]
+        }
+      ],
+      "indexes": [
+        {
+          "name": "ix_warehouses_code",
+          "columns": [
+            "code"
+          ],
+          "unique": false
+        }
+      ],
+      "columns": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "nullable": false,
+          "primary_key": true,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "client_id",
+          "type": "INTEGER",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": "clients.id",
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "code",
+          "type": "VARCHAR(32)",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "index": true,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "name",
+          "type": "VARCHAR(255)",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "active",
+          "type": "BOOLEAN",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": "True"
+        },
+        {
+          "name": "created_at",
+          "type": "DATETIME",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": "_utcnow"
+        }
+      ]
+    },
+    "inventory_exceptions": {
+      "purpose": "Inventory-import/control exceptions (Client+Warehouse).",
+      "primary_key": [
+        "id"
+      ],
+      "foreign_keys": [
+        {
+          "column": "warehouse_id",
+          "target": "warehouses.id",
+          "constraint": null
+        },
+        {
+          "column": "client_id",
+          "target": "clients.id",
+          "constraint": null
+        }
+      ],
+      "unique_constraints": [],
+      "indexes": [],
+      "columns": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "nullable": false,
+          "primary_key": true,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "type",
+          "type": "VARCHAR(48)",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "barcode",
+          "type": "VARCHAR(128)",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "upc",
+          "type": "VARCHAR(64)",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "client_id",
+          "type": "INTEGER",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": "clients.id",
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "warehouse_id",
+          "type": "INTEGER",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": "warehouses.id",
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "client_code",
+          "type": "VARCHAR(32)",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "warehouse_code",
+          "type": "VARCHAR(32)",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "details",
+          "type": "TEXT",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "status",
+          "type": "VARCHAR(20)",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": "OPEN"
+        },
+        {
+          "name": "created_at",
+          "type": "DATETIME",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": "_utcnow"
+        }
+      ]
+    },
+    "orders": {
+      "purpose": "Customer orders; uniqueness Client+Warehouse+OrderType+OrderNumber.",
+      "primary_key": [
+        "id"
+      ],
+      "foreign_keys": [
+        {
+          "column": "processing_user_id",
+          "target": "users.id",
+          "constraint": null
+        },
+        {
+          "column": "client_id",
+          "target": "clients.id",
+          "constraint": null
+        },
+        {
+          "column": "division_id",
+          "target": "divisions.id",
+          "constraint": null
+        },
+        {
+          "column": "closed_by_user_id",
+          "target": "users.id",
+          "constraint": null
+        },
+        {
+          "column": "warehouse_id",
+          "target": "warehouses.id",
+          "constraint": null
+        },
+        {
+          "column": "validated_by_user_id",
+          "target": "users.id",
+          "constraint": null
+        },
+        {
+          "column": "import_batch_id",
+          "target": "import_batches.id",
+          "constraint": null
+        },
+        {
+          "column": "order_type_id",
+          "target": "order_types.id",
+          "constraint": null
+        }
+      ],
+      "unique_constraints": [
+        {
+          "name": "uq_order_scope_number",
+          "columns": [
+            "client_id",
+            "warehouse_id",
+            "order_type_id",
+            "order_number"
+          ]
+        }
+      ],
+      "indexes": [
+        {
+          "name": "ix_orders_client_id",
+          "columns": [
+            "client_id"
+          ],
+          "unique": false
+        },
+        {
+          "name": "ix_orders_warehouse_id",
+          "columns": [
+            "warehouse_id"
+          ],
+          "unique": false
+        },
+        {
+          "name": "ix_orders_status",
+          "columns": [
+            "status"
+          ],
+          "unique": false
+        },
+        {
+          "name": "ix_orders_processing_lock_id",
+          "columns": [
+            "processing_lock_id"
+          ],
+          "unique": false
+        },
+        {
+          "name": "ix_orders_division_id",
+          "columns": [
+            "division_id"
+          ],
+          "unique": false
+        },
+        {
+          "name": "ix_orders_created_at",
+          "columns": [
+            "created_at"
+          ],
+          "unique": false
+        },
+        {
+          "name": "ix_orders_order_number",
+          "columns": [
+            "order_number"
+          ],
+          "unique": false
+        },
+        {
+          "name": "ix_orders_order_type_id",
+          "columns": [
+            "order_type_id"
+          ],
+          "unique": false
+        }
+      ],
+      "columns": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "nullable": false,
+          "primary_key": true,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "order_number",
+          "type": "VARCHAR(64)",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "index": true,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "customer",
+          "type": "VARCHAR(255)",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "carrier",
+          "type": "VARCHAR(128)",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "shipping_service",
+          "type": "VARCHAR(128)",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "status",
+          "type": "VARCHAR(20)",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "index": true,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": "NEW"
+        },
+        {
+          "name": "client_id",
+          "type": "INTEGER",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "index": true,
+          "foreign_key": "clients.id",
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "warehouse_id",
+          "type": "INTEGER",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "index": true,
+          "foreign_key": "warehouses.id",
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "order_type_id",
+          "type": "INTEGER",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "index": true,
+          "foreign_key": "order_types.id",
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "division_id",
+          "type": "INTEGER",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "index": true,
+          "foreign_key": "divisions.id",
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "notes",
+          "type": "TEXT",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "import_batch_id",
+          "type": "INTEGER",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": "import_batches.id",
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "validated_by_user_id",
+          "type": "INTEGER",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": "users.id",
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "validated_by_username",
+          "type": "VARCHAR(64)",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "closed_by_user_id",
+          "type": "INTEGER",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": "users.id",
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "closed_by_username",
+          "type": "VARCHAR(64)",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "closed_at",
+          "type": "DATETIME",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "processing_user_id",
+          "type": "INTEGER",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": "users.id",
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "processing_username",
+          "type": "VARCHAR(64)",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "processing_started_at",
+          "type": "DATETIME",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "processing_lock_id",
+          "type": "VARCHAR(64)",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "index": true,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "created_at",
+          "type": "DATETIME",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "index": true,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": "_utcnow"
+        },
+        {
+          "name": "updated_at",
+          "type": "DATETIME",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": "_utcnow"
+        }
+      ]
+    },
+    "boxes": {
+      "purpose": "Cartons packed during order processing.",
+      "primary_key": [
+        "id"
+      ],
+      "foreign_keys": [
+        {
+          "column": "closed_by_user_id",
+          "target": "users.id",
+          "constraint": null
+        },
+        {
+          "column": "created_by_user_id",
+          "target": "users.id",
+          "constraint": null
+        },
+        {
+          "column": "order_id",
+          "target": "orders.id",
+          "constraint": null
+        }
+      ],
+      "unique_constraints": [],
+      "indexes": [],
+      "columns": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "nullable": false,
+          "primary_key": true,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "order_id",
+          "type": "INTEGER",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": "orders.id",
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "box_number",
+          "type": "VARCHAR(64)",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "length_cm",
+          "type": "FLOAT",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "width_cm",
+          "type": "FLOAT",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "height_cm",
+          "type": "FLOAT",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "dimension_unit",
+          "type": "VARCHAR(8)",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": "in"
+        },
+        {
+          "name": "weight_kg",
+          "type": "FLOAT",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "weight_unit",
+          "type": "VARCHAR(8)",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": "lb"
+        },
+        {
+          "name": "reweigh_required",
+          "type": "BOOLEAN",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": "False"
+        },
+        {
+          "name": "status",
+          "type": "VARCHAR(20)",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": "OPEN"
+        },
+        {
+          "name": "created_by_user_id",
+          "type": "INTEGER",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": "users.id",
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "created_by_username",
+          "type": "VARCHAR(64)",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "closed_by_user_id",
+          "type": "INTEGER",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": "users.id",
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "closed_by_username",
+          "type": "VARCHAR(64)",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "created_at",
+          "type": "DATETIME",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": "_utcnow"
+        },
+        {
+          "name": "closed_at",
+          "type": "DATETIME",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        }
+      ]
+    },
+    "inventory_units": {
+      "purpose": "Physical units identified by unique barcode; scoped Client+Warehouse.",
+      "primary_key": [
+        "id"
+      ],
+      "foreign_keys": [
+        {
+          "column": "order_type_id",
+          "target": "order_types.id",
+          "constraint": null
+        },
+        {
+          "column": "client_id",
+          "target": "clients.id",
+          "constraint": null
+        },
+        {
+          "column": "order_id",
+          "target": "orders.id",
+          "constraint": null
+        },
+        {
+          "column": "warehouse_id",
+          "target": "warehouses.id",
+          "constraint": null
+        },
+        {
+          "column": "import_batch_id",
+          "target": "import_batches.id",
+          "constraint": null
+        }
+      ],
+      "unique_constraints": [],
+      "indexes": [
+        {
+          "name": "ix_inventory_units_cwl",
+          "columns": [
+            "client_id",
+            "warehouse_id",
+            "location"
+          ],
+          "unique": false
+        },
+        {
+          "name": "ix_inventory_units_upc",
+          "columns": [
+            "upc"
+          ],
+          "unique": false
+        },
+        {
+          "name": "ix_inventory_units_cws",
+          "columns": [
+            "client_id",
+            "warehouse_id",
+            "sku"
+          ],
+          "unique": false
+        },
+        {
+          "name": "ix_inventory_units_cwu",
+          "columns": [
+            "client_id",
+            "warehouse_id",
+            "upc"
+          ],
+          "unique": false
+        },
+        {
+          "name": "ix_inventory_units_warehouse_id",
+          "columns": [
+            "warehouse_id"
+          ],
+          "unique": false
+        },
+        {
+          "name": "ix_inventory_units_barcode",
+          "columns": [
+            "barcode"
+          ],
+          "unique": true
+        },
+        {
+          "name": "ix_inventory_units_client_id",
+          "columns": [
+            "client_id"
+          ],
+          "unique": false
+        },
+        {
+          "name": "ix_inventory_units_sku",
+          "columns": [
+            "sku"
+          ],
+          "unique": false
+        }
+      ],
+      "columns": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "nullable": false,
+          "primary_key": true,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "barcode",
+          "type": "VARCHAR(128)",
+          "nullable": false,
+          "primary_key": false,
+          "unique": true,
+          "index": true,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "upc",
+          "type": "VARCHAR(64)",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "index": true,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "sku",
+          "type": "VARCHAR(64)",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "index": true,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "description",
+          "type": "VARCHAR(255)",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "location",
+          "type": "VARCHAR(64)",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "status",
+          "type": "VARCHAR(20)",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": "AVAILABLE"
+        },
+        {
+          "name": "client_id",
+          "type": "INTEGER",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "index": true,
+          "foreign_key": "clients.id",
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "warehouse_id",
+          "type": "INTEGER",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "index": true,
+          "foreign_key": "warehouses.id",
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "order_type_id",
+          "type": "INTEGER",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": "order_types.id",
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "order_id",
+          "type": "INTEGER",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": "orders.id",
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "import_batch_id",
+          "type": "INTEGER",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": "import_batches.id",
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "created_at",
+          "type": "DATETIME",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": "_utcnow"
+        },
+        {
+          "name": "updated_at",
+          "type": "DATETIME",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": "_utcnow"
+        }
+      ]
+    },
+    "invoices": {
+      "purpose": "One invoice per closed order.",
+      "primary_key": [
+        "id"
+      ],
+      "foreign_keys": [
+        {
+          "column": "created_by_user_id",
+          "target": "users.id",
+          "constraint": null
+        },
+        {
+          "column": "order_type_id",
+          "target": "order_types.id",
+          "constraint": null
+        },
+        {
+          "column": "order_id",
+          "target": "orders.id",
+          "constraint": null
+        },
+        {
+          "column": "warehouse_id",
+          "target": "warehouses.id",
+          "constraint": null
+        },
+        {
+          "column": "client_id",
+          "target": "clients.id",
+          "constraint": null
+        }
+      ],
+      "unique_constraints": [
+        {
+          "name": "uq_invoice_order",
+          "columns": [
+            "order_id"
+          ]
+        },
+        {
+          "name": null,
+          "columns": [
+            "order_id"
+          ]
+        }
+      ],
+      "indexes": [
+        {
+          "name": "ix_invoices_invoice_number",
+          "columns": [
+            "invoice_number"
+          ],
+          "unique": true
+        }
+      ],
+      "columns": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "nullable": false,
+          "primary_key": true,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "invoice_number",
+          "type": "VARCHAR(64)",
+          "nullable": false,
+          "primary_key": false,
+          "unique": true,
+          "index": true,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "order_id",
+          "type": "INTEGER",
+          "nullable": false,
+          "primary_key": false,
+          "unique": true,
+          "index": false,
+          "foreign_key": "orders.id",
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "client_id",
+          "type": "INTEGER",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": "clients.id",
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "warehouse_id",
+          "type": "INTEGER",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": "warehouses.id",
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "order_type_id",
+          "type": "INTEGER",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": "order_types.id",
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "customer",
+          "type": "VARCHAR(255)",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "carrier",
+          "type": "VARCHAR(128)",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "shipping_service",
+          "type": "VARCHAR(128)",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "total_units",
+          "type": "INTEGER",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": "0"
+        },
+        {
+          "name": "total_boxes",
+          "type": "INTEGER",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": "0"
+        },
+        {
+          "name": "total_weight",
+          "type": "FLOAT",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": "0.0"
+        },
+        {
+          "name": "status",
+          "type": "VARCHAR(20)",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": "ISSUED"
+        },
+        {
+          "name": "created_at",
+          "type": "DATETIME",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": "_utcnow"
+        },
+        {
+          "name": "created_by",
+          "type": "VARCHAR(128)",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "created_by_user_id",
+          "type": "INTEGER",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": "users.id",
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "created_by_username",
+          "type": "VARCHAR(64)",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        }
+      ]
+    },
+    "order_exceptions": {
+      "purpose": "Order-processing exceptions.",
+      "primary_key": [
+        "id"
+      ],
+      "foreign_keys": [
+        {
+          "column": "created_by_user_id",
+          "target": "users.id",
+          "constraint": null
+        },
+        {
+          "column": "order_id",
+          "target": "orders.id",
+          "constraint": null
+        }
+      ],
+      "unique_constraints": [],
+      "indexes": [],
+      "columns": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "nullable": false,
+          "primary_key": true,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "order_id",
+          "type": "INTEGER",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": "orders.id",
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "barcode",
+          "type": "VARCHAR(128)",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "type",
+          "type": "VARCHAR(48)",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "message",
+          "type": "TEXT",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "resolved",
+          "type": "BOOLEAN",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": "False"
+        },
+        {
+          "name": "created_by_user_id",
+          "type": "INTEGER",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": "users.id",
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "created_by_username",
+          "type": "VARCHAR(64)",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": "SYSTEM"
+        },
+        {
+          "name": "created_at",
+          "type": "DATETIME",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": "_utcnow"
+        }
+      ]
+    },
+    "order_lines": {
+      "purpose": "Ordered SKU quantities on an order.",
+      "primary_key": [
+        "id"
+      ],
+      "foreign_keys": [
+        {
+          "column": "order_id",
+          "target": "orders.id",
+          "constraint": null
+        }
+      ],
+      "unique_constraints": [],
+      "indexes": [
+        {
+          "name": "ix_order_lines_order_id",
+          "columns": [
+            "order_id"
+          ],
+          "unique": false
+        }
+      ],
+      "columns": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "nullable": false,
+          "primary_key": true,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "order_id",
+          "type": "INTEGER",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "index": true,
+          "foreign_key": "orders.id",
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "sku",
+          "type": "VARCHAR(64)",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "description",
+          "type": "VARCHAR(255)",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "quantity",
+          "type": "INTEGER",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": "0"
+        }
+      ]
+    },
+    "allocations": {
+      "purpose": "Barcode-level assignment of an inventory unit to an order.",
+      "primary_key": [
+        "id"
+      ],
+      "foreign_keys": [
+        {
+          "column": "order_line_id",
+          "target": "order_lines.id",
+          "constraint": null
+        },
+        {
+          "column": "order_id",
+          "target": "orders.id",
+          "constraint": null
+        },
+        {
+          "column": "inventory_unit_id",
+          "target": "inventory_units.id",
+          "constraint": null
+        }
+      ],
+      "unique_constraints": [],
+      "indexes": [
+        {
+          "name": "ix_allocations_barcode",
+          "columns": [
+            "barcode"
+          ],
+          "unique": false
+        },
+        {
+          "name": "ix_allocations_unit_status",
+          "columns": [
+            "inventory_unit_id",
+            "status"
+          ],
+          "unique": false
+        }
+      ],
+      "columns": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "nullable": false,
+          "primary_key": true,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "order_id",
+          "type": "INTEGER",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": "orders.id",
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "order_line_id",
+          "type": "INTEGER",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": "order_lines.id",
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "inventory_unit_id",
+          "type": "INTEGER",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": "inventory_units.id",
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "barcode",
+          "type": "VARCHAR(128)",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "index": true,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "status",
+          "type": "VARCHAR(20)",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": "ACTIVE"
+        },
+        {
+          "name": "created_at",
+          "type": "DATETIME",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": "_utcnow"
+        }
+      ]
+    },
+    "box_contents": {
+      "purpose": "Units packed into a carton (one unit in at most one box).",
+      "primary_key": [
+        "id"
+      ],
+      "foreign_keys": [
+        {
+          "column": "inventory_unit_id",
+          "target": "inventory_units.id",
+          "constraint": null
+        },
+        {
+          "column": "box_id",
+          "target": "boxes.id",
+          "constraint": null
+        }
+      ],
+      "unique_constraints": [
+        {
+          "name": "uq_box_contents_unit",
+          "columns": [
+            "inventory_unit_id"
+          ]
+        }
+      ],
+      "indexes": [
+        {
+          "name": "ix_box_contents_barcode",
+          "columns": [
+            "barcode"
+          ],
+          "unique": false
+        }
+      ],
+      "columns": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "nullable": false,
+          "primary_key": true,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "box_id",
+          "type": "INTEGER",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": "boxes.id",
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "inventory_unit_id",
+          "type": "INTEGER",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": "inventory_units.id",
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "barcode",
+          "type": "VARCHAR(128)",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "index": true,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "created_at",
+          "type": "DATETIME",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": "_utcnow"
+        }
+      ]
+    },
+    "documents": {
+      "purpose": "Generated PDFs (pick tickets, packing, closure).",
+      "primary_key": [
+        "id"
+      ],
+      "foreign_keys": [
+        {
+          "column": "box_id",
+          "target": "boxes.id",
+          "constraint": null
+        },
+        {
+          "column": "created_by_user_id",
+          "target": "users.id",
+          "constraint": null
+        },
+        {
+          "column": "order_id",
+          "target": "orders.id",
+          "constraint": null
+        }
+      ],
+      "unique_constraints": [],
+      "indexes": [],
+      "columns": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "nullable": false,
+          "primary_key": true,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "order_id",
+          "type": "INTEGER",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": "orders.id",
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "box_id",
+          "type": "INTEGER",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": "boxes.id",
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "type",
+          "type": "VARCHAR(48)",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "filename",
+          "type": "VARCHAR(255)",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "path",
+          "type": "VARCHAR(512)",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "created_by_user_id",
+          "type": "INTEGER",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": "users.id",
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "created_by_username",
+          "type": "VARCHAR(64)",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "created_at",
+          "type": "DATETIME",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": "_utcnow"
+        }
+      ]
+    },
+    "inventory_movements": {
+      "purpose": "Inventory status/location movement history.",
+      "primary_key": [
+        "id"
+      ],
+      "foreign_keys": [
+        {
+          "column": "warehouse_id",
+          "target": "warehouses.id",
+          "constraint": null
+        },
+        {
+          "column": "created_by_user_id",
+          "target": "users.id",
+          "constraint": null
+        },
+        {
+          "column": "order_id",
+          "target": "orders.id",
+          "constraint": null
+        },
+        {
+          "column": "client_id",
+          "target": "clients.id",
+          "constraint": null
+        },
+        {
+          "column": "inventory_unit_id",
+          "target": "inventory_units.id",
+          "constraint": null
+        }
+      ],
+      "unique_constraints": [],
+      "indexes": [
+        {
+          "name": "ix_inventory_movements_barcode",
+          "columns": [
+            "barcode"
+          ],
+          "unique": false
+        },
+        {
+          "name": "ix_inventory_movements_warehouse_id",
+          "columns": [
+            "warehouse_id"
+          ],
+          "unique": false
+        },
+        {
+          "name": "ix_inventory_movements_client_id",
+          "columns": [
+            "client_id"
+          ],
+          "unique": false
+        }
+      ],
+      "columns": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "nullable": false,
+          "primary_key": true,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "inventory_unit_id",
+          "type": "INTEGER",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": "inventory_units.id",
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "barcode",
+          "type": "VARCHAR(128)",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "index": true,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "upc",
+          "type": "VARCHAR(64)",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "client_id",
+          "type": "INTEGER",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "index": true,
+          "foreign_key": "clients.id",
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "warehouse_id",
+          "type": "INTEGER",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "index": true,
+          "foreign_key": "warehouses.id",
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "movement_type",
+          "type": "VARCHAR(48)",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "from_status",
+          "type": "VARCHAR(20)",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "to_status",
+          "type": "VARCHAR(20)",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "from_location",
+          "type": "VARCHAR(64)",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "to_location",
+          "type": "VARCHAR(64)",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "order_id",
+          "type": "INTEGER",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": "orders.id",
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "actor",
+          "type": "VARCHAR(128)",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "created_by_user_id",
+          "type": "INTEGER",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": "users.id",
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "created_by_username",
+          "type": "VARCHAR(64)",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "reason",
+          "type": "VARCHAR(255)",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "created_at",
+          "type": "DATETIME",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": "_utcnow"
+        }
+      ]
+    },
+    "transactions": {
+      "purpose": "Append-only operational event ledger.",
+      "primary_key": [
+        "id"
+      ],
+      "foreign_keys": [
+        {
+          "column": "inventory_unit_id",
+          "target": "inventory_units.id",
+          "constraint": null
+        },
+        {
+          "column": "user_id",
+          "target": "users.id",
+          "constraint": null
+        },
+        {
+          "column": "order_id",
+          "target": "orders.id",
+          "constraint": null
+        }
+      ],
+      "unique_constraints": [],
+      "indexes": [],
+      "columns": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "nullable": false,
+          "primary_key": true,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "type",
+          "type": "VARCHAR(48)",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "order_id",
+          "type": "INTEGER",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": "orders.id",
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "inventory_unit_id",
+          "type": "INTEGER",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": "inventory_units.id",
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "barcode",
+          "type": "VARCHAR(128)",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "quantity",
+          "type": "INTEGER",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "detail",
+          "type": "TEXT",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "user_id",
+          "type": "INTEGER",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": "users.id",
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "username",
+          "type": "VARCHAR(64)",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "created_at",
+          "type": "DATETIME",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": "_utcnow"
+        }
+      ]
+    },
+    "pick_tickets": {
+      "purpose": "Permanent pick-ticket identity; one per fully allocated order.",
+      "primary_key": [
+        "id"
+      ],
+      "foreign_keys": [
+        {
+          "column": "document_id",
+          "target": "documents.id",
+          "constraint": null
+        },
+        {
+          "column": "order_id",
+          "target": "orders.id",
+          "constraint": null
+        },
+        {
+          "column": "assigned_by_user_id",
+          "target": "users.id",
+          "constraint": null
+        }
+      ],
+      "unique_constraints": [
+        {
+          "name": null,
+          "columns": [
+            "order_id"
+          ]
+        }
+      ],
+      "indexes": [
+        {
+          "name": "ix_pick_tickets_pick_ticket_number",
+          "columns": [
+            "pick_ticket_number"
+          ],
+          "unique": true
+        }
+      ],
+      "columns": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "nullable": false,
+          "primary_key": true,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "pick_ticket_number",
+          "type": "VARCHAR(64)",
+          "nullable": false,
+          "primary_key": false,
+          "unique": true,
+          "index": true,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "order_id",
+          "type": "INTEGER",
+          "nullable": false,
+          "primary_key": false,
+          "unique": true,
+          "index": false,
+          "foreign_key": "orders.id",
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "status",
+          "type": "VARCHAR(20)",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": "ACTIVE"
+        },
+        {
+          "name": "assigned_at",
+          "type": "DATETIME",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": "_utcnow"
+        },
+        {
+          "name": "assigned_by_user_id",
+          "type": "INTEGER",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": "users.id",
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "assigned_by_username",
+          "type": "VARCHAR(64)",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "document_id",
+          "type": "INTEGER",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": "documents.id",
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "created_at",
+          "type": "DATETIME",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": "_utcnow"
+        },
+        {
+          "name": "updated_at",
+          "type": "DATETIME",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": "_utcnow"
+        }
+      ]
+    },
+    "pick_ticket_print_events": {
+      "purpose": "Print/reprint history for pick tickets.",
+      "primary_key": [
+        "id"
+      ],
+      "foreign_keys": [
+        {
+          "column": "pick_ticket_id",
+          "target": "pick_tickets.id",
+          "constraint": null
+        },
+        {
+          "column": "user_id",
+          "target": "users.id",
+          "constraint": null
+        }
+      ],
+      "unique_constraints": [],
+      "indexes": [
+        {
+          "name": "ix_pick_ticket_print_events_pick_ticket_id",
+          "columns": [
+            "pick_ticket_id"
+          ],
+          "unique": false
+        },
+        {
+          "name": "ix_pick_ticket_print_events_printed_at",
+          "columns": [
+            "printed_at"
+          ],
+          "unique": false
+        }
+      ],
+      "columns": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "nullable": false,
+          "primary_key": true,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "pick_ticket_id",
+          "type": "INTEGER",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "index": true,
+          "foreign_key": "pick_tickets.id",
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "user_id",
+          "type": "INTEGER",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": "users.id",
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "username",
+          "type": "VARCHAR(64)",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "printed_at",
+          "type": "DATETIME",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "index": true,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": "_utcnow"
+        },
+        {
+          "name": "source",
+          "type": "VARCHAR(20)",
+          "nullable": false,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        },
+        {
+          "name": "ip_address",
+          "type": "VARCHAR(64)",
+          "nullable": true,
+          "primary_key": false,
+          "unique": false,
+          "index": false,
+          "foreign_key": null,
+          "server_default": null,
+          "python_default": null
+        }
+      ]
+    }
+  }
+}

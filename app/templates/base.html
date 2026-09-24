@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{% block title %}WMS{% endblock %} · WMS</title>
+    <meta name="csrf-token" content="{{ csrf_token() }}" />
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static', filename='css/styles.css') }}"
+    />
+    <script src="{{ url_for('static', filename='js/csrf.js') }}" defer></script>
+    {% block head %}{% endblock %}
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">WMS SYSTEM</div>
+      {% if current_user.is_authenticated %}
+      <nav>
+        {% for code, label, endpoint in nav_modules %}
+          {% if can(code) %}
+            <a
+              class="{{ 'active' if request.blueprint == endpoint.split('.')[0] }}"
+              href="{{ url_for(endpoint) }}"
+            >{{ label }}</a>
+          {% endif %}
+        {% endfor %}
+      </nav>
+      <div class="usermenu">
+        <details>
+          <summary>{{ current_user.full_name or current_user.username }} · {{ current_user.role }} &#9662;</summary>
+          <div class="usermenu-panel">
+            <a href="{{ url_for('auth.profile') }}">My Profile</a>
+            <a href="{{ url_for('auth.change_password') }}">Change Password</a>
+            <form method="post" action="{{ url_for('auth.logout') }}">{% include "_csrf.html" %}<button type="submit">Logout</button></form>
+          </div>
+        </details>
+      </div>
+      {% endif %}
+    </header>
+
+    <main class="container">
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          <div class="flashes">
+            {% for category, message in messages %}
+              <div class="flash flash-{{ category }}">{{ message }}</div>
+            {% endfor %}
+          </div>
+        {% endif %}
+      {% endwith %}
+
+      {% block content %}{% endblock %}
+    </main>
+  </body>
+</html>

@@ -1,0 +1,54 @@
+{% extends "inventory/_layout.html" %}
+{% block title %}Inventory Issues{% endblock %}
+{% block inv_content %}
+<div class="card">
+  <form method="get" class="inline-form">
+    <label>Status
+      <select name="status">
+        {% for s in ['OPEN','RESOLVED','MISSING','TO_DELETE'] %}
+          <option value="{{ s }}" {{ 'selected' if status==s }}>{{ s }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>UPC <input name="upc" value="{{ upc }}" /></label>
+    <label>Location <input name="location" value="{{ location }}" /></label>
+    <label>Date <input type="date" name="date" value="{{ date_str }}" /></label>
+    <label>Search <input name="q" value="{{ q }}" placeholder="UPC, ticket, WMS order" /></label>
+    <button type="submit">Apply</button>
+  </form>
+</div>
+<div class="card">
+  <table>
+    <thead>
+      <tr>
+        <th>Issue #</th><th>Reported Date</th><th>Client</th><th>Warehouse</th>
+        <th>UPC</th><th>SKU</th><th>Description</th><th>Original Location</th>
+        <th>WMS Order ID</th><th>Pick Ticket</th><th>Issue Type</th><th>Status</th>
+        <th>Reported By</th><th>Action</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for issue in issues %}
+        <tr>
+          <td class="mono">{{ issue.id }}</td>
+          <td class="muted">{{ issue.reported_at.strftime('%Y-%m-%d %H:%M') if issue.reported_at else '—' }}</td>
+          <td>{{ issue.client.client_code if issue.client else '—' }}</td>
+          <td>{{ issue.warehouse.warehouse_code if issue.warehouse else '—' }}</td>
+          <td class="mono">{{ issue.upc }}</td>
+          <td>{{ issue.unit.sku if issue.unit else '—' }}</td>
+          <td>{{ issue.unit.description if issue.unit else '—' }}</td>
+          <td>{{ issue.original_location }}</td>
+          <td class="mono">{{ issue.order.wms_order_id if issue.order else '—' }}</td>
+          <td class="mono">{{ issue.pick_ticket.pick_ticket_number if issue.pick_ticket else '—' }}</td>
+          <td>{{ issue.issue_type }}</td>
+          <td><span class="badge badge-{{ issue.status }}">{{ issue.status }}</span></td>
+          <td>{{ issue.reported_by_user_id or '—' }}</td>
+          <td><a class="btn" href="{{ url_for('inventory.issue_detail', issue_id=issue.id) }}">Open</a></td>
+        </tr>
+      {% else %}
+        <tr><td colspan="14" class="muted">No inventory issues.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}Close Short · {{ order.wms_order_id }}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Order Has Missing Units</h1>
+  <p class="sub">Explicit Close Short exception for allocated units that could not be physically located</p>
+</div>
+
+<div class="card shortage-card">
+  <h2>ORDER HAS MISSING UNITS</h2>
+  <div class="kv-grid">
+    <div class="kv"><span>Expected on Pick Ticket</span><strong class="num-cell">{{ summary.expected }}</strong></div>
+    <div class="kv"><span>Packed</span><strong class="num-cell">{{ summary.packed }}</strong></div>
+    <div class="kv"><span>Missing / Not Found</span><strong class="num-cell">{{ summary.missing }}</strong></div>
+    <div class="kv"><span>Close Entire Order Short</span><strong>{{ 'YES' if summary.close_entire_order else 'NO — ticket wave only' }}</strong></div>
+  </div>
+  <p class="muted" style="margin-top:0.75rem;">The following allocated units were not scanned:</p>
+</div>
+
+<div class="card">
+  <h2>Remaining Units Not Scanned</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Location</th>
+        <th>UPC</th>
+        <th>SKU</th>
+        <th>Description</th>
+        <th>Style</th>
+        <th>Color</th>
+        <th>Size</th>
+        <th class="right">Qty</th>
+        {% if is_admin %}<th>Unit IDs</th>{% endif %}
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in summary.rows %}
+        <tr>
+          <td>{{ row.location }}</td>
+          <td class="mono">{{ row.upc }}</td>
+          <td class="mono">{{ row.sku }}</td>
+          <td>{{ row.description }}</td>
+          <td>{{ row.style or '—' }}</td>
+          <td>{{ row.color or '—' }}</td>
+          <td>{{ row.size or '—' }}</td>
+          <td class="right num-cell">{{ row.qty }}</td>
+          {% if is_admin %}<td class="muted mono">{{ row.unit_ids|join(', ') }}</td>{% endif %}
+        </tr>
+      {% else %}
+        <tr><td colspan="{{ 9 if is_admin else 8 }}" class="muted">No remaining reserved units.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="card">
+  {% if not short_ok %}
+    <div class="flash flash-warning">{{ short_reason }}</div>
+  {% endif %}
+  <div class="btn-row">
+    <a class="btn-secondary btn" href="{{ url_for('processing.detail', order_id=order.id) }}">Cancel / Continue Processing</a>
+  </div>
+  {% if can('ORDER_CLOSE_SHORT') and short_ok %}
+    <form method="post" action="{{ url_for('processing.short_close', order_id=order.id) }}" style="margin-top:1rem;">
+      {% include "_csrf.html" %}
+      <label class="confirm-check">
+        <input type="checkbox" name="confirm_missing" value="1" required />
+        <span>{{ confirm_text }}</span>
+      </label>
+      <button type="submit" class="btn-danger">Confirm &amp; Close Short</button>
+      <p class="hint">
+        {% if summary.close_entire_order %}
+          This will close the entire order short because shipped + confirmed short equals ordered.
+        {% else %}
+          This will close the current Pick Ticket short and leave remaining unordered quantity open for a future allocation wave.
+        {% endif %}
+      </p>
+    </form>
+  {% elif can('ORDER_CLOSE_SHORT') %}
+    <p class="muted">Close Short is not available until packed cartons are closed and remaining units are still reserved on this Pick Ticket.</p>
+  {% else %}
+    <p class="muted">Close Short requires the ORDER_CLOSE_SHORT permission.</p>
+  {% endif %}
+</div>
+{% endblock %}

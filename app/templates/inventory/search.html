@@ -1,0 +1,49 @@
+{% extends "inventory/_layout.html" %}
+{% block title %}Inventory Search{% endblock %}
+{% block inv_content %}
+<div class="panel">
+  <h2>Universal Search</h2>
+  <form method="get" action="{{ request.path }}" class="scopebar" style="border:none;padding:0;background:none;">
+    {% if scope.client_id %}<input type="hidden" name="client_id" value="{{ scope.client_id }}" />{% endif %}
+    {% if scope.warehouse_id %}<input type="hidden" name="warehouse_id" value="{{ scope.warehouse_id }}" />{% endif %}
+    {% if show_zero %}<input type="hidden" name="show_zero" value="1" />{% endif %}
+    <div><label>Search (UPC, SKU, Description, Style, Color, Size, Location, Unit ID)</label><br />
+      <input name="q" value="{{ q }}" style="min-width:340px;" placeholder="type a value…" /></div>
+    <div><label>Status</label><br />
+      <select name="status">
+        <option value="">Any</option>
+        {% for s in statuses %}<option value="{{ s }}" {{ 'selected' if status==s }}>{{ s }}</option>{% endfor %}
+      </select>
+    </div>
+    <button class="btn" type="submit">Search</button>
+  </form>
+</div>
+
+{% if q or status %}
+<div class="panel">
+  <h2>Results ({{ results|length }})</h2>
+  <table>
+    <thead><tr><th>Unit</th><th>UPC</th><th>SKU</th><th>Description</th><th>Style</th><th>Client</th><th>WH</th><th>Location</th><th>Status</th></tr></thead>
+    <tbody>
+      {% for u in results %}
+        <tr>
+          <td class="mono">{{ u.id }}</td>
+          <td class="mono">
+            <a href="{{ url_for('inventory.upc_view', client_id=scope.client_id or u.client_id, warehouse_id=scope.warehouse_id or None, upc=u.upc) }}">{{ u.upc }}</a>
+          </td>
+          <td>{{ u.sku or '—' }}</td>
+          <td>{{ u.description or '—' }}</td>
+          <td>{{ u.style or '—' }}</td>
+          <td>{{ u.client.client_code if u.client else '—' }}</td>
+          <td>{{ u.warehouse.warehouse_code if u.warehouse else '—' }}</td>
+          <td>{{ u.location }}</td>
+          <td><span class="pill pill-{{ u.status }}">{{ u.status }}</span></td>
+        </tr>
+      {% else %}
+        <tr><td colspan="9" class="sub">No matches.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+{% endblock %}

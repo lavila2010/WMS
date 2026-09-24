@@ -1,0 +1,121 @@
+/* Inventory Control extras. Global light tokens live in styles.css. */
+.inv {
+  color: #182230;
+}
+.inv h1 { color: #182230; font-size: 1.4rem; margin: 0 0 0.25rem; }
+.inv .sub { color: #6B7280; font-size: 0.85rem; margin: 0 0 1rem; }
+
+.inv .scopebar {
+  display: flex;
+  gap: 0.75rem;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 0.85rem 1rem;
+  margin-bottom: 1rem;
+}
+.inv .scopebar .zero-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: #374151;
+  font-size: 0.86rem;
+  text-transform: none;
+  letter-spacing: 0;
+  padding-bottom: 0.35rem;
+  font-weight: 500;
+}
+.inv .scopebar .zero-toggle input {
+  margin: 0;
+}
+.inv input, .inv select {
+  background: #fff;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  padding: 0.45rem 0.6rem;
+  color: #111827;
+  font-size: 0.9rem;
+}
+.inv input:focus, .inv select:focus { outline: 2px solid #2563eb; }
+
+.inv .tabs {
+  display: flex;
+  gap: 0.25rem;
+  border-bottom: 1px solid #e5e7eb;
+  margin-bottom: 1.25rem;
+  flex-wrap: wrap;
+}
+.inv .tabs a {
+  padding: 0.55rem 0.9rem;
+  color: #6b7280;
+  text-decoration: none;
+  font-size: 0.9rem;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+.inv .tabs a:hover { color: #111827; }
+.inv .tabs a.active { color: #2563eb; border-bottom-color: #2563eb; font-weight: 600; }
+
+.inv .kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+}
+.inv .kpi {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 0.9rem 1rem;
+}
+.inv .kpi .num { font-size: 1.5rem; font-weight: 700; color: #0f172a; font-variant-numeric: tabular-nums; }
+.inv .kpi .label { color: #6b7280; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; margin-top: 0.15rem; }
+
+.inv .panel {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 1rem 1.1rem;
+  margin-bottom: 1.25rem;
+}
+.inv .panel h2 { font-size: 1rem; margin: 0 0 0.75rem; color: #111827; }
+
+.inv table { width: 100%; border-collapse: collapse; font-size: 0.86rem; }
+.inv th, .inv td { text-align: left; padding: 0.5rem 0.55rem; border-bottom: 1px solid #eef2f7; }
+.inv th { color: #6b7280; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.04em; background: #fafbfc; }
+.inv tbody tr:hover { background: #f8fafc; }
+.inv .mono { font-family: ui-monospace, Menlo, monospace; color: #2563eb; }
+.inv .right { text-align: right; font-variant-numeric: tabular-nums; }
+.inv a { color: #1F5F8B; }
+
+.inv .btn {
+  display: inline-block;
+  background: #1F5F8B; color: #fff; border: none; border-radius: 6px;
+  padding: 0.5rem 0.9rem; font-weight: 600; font-size: 0.86rem; cursor: pointer; text-decoration: none;
+}
+.inv .btn:hover { background: #184e73; }
+.inv .btn[disabled], .inv .btn.disabled { background: #9ca3af; cursor: not-allowed; pointer-events: none; }
+.inv .btn-secondary { background: #fff; color: #374151; border: 1px solid #d1d5db; }
+.inv .btn-danger { background: #fff; color: #dc2626; border: 1px solid #dc2626; }
+
+.inv .pill { display:inline-block; padding: 0.1rem 0.5rem; border-radius: 999px; font-size: 0.72rem; font-weight: 600; border: 1px solid #d1d5db; }
+.inv .pill-AVAILABLE { color: #047857; border-color: #6ee7b7; background: #ecfdf5; }
+.inv .pill-RESERVED { color: #9A6700; border-color: #fcd34d; background: #FFF6DC; }
+.inv .pill-ALLOCATED { color: #b45309; border-color: #fcd34d; background: #fffbeb; }
+.inv .pill-PACKED { color: #1d4ed8; border-color: #93c5fd; background: #eff6ff; }
+.inv .pill-SHIPPED { color: #6b7280; }
+
+.inv .err { color: #b91c1c; }
+.inv .warn { color: #b45309; }
+.inv .ok { color: #047857; font-weight: 600; }
+.inv .box { border:1px solid #e5e7eb; border-radius:8px; padding:0.75rem 0.9rem; background:#fff; }
+.inv .errbox { border-left: 3px solid #dc2626; background: #fef2f2; }
+.inv .warnbox { border-left: 3px solid #f59e0b; background: #fffbeb; }
+.inv .tree { font-size: 0.9rem; }
+.inv .tree .client { font-weight: 700; margin-top: 0.4rem; }
+.inv .tree .wh { margin-left: 1.2rem; color: #374151; }
+.inv .grid2 { display:grid; grid-template-columns: repeat(auto-fit, minmax(220px,1fr)); gap: 0.5rem 1.5rem; }
+.inv .kv { display:flex; justify-content:space-between; border-bottom:1px solid #eef2f7; padding:0.35rem 0; font-size:0.88rem; }
+.inv .kv span:first-child { color:#6b7280; }

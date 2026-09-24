@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Divisions{% endblock %}
+{% block content %}
+{% include "admin/_tabs.html" %}
+{% if can('DIVISIONS_CREATE') %}
+<div class="card">
+  <h2>Create division</h2>
+  <form method="post" action="{{ url_for('admin.create_division_view') }}" class="form-grid">
+    {% include "_csrf.html" %}
+    <label>Client
+      <select name="client_id" required>
+        {% for c in clients %}<option value="{{ c.id }}">{{ c.client_code }} · {{ c.name }}</option>{% endfor %}
+      </select>
+    </label>
+    <label>Name <input name="name" required></label>
+    <label>Operation type
+      <select name="operation_type" required>
+        {% for op in operation_types %}<option value="{{ op }}">{{ op }}</option>{% endfor %}
+      </select>
+    </label>
+    <button class="btn" type="submit">Create</button>
+  </form>
+</div>
+{% endif %}
+<div class="card">
+  <h2>Divisions</h2>
+  <table>
+    <thead><tr><th>Code</th><th>Name</th><th>Client</th><th>Type</th><th>Active</th></tr></thead>
+    <tbody>
+      {% for d in divisions %}
+      <tr>
+        <td class="mono">{{ d.code }}</td>
+        <td>{{ d.name }}</td>
+        <td class="mono">{{ d.client.client_code }}</td>
+        <td>{{ d.operation_type }}</td>
+        <td>{% if d.active %}<span class="pill-ok">Yes</span>{% else %}<span class="pill-bad">No</span>{% endif %}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="5" class="muted">No divisions.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

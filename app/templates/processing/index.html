@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Order Processing{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Order Processing</h1>
+  <p class="sub">Confirm Pick Ticket, pack units into cartons, close the order and generate final documentation</p>
+</div>
+
+<div class="card start-order-card">
+  <h2>Start Order</h2>
+  <p class="sub" style="margin-bottom:1rem;">Enter or scan the Pick Ticket number associated with the client order.</p>
+  {% if pdf_id %}
+  <p class="sub">Opening Order Closure Report…
+    <a href="{{ url_for('processing.open_pdf', document_id=pdf_id) }}" target="_blank" rel="noopener">Open PDF</a>
+  </p>
+  {% endif %}
+  {% if packing_id %}
+  <div class="btn-row" style="margin-bottom:1rem;">
+    <a class="btn-secondary btn" href="{{ url_for('processing.open_pdf', document_id=packing_id) }}" target="_blank" rel="noopener">View Packing List</a>
+    <form method="post" action="{{ url_for('processing.print_pdf', document_id=packing_id) }}">{% include "_csrf.html" %}<button class="btn-secondary" type="submit">Print Packing List</button></form>
+  </div>
+  {% endif %}
+  <form method="post" action="{{ url_for('processing.find') }}" class="inline-form">
+    {% include "_csrf.html" %}
+    <label>Pick Ticket Number
+      <input id="pick-ticket" name="pick_ticket_number" value="{{ pick_ticket_number or '' }}" autocomplete="off" autofocus />
+    </label>
+    <button type="submit">Find Order</button>
+  </form>
+</div>
+{% endblock %}
+
+{% block head %}
+{% if pdf_id %}
+<script>
+  window.addEventListener("DOMContentLoaded", function () {
+    window.open({{ url_for('processing.open_pdf', document_id=pdf_id)|tojson }}, "_blank");
+    var field = document.getElementById("pick-ticket");
+    if (field) field.focus();
+  });
+</script>
+{% endif %}
+{% endblock %}

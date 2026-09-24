@@ -1,0 +1,38 @@
+{% extends "inventory/_layout.html" %}
+{% block title %}Import History{% endblock %}
+{% block inv_content %}
+<div class="panel">
+  <h2>Inventory Import History</h2>
+  <p class="sub">
+    Worker Health: {{ worker_health.worker_status if worker_health else 'Offline' }}
+    {% if worker_health and worker_health.last_seen_at %} · Last Worker Heartbeat {{ worker_health.last_seen_at }}{% endif %}
+  </p>
+  <table>
+    <thead>
+      <tr>
+        <th>Date</th><th>Filename</th><th>Client</th><th>Warehouse</th>
+        <th class="right">Submitted</th><th class="right">Units</th><th class="right">Rejected</th>
+        <th>Status</th><th>Executor</th><th>Last Progress</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for b in batches %}
+        <tr>
+          <td class="sub">{{ b.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+          <td><a href="{{ url_for('inventory.import_detail', batch_id=b.id, client_id=scope.client_id or None, warehouse_id=scope.warehouse_id or None) }}">{{ b.filename }}</a></td>
+          <td>{{ b.client.client_code if b.client else b.client_id }}</td>
+          <td>{{ b.warehouse.warehouse_code if b.warehouse else b.warehouse_id }}</td>
+          <td class="right">{{ b.rows_submitted }}</td>
+          <td class="right">{{ b.rows_imported }}</td>
+          <td class="right">{{ b.rows_rejected }}</td>
+          <td><span class="{{ 'ok' if b.status=='COMPLETED' else 'err' }}">{{ b.status }}</span></td>
+          <td class="sub">{% if b.last_executor == 'web-recovery' %}Recovery{% elif b.last_executor == 'worker' %}Worker{% else %}{{ b.last_executor or '—' }}{% endif %}</td>
+          <td class="sub">{{ b.last_progress_at.strftime('%Y-%m-%d %H:%M:%S') if b.last_progress_at else '—' }}</td>
+        </tr>
+      {% else %}
+        <tr><td colspan="10" class="sub">No inventory imports yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

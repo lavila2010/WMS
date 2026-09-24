@@ -1,0 +1,110 @@
+{% extends "inventory/_layout.html" %}
+{% block title %}Inventory Transactions{% endblock %}
+{% block inv_content %}
+<div class="panel">
+  <h2>Filters</h2>
+  <form method="get" action="{{ request.path }}" class="scopebar" style="border:none;padding:0;background:none;">
+    <div>
+      <label>Client</label><br />
+      <select name="client_id" onchange="this.form.submit()">
+        <option value="">{{ 'All clients' if current_user.is_admin() else 'All authorized' }}</option>
+        {% for c in options.clients %}
+          <option value="{{ c.id }}" {{ 'selected' if scope.client_id == c.id }}>{{ c.client_code }} — {{ c.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label>Warehouse</label><br />
+      <select name="warehouse_id">
+        <option value="">All warehouses</option>
+        {% for w in options.warehouses %}
+          <option value="{{ w.id }}" {{ 'selected' if scope.warehouse_id == w.id }}>{{ w.warehouse_code }} — {{ w.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div><label>UPC</label><br /><input name="upc" value="{{ filters.upc }}" /></div>
+    <div>
+      <label>Transaction Type</label><br />
+      <select name="type">
+        <option value="">All types</option>
+        {% for t in ledger_types %}
+          <option value="{{ t }}" {{ 'selected' if filters.type == t }}>{{ t }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div><label>From Date</label><br /><input type="date" name="date_from" value="{{ filters.date_from }}" /></div>
+    <div><label>To Date</label><br /><input type="date" name="date_to" value="{{ filters.date_to }}" /></div>
+    <div>
+      <label>Per page</label><br />
+      <select name="per_page" onchange="this.form.submit()">
+        {% for opt in per_page_options %}
+          <option value="{{ opt }}" {{ 'selected' if per_page == opt }}>{{ opt }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <button class="btn" type="submit">Filter</button>
+    {% if can('INVENTORY_EXPORT') %}
+      <a class="btn btn-secondary" href="{{ url_for('inventory.transactions_xlsx', client_id=scope.client_id or None, warehouse_id=scope.warehouse_id or None, upc=filters.upc or None, type=filters.type or None, date_from=filters.date_from or None, date_to=filters.date_to or None) }}">Export Excel</a>
+      <a class="btn btn-secondary" href="{{ url_for('inventory.transactions_csv', client_id=scope.client_id or None, warehouse_id=scope.warehouse_id or None, upc=filters.upc or None, type=filters.type or None, date_from=filters.date_from or None, date_to=filters.date_to or None) }}">Export CSV</a>
+    {% endif %}
+  </form>
+</div>
+
+<div class="panel">
+  <h2>Movement Ledger ({{ '{:,}'.format(total) }})</h2>
+  <p class="sub">Showing page {{ page }} of {{ pages }}</p>
+  <table>
+    <thead>
+      <tr>
+        <th>Timestamp</th>
+        <th>Unit</th>
+        <th>UPC</th>
+        <th>Client</th>
+        <th>Warehouse</th>
+        <th>Location</th>
+        <th>Transaction</th>
+        <th>From</th>
+        <th>To</th>
+        <th>Reference</th>
+        <th>WMS Order ID</th>
+        <th>Client Order Number</th>
+        <th>Customer</th>
+        <th>Carton Number</th>
+        <th>Tracking Number</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in rows %}
+        <tr>
+          <td class="sub">{{ row.timestamp }}</td>
+          <td class="mono">{{ row.unit_id }}</td>
+          <td class="mono">{{ row.upc }}</td>
+          <td>{{ row.client or '—' }}</td>
+          <td>{{ row.warehouse or '—' }}</td>
+          <td>{{ row.location or '—' }}</td>
+          <td>{{ row.transaction }}</td>
+          <td>{{ row.from_status or '—' }}</td>
+          <td>{{ row.to_status or '—' }}</td>
+          <td>{{ row.reference or '—' }}</td>
+          <td class="mono">{{ row.wms_order_id or '—' }}</td>
+          <td class="mono">{{ row.client_order_number or '—' }}</td>
+          <td>{{ row.customer or '—' }}</td>
+          <td class="mono">{{ row.carton_number or '—' }}</td>
+          <td class="mono">{{ row.tracking_number or '—' }}</td>
+        </tr>
+      {% else %}
+        <tr><td colspan="15" class="sub">No movements in scope.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <div class="pager">
+    <span class="sub">{{ total }} movements · page {{ page }} of {{ pages }}</span>
+    {% if page > 1 %}
+      <a class="btn btn-secondary" href="{{ url_for('inventory.transactions', client_id=scope.client_id or None, warehouse_id=scope.warehouse_id or None, upc=filters.upc or None, type=filters.type or None, date_from=filters.date_from or None, date_to=filters.date_to or None, page=page-1, per_page=per_page) }}">Previous</a>
+    {% endif %}
+    {% if page < pages %}
+      <a class="btn btn-secondary" href="{{ url_for('inventory.transactions', client_id=scope.client_id or None, warehouse_id=scope.warehouse_id or None, upc=filters.upc or None, type=filters.type or None, date_from=filters.date_from or None, date_to=filters.date_to or None, page=page+1, per_page=per_page) }}">Next</a>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

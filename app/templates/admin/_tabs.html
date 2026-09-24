@@ -1,0 +1,14 @@
+<div class="page-header">
+  <h1>Administration</h1>
+  <p class="sub">Users, client access, masters, and audit history</p>
+</div>
+<div class="tabs">
+  {% if can('USERS_VIEW') %}<a class="{{ 'active' if active_tab=='users' }}" href="{{ url_for('admin.users') }}">Users</a>{% endif %}
+  {% if can('PERMISSIONS_ASSIGN') %}<a class="{{ 'active' if active_tab=='permissions' }}" href="{{ url_for('admin.permissions_tab') }}">Permissions</a>{% endif %}
+  {% if can('PERMISSIONS_ASSIGN') %}<a class="{{ 'active' if active_tab=='client_access' }}" href="{{ url_for('admin.client_access') }}">Client Access</a>{% endif %}
+  {% if can('CLIENTS_VIEW') %}<a class="{{ 'active' if active_tab=='clients' }}" href="{{ url_for('admin.clients') }}">Clients</a>{% endif %}
+  {% if can('DIVISIONS_VIEW') %}<a class="{{ 'active' if active_tab=='divisions' }}" href="{{ url_for('admin.divisions') }}">Divisions</a>{% endif %}
+  {% if can('WAREHOUSES_VIEW') %}<a class="{{ 'active' if active_tab=='warehouses' }}" href="{{ url_for('admin.warehouses') }}">Warehouses</a>{% endif %}
+  {% if can('DIVISIONS_VIEW') %}<a class="{{ 'active' if active_tab=='mappings' }}" href="{{ url_for('admin.mappings') }}">Mappings</a>{% endif %}
+  {% if can('AUDIT_VIEW') %}<a class="{{ 'active' if active_tab=='audit' }}" href="{{ url_for('admin.audit') }}">Audit</a>{% endif %}
+</div>

@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+{% block title %}Shipping {{ order.wms_order_id }}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div class="section-title">
+    <h1>{{ order.wms_order_id }}</h1>
+    <span class="badge badge-{{ order.status }}">{{ order.status }}</span>
+    <span class="badge badge-{{ order.shipping_status }}">{{ order.shipping_status }}</span>
+  </div>
+  <p class="sub">Enter carton tracking numbers. Confirmation requires every carton.</p>
+</div>
+
+<div class="card">
+  <div class="kv-grid">
+    <div class="kv"><span>Client</span><strong>{{ order.client.client_code }}</strong></div>
+    <div class="kv"><span>Division</span><strong>{{ order.division.code }}</strong></div>
+    <div class="kv"><span>Warehouse</span><strong>{{ order.warehouse.warehouse_code }}</strong></div>
+    <div class="kv"><span>WMS Order ID</span><strong class="mono">{{ order.wms_order_id }}</strong></div>
+    <div class="kv"><span>Client Order Number</span><strong class="mono">{{ order.client_order_number }}</strong></div>
+    <div class="kv"><span>Pick Ticket</span><strong class="mono">{{ ticket.pick_ticket_number if ticket else '—' }}</strong></div>
+    <div class="kv"><span>Customer</span><strong>{{ order.customer or '—' }}</strong></div>
+    <div class="kv"><span>Customer Address</span><strong>{{ order.customer_address or '—' }}</strong></div>
+    <div class="kv"><span>Carrier</span><strong>{{ order.carrier or '—' }}</strong></div>
+    <div class="kv"><span>Shipping Service</span><strong>{{ order.shipping_service or '—' }}</strong></div>
+    <div class="kv"><span>Closed Date</span><strong>{{ order.closed_at.strftime('%Y-%m-%d %H:%M') if order.closed_at else '—' }}</strong></div>
+    <div class="kv"><span>Closed By</span><strong>{{ order.closed_by_username or '—' }}</strong></div>
+    <div class="kv"><span>Shipping Status</span><strong><span class="badge badge-{{ order.shipping_status }}">{{ order.shipping_status }}</span></strong></div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Cartons</h2>
+  <form method="post" action="{{ url_for('orders.shipping_save_tracking', order_id=order.id) }}">
+    {% include "_csrf.html" %}
+    <table>
+      <thead>
+        <tr>
+          <th>Carton #</th>
+          <th>Dimensions</th>
+          <th>Weight</th>
+          <th class="right">Units</th>
+          <th>Carrier</th>
+          <th>Tracking Number</th>
+          <th>Tracking Status</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in cartons %}
+          {% set c = row.carton %}
+          <tr>
+            <td class="mono">{{ c.carton_number }}</td>
+            <td>{{ row.dims }} {{ c.dimension_unit }}</td>
+            <td>{{ row.weight }}</td>
+            <td class="right num-cell">{{ row.units }}</td>
+            <td>
+              {% if can('SHIPPING_EDIT') %}
+              <select name="tracking_carrier_{{ c.id }}">
+                <option value="">Select</option>
+                {% for carrier in carriers %}
+                  <option value="{{ carrier }}" {{ 'selected' if c.tracking_carrier == carrier }}>{{ carrier }}</option>
+                {% endfor %}
+              </select>
+              {% else %}
+                {{ c.tracking_carrier or '—' }}
+              {% endif %}
+            </td>
+            <td>
+              {% if can('SHIPPING_EDIT') %}
+              <input name="tracking_number_{{ c.id }}" value="{{ c.tracking_number or '' }}" maxlength="64" autocomplete="off" class="mono" />
+              {% else %}
+                <span class="mono">{{ c.tracking_number or '—' }}</span>
+              {% endif %}
+            </td>
+            <td><span class="badge badge-{{ c.shipping_label_status }}">{{ c.shipping_label_status }}</span></td>
+            <td class="muted">{{ 'Editable' if can('SHIPPING_EDIT') else 'View only' }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% if can('SHIPPING_EDIT') %}
+    <div class="btn-row">
+      <label>Correction reason <input name="reason" placeholder="Required when changing confirmed tracking" /></label>
+      <button type="submit">Save Tracking</button>
+    </div>
+    {% endif %}
+  </form>
+  {% if can('SHIPPING_CONFIRM') %}
+  <form method="post" action="{{ url_for('orders.shipping_confirm', order_id=order.id) }}" class="btn-row">
+    {% include "_csrf.html" %}
+    <button type="submit">Validate & Confirm Shipping</button>
+  </form>
+  {% endif %}
+</div>
+
+<div class="card">
+  <h2>Documents</h2>
+  <div class="btn-row">
+    {% if closure %}
+      <a class="btn-secondary btn" href="{{ url_for('orders.order_document', document_id=closure.id) }}" target="_blank" rel="noopener">View Closure Report</a>
+      {% if can('DOCUMENT_REPRINT') %}
+      <form method="post" action="{{ url_for('orders.print_order_document', document_id=closure.id) }}">{% include "_csrf.html" %}<button class="btn-secondary" type="submit">Reprint Closure Report</button></form>
+      {% endif %}
+    {% endif %}
+    {% if packing %}
+      <a class="btn-secondary btn" href="{{ url_for('orders.order_document', document_id=packing.id) }}" target="_blank" rel="noopener">View Packing List</a>
+      {% if can('DOCUMENT_REPRINT') %}
+      <form method="post" action="{{ url_for('orders.print_order_document', document_id=packing.id) }}">{% include "_csrf.html" %}<button class="btn-secondary" type="submit">Reprint Packing List</button></form>
+      {% endif %}
+    {% endif %}
+    <a class="btn-secondary btn" href="{{ url_for('orders.shipping', client_id=order.client_id) }}">Back</a>
+  </div>
+</div>
+{% endblock %}

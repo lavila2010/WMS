@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Dashboard</h1>
+  <p class="sub">Operational overview for the selected Client and Warehouse</p>
+</div>
+
+<div class="card">
+  <form method="get" class="form-grid">
+    <label>Client
+      <select name="client_id" onchange="this.form.submit()">
+        <option value="">All accessible</option>
+        {% for c in clients %}
+        <option value="{{ c.id }}" {{ 'selected' if client_id==c.id }}>{{ c.client_code }} · {{ c.name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Warehouse
+      <select name="warehouse_id" onchange="this.form.submit()">
+        <option value="">All</option>
+        {% for w in warehouses %}
+        <option value="{{ w.id }}" {{ 'selected' if warehouse_id==w.id }}>{{ w.warehouse_code }}</option>
+        {% endfor %}
+      </select>
+    </label>
+  </form>
+</div>
+
+<div class="card">
+  <h2>Inventory units</h2>
+  <div class="grid">
+    <div class="stat"><div class="num">{{ unit_counts.total }}</div><div class="label">Total</div></div>
+    <div class="stat"><div class="num">{{ unit_counts.available }}</div><div class="label">Available</div></div>
+    <div class="stat"><div class="num">{{ unit_counts.reserved }}</div><div class="label">Reserved</div></div>
+    <div class="stat"><div class="num">{{ unit_counts.packed }}</div><div class="label">Packed</div></div>
+    <div class="stat"><div class="num">{{ unit_counts.shipped }}</div><div class="label">Shipped</div></div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Orders by workflow status</h2>
+  <div class="grid">
+    {% for status, count in status_counts.items() %}
+      <div class="stat">
+        <div class="num">{{ count }}</div>
+        <div class="label"><span class="badge">{{ status }}</span></div>
+      </div>
+    {% endfor %}
+  </div>
+</div>
+
+<div class="card">
+  <h2>Overview</h2>
+  <div class="grid">
+    <div class="stat"><div class="num">{{ stats.orders_total }}</div><div class="label">Orders</div></div>
+    <div class="stat"><div class="num">{{ stats.boxes_total }}</div><div class="label">Cartons</div></div>
+    <div class="stat"><div class="num">{{ stats.open_exceptions }}</div><div class="label">Open exceptions</div></div>
+  </div>
+</div>
+{% endblock %}

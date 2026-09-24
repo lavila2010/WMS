@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% block title %}Allocation{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Allocation</h1>
+  <p class="sub">Reserve AVAILABLE units for the same Client + Warehouse + UPC. Bulk allocation runs one transaction per order.</p>
+</div>
+<div class="card">
+  <form method="get" class="inline-form">
+    <label>Client
+      <select name="client_id" onchange="this.form.submit()">
+        <option value="">All accessible</option>
+        {% for c in clients %}
+          <option value="{{ c.id }}" {{ 'selected' if client_id==c.id }}>{{ c.client_code }} — {{ c.name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Per page
+      <select name="per_page" onchange="this.form.submit()">
+        {% for opt in per_page_options %}
+          <option value="{{ opt }}" {{ 'selected' if per_page==opt }}>{{ opt }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    {% if can('ALLOCATION_REPORT_VIEW') %}
+      <a class="btn btn-secondary" href="{{ url_for('allocation.exceptions', client_id=client_id or None) }}">Daily Allocation Exceptions</a>
+    {% endif %}
+  </form>
+</div>
+<form method="post" action="{{ url_for('allocation.bulk') }}" id="bulk-alloc-form">
+  {% include "_csrf.html" %}
+  <input type="hidden" name="client_id" value="{{ client_id or '' }}" />
+  <input type="hidden" name="page" value="{{ page }}" />
+  <input type="hidden" name="per_page" value="{{ per_page }}" />
+  <div class="card">
+    <div class="btn-row">
+      <label><input type="checkbox" id="select-all-visible" /> Select All Visible</label>
+      {% if can('ALLOCATION_BULK_RUN') %}
+      <button type="submit">Allocate Selected</button>
+      {% endif %}
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th></th>
+          <th>WMS Order ID</th>
+          <th>Client Order #</th>
+          <th>Client</th>
+          <th>Division</th>
+          <th>Warehouse</th>
+          <th>Customer</th>
+          <th class="right">Ordered Units</th>
+          <th class="right">Already Shipped</th>
+          <th class="right">Currently Allocated</th>
+          <th class="right">Remaining To Allocate</th>
+          <th>Allocation Status</th>
+          <th>Partial Approval</th>
+          <th>Created</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+          <tr>
+            <td>{% if row.eligible %}<input type="checkbox" name="order_ids" value="{{ row.order_id }}" class="order-check" />{% endif %}</td>
+            <td class="mono">{{ row.wms_order_id }}</td>
+            <td class="mono">{{ row.client_order_number }}</td>
+            <td>{{ row.client_code or '—' }}</td>
+            <td>{{ row.division_code or '—' }}</td>
+            <td>{{ row.warehouse_code or '—' }}</td>
+            <td>{{ row.customer or '—' }}</td>
+            <td class="right num-cell">{{ row.ordered }}</td>
+            <td class="right num-cell">{{ row.shipped }}</td>
+            <td class="right num-cell">{{ row.currently_allocated }}</td>
+            <td class="right num-cell">{{ row.remaining }}</td>
+            <td><span class="badge badge-{{ row.status }}">{{ row.status }}</span></td>
+            <td>{{ row.partial_approval }}</td>
+            <td class="muted">{{ row.created_at.strftime('%Y-%m-%d %H:%M') if row.created_at else '—' }}</td>
+            <td class="right"><a class="btn{% if row.pick_ticket_ready %} btn-secondary{% endif %}" href="{{ row.action_href }}">{{ row.action_label }}</a></td>
+          </tr>
+        {% else %}
+          <tr><td colspan="15" class="muted">No orders are waiting for allocation.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <div class="pager">
+      <span class="muted">{{ total }} orders · page {{ page }} of {{ pages }}</span>
+      {% if page > 1 %}
+        <a class="btn btn-secondary" href="{{ url_for('allocation.index', client_id=client_id or None, page=page-1, per_page=per_page) }}">Previous</a>
+      {% endif %}
+      {% if page < pages %}
+        <a class="btn btn-secondary" href="{{ url_for('allocation.index', client_id=client_id or None, page=page+1, per_page=per_page) }}">Next</a>
+      {% endif %}
+    </div>
+  </div>
+</form>
+<script>
+(function () {
+  var all = document.getElementById('select-all-visible');
+  if (!all) return;
+  all.addEventListener('change', function () {
+    document.querySelectorAll('.order-check').forEach(function (box) { box.checked = all.checked; });
+  });
+})();
+</script>
+{% endblock %}

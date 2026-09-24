@@ -1,0 +1,232 @@
+{% extends "inventory/_layout.html" %}
+{% block title %}Upload Inventory{% endblock %}
+{% block inv_content %}
+
+<div class="panel">
+  <h2>Select Context, Then File</h2>
+  <p class="sub">Required columns: UPC, SKU, Description, Style, Color, Size, Quantity, Location. SKU may be blank. Client and Warehouse come from the selected context. If the file includes Client or Warehouse columns they are validated only and cannot override context. Quantity N creates N physical units.</p>
+  <form method="post" action="{{ url_for('inventory.import_preview') }}" enctype="multipart/form-data" class="scopebar" style="border:none;padding:0;background:none;">
+    {% include "_csrf.html" %}
+    <div>
+      <label>Client</label><br />
+      <select name="client_id" id="inv-client" required>
+        <option value="">Select client</option>
+        {% for c in options.clients %}
+          <option value="{{ c.id }}" {{ 'selected' if scope.client_id == c.id }}>{{ c.client_code }} — {{ c.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label>Warehouse</label><br />
+      <select name="warehouse_id" id="inv-warehouse" required>
+        <option value="">Select warehouse</option>
+        {% for w in options.warehouses %}
+          <option value="{{ w.id }}" data-client="{{ w.client_id }}" {{ 'selected' if scope.warehouse_id == w.id }}>{{ w.warehouse_code }} — {{ w.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label>Excel file</label><br />
+      <input type="file" name="file" accept=".xlsx" required />
+    </div>
+    <button class="btn" type="submit">Validate &amp; Preview</button>
+    <a class="btn btn-secondary" href="{{ url_for('inventory.template') }}">Download template</a>
+  </form>
+</div>
+
+{% if processing_batch %}
+<div class="panel" id="import-progress"
+     data-status-url="{{ url_for('inventory.import_status', batch_id=processing_batch.batch_id) }}"
+     data-recover-url="{{ url_for('imports.recover', batch_id=processing_batch.batch_id) }}"
+     data-csrf-token="{{ csrf_token() }}">
+  {% if processing_batch.status == 'FAILED' %}
+    <h2>IMPORT FAILED</h2>
+  {% elif processing_batch.status == 'COMPLETED' %}
+    <h2>COMPLETED</h2>
+  {% else %}
+    <h2>Inventory Import Processing</h2>
+  {% endif %}
+  <p class="sub">
+    Client {{ processing_batch.client_code }}
+    · Warehouse {{ processing_batch.warehouse_code }}
+    · File {{ processing_batch.filename }}
+  </p>
+  <div class="kpis">
+    <div class="kpi"><div class="num" id="imp-rows">{{ processing_batch.rows_validated }} / {{ processing_batch.rows_submitted }}</div><div class="label">Rows</div></div>
+    <div class="kpi"><div class="num" id="imp-units">{{ processing_batch.units_created }} / {{ processing_batch.units_expected }}</div><div class="label">Units</div></div>
+    <div class="kpi"><div class="num" id="imp-progress">{{ processing_batch.progress_percent }}%</div><div class="label">Progress</div></div>
+    <div class="kpi"><div class="num" id="imp-status">{{ processing_batch.status }}</div><div class="label">Status</div></div>
+    <div class="kpi"><div class="num" id="imp-worker">{{ processing_batch.worker_status or 'Offline' }}</div><div class="label">Worker</div></div>
+    <div class="kpi"><div class="num">{{ processing_batch.unique_upcs }}</div><div class="label">Unique UPCs</div></div>
+    <div class="kpi"><div class="num">{{ processing_batch.unique_locations }}</div><div class="label">Locations</div></div>
+  </div>
+  <p class="sub" id="imp-mode">
+    {% if processing_batch.status == 'PROCESSING' %}
+      {% if processing_batch.worker_healthy %}Worker: Online{% else %}Recovery Mode{% endif %}
+    {% endif %}
+  </p>
+  <p class="sub" id="imp-recovering" style="{{ '' if processing_batch.status == 'PROCESSING' and not processing_batch.worker_healthy else 'display:none;' }}">Recovering import automatically...</p>
+  <div id="imp-complete" style="{{ '' if processing_batch.status == 'COMPLETED' else 'display:none;' }}">
+    <div class="grid2">
+      <div class="kv"><span>Rows Imported</span><span id="imp-rows-imported">{{ processing_batch.rows_validated }}</span></div>
+      <div class="kv"><span>Physical Units Created</span><span id="imp-units-final">{{ processing_batch.units_created }}</span></div>
+      <div class="kv"><span>Unique UPCs</span><span>{{ processing_batch.unique_upcs }}</span></div>
+      <div class="kv"><span>Locations</span><span>{{ processing_batch.unique_locations }}</span></div>
+      <div class="kv"><span>Duration</span><span id="imp-duration">{% if processing_batch.duration_seconds is not none %}{{ processing_batch.duration_seconds }}s{% else %}—{% endif %}</span></div>
+    </div>
+  </div>
+  <div id="imp-failed" class="box errbox" style="margin-top:0.75rem;{{ '' if processing_batch.status == 'FAILED' else 'display:none;' }}">
+    <b class="err">IMPORT FAILED</b>
+    <p id="imp-error">{{ processing_batch.error_message or 'Import failed. Inventory from this batch is not available.' }}</p>
+    <div style="margin-top:0.6rem; display:flex; gap:0.6rem;">
+      {% if processing_batch.retry_safe %}
+      <form method="post" action="{{ url_for('inventory.import_retry', batch_id=processing_batch.batch_id) }}">
+        {% include "_csrf.html" %}
+        <button class="btn" type="submit">Retry Import</button>
+      </form>
+      {% endif %}
+      {% if processing_batch.cleanup_safe %}
+      <form method="post" action="{{ url_for('inventory.import_cleanup', batch_id=processing_batch.batch_id) }}">
+        {% include "_csrf.html" %}
+        <button class="btn btn-danger" type="submit">Cancel/Cleanup Failed Import</button>
+      </form>
+      {% endif %}
+    </div>
+  </div>
+</div>
+<script>
+(function () {
+  var panel = document.getElementById("import-progress");
+  if (!panel) return;
+  var statusUrl = panel.getAttribute("data-status-url");
+  var recoverUrl = panel.getAttribute("data-recover-url");
+  var csrf = panel.getAttribute("data-csrf-token");
+  var recovering = false;
+  function render(data) {
+    document.getElementById("imp-rows").textContent = data.rows_validated + " / " + data.rows_submitted;
+    document.getElementById("imp-units").textContent = data.units_created + " / " + data.units_expected;
+    document.getElementById("imp-progress").textContent = data.progress_percent + "%";
+    document.getElementById("imp-status").textContent = data.status;
+    var workerEl = document.getElementById("imp-worker");
+    if (workerEl) workerEl.textContent = data.worker_status || "Offline";
+    var mode = document.getElementById("imp-mode");
+    var recoveringEl = document.getElementById("imp-recovering");
+    if (data.status === "PROCESSING") {
+      if (mode) mode.textContent = data.worker_healthy ? "Worker: Online" : "Recovery Mode";
+      if (recoveringEl) recoveringEl.style.display = data.worker_healthy ? "none" : "";
+    } else if (mode) {
+      mode.textContent = "";
+      if (recoveringEl) recoveringEl.style.display = "none";
+    }
+    var complete = document.getElementById("imp-complete");
+    var failed = document.getElementById("imp-failed");
+    if (data.status === "COMPLETED") {
+      complete.style.display = "";
+      failed.style.display = "none";
+      document.getElementById("imp-rows-imported").textContent = data.rows_validated;
+      document.getElementById("imp-units-final").textContent = data.units_created;
+      document.getElementById("imp-duration").textContent = data.duration_seconds != null ? data.duration_seconds + "s" : "—";
+      var heading = panel.querySelector("h2");
+      if (heading) heading.textContent = "COMPLETED";
+    } else if (data.status === "FAILED") {
+      complete.style.display = "none";
+      failed.style.display = "";
+      document.getElementById("imp-error").textContent = data.error_message || "Import failed. Inventory from this batch is not available.";
+      var headingFail = panel.querySelector("h2");
+      if (headingFail) headingFail.textContent = "IMPORT FAILED";
+    }
+  }
+  function recover(data) {
+    if (!recoverUrl || recovering || !data.recovery_eligible) return Promise.resolve(data);
+    recovering = true;
+    var body = new URLSearchParams();
+    body.append("csrf_token", csrf || "");
+    return fetch(recoverUrl, {
+      method: "POST",
+      headers: { "Accept": "application/json", "X-Requested-With": "XMLHttpRequest" },
+      credentials: "same-origin",
+      body: body
+    }).then(function (r) { return r.json(); }).finally(function () { recovering = false; });
+  }
+  function poll() {
+    fetch(statusUrl, { headers: { "Accept": "application/json" }, credentials: "same-origin" })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        render(data);
+        if (data.status !== "PROCESSING") return data;
+        return recover(data).then(function (next) {
+          if (next && next.status) render(next);
+          return next || data;
+        });
+      })
+      .then(function (data) {
+        if (data && data.status === "PROCESSING") setTimeout(poll, 1500);
+      })
+      .catch(function () { setTimeout(poll, 2500); });
+  }
+  if ({{ 'true' if processing_batch.status == 'PROCESSING' else 'false' }}) poll();
+})();
+</script>
+{% endif %}
+
+{% if preview %}
+<div class="panel">
+  <h2>Preview — {{ preview.filename }}</h2>
+  <p class="sub">Context {{ preview.client_code }} / {{ preview.warehouse_code }}{% if preview.batch_id %} · Batch {{ preview.batch_id }}{% endif %}</p>
+  <div class="kpis">
+    <div class="kpi"><div class="num">{{ preview.filename }}</div><div class="label">File</div></div>
+    <div class="kpi"><div class="num">{{ preview.client_code }}</div><div class="label">Client</div></div>
+    <div class="kpi"><div class="num">{{ preview.warehouse_code }}</div><div class="label">Warehouse</div></div>
+    <div class="kpi"><div class="num">{{ preview.total_rows }}</div><div class="label">Rows</div></div>
+    <div class="kpi"><div class="num">{{ preview.units }}</div><div class="label">Expected Units</div></div>
+    <div class="kpi"><div class="num">{{ preview.unique_upcs }}</div><div class="label">Unique UPCs</div></div>
+    <div class="kpi"><div class="num">{{ preview.unique_styles or 0 }}</div><div class="label">Unique Styles</div></div>
+    <div class="kpi"><div class="num">{{ preview.unique_locations }}</div><div class="label">Unique Locations</div></div>
+    <div class="kpi"><div class="num {{ 'err' if preview.has_blocking else 'ok' }}">{{ 'Blocked' if preview.has_blocking else 'Valid' }}</div><div class="label">Validation</div></div>
+  </div>
+
+  {% if preview.blocking %}
+    <h2 style="margin-top:1rem;">Blocking Errors</h2>
+    {% for e in preview.blocking %}
+      <div class="box errbox" style="margin-bottom:0.4rem;"><b class="err">{{ e.type }}</b> — {{ e.message }}</div>
+    {% endfor %}
+  {% endif %}
+
+  {% if preview.rows %}
+    <h2 style="margin-top:1rem;">First {{ preview.rows|length }} Rows</h2>
+    <table>
+      <thead><tr><th>Row</th><th>UPC</th><th>SKU</th><th>Description</th><th>Style</th><th>Color</th><th>Size</th><th>Qty</th><th>Location</th></tr></thead>
+      <tbody>
+        {% for r in preview.rows %}
+          <tr>
+            <td>{{ r.excel_row }}</td>
+            <td class="mono">{{ r.upc }}</td>
+            <td>{{ r.sku or '—' }}</td>
+            <td>{{ r.description or '—' }}</td>
+            <td>{{ r.style or '—' }}</td>
+            <td>{{ r.color or '—' }}</td>
+            <td>{{ r.size or '—' }}</td>
+            <td class="right">{{ r.quantity }}</td>
+            <td>{{ r.location }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% endif %}
+
+  <div style="margin-top:1rem; display:flex; gap:0.6rem;">
+    <form method="post" action="{{ url_for('inventory.import_confirm') }}" onsubmit="var b=this.querySelector('button'); b.disabled=true; b.textContent='Starting…';">
+      {% include "_csrf.html" %}
+      <button class="btn {{ 'disabled' if preview.has_blocking }}" type="submit" {{ 'disabled' if preview.has_blocking }}>Confirm Import</button>
+    </form>
+    <form method="post" action="{{ url_for('inventory.import_cancel') }}">
+      {% include "_csrf.html" %}
+      <button class="btn btn-danger" type="submit">Cancel</button>
+    </form>
+  </div>
+  {% if preview.has_blocking %}
+    <p class="err" style="margin-top:0.5rem;">Confirm is disabled while blocking errors exist. Zero units will be inserted.</p>
+  {% endif %}
+</div>
+{% endif %}
+{% endblock %}

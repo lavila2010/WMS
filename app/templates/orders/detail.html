@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}Order {{ order.wms_order_id }}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div class="section-title">
+    <h1>Order {{ order.wms_order_id }}</h1>
+    <span class="badge badge-{{ order.shipping_status }}">{{ order.shipping_status }}</span>
+    <span class="badge badge-{{ order.status }}">{{ order.status }}</span>
+  </div>
+  <p class="sub">
+    Client {{ order.client.client_code if order.client else '—' }} ·
+    Warehouse {{ order.warehouse.warehouse_code if order.warehouse else '—' }} ·
+    Division {{ order.division.code if order.division else '—' }} ·
+    Client order {{ order.client_order_number }} ·
+    Destination {{ '%02d'|format(order.destination_sequence) }}
+  </p>
+</div>
+
+<div class="card">
+  <div class="grid">
+    <div class="kv"><span>Customer</span><span>{{ order.customer or '—' }}</span></div>
+    <div class="kv"><span>Address</span><span>{{ order.customer_address or '—' }}</span></div>
+    <div class="kv"><span>Phone</span><span>{{ order.customer_phone or '—' }}</span></div>
+    <div class="kv"><span>Carrier</span><span>{{ order.carrier or '—' }}</span></div>
+    <div class="kv"><span>Shipping Service</span><span>{{ order.shipping_service or '—' }}</span></div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Lines</h2>
+  <table>
+    <thead><tr><th>UPC</th><th>SKU</th><th>Description</th><th class="right">Ordered</th><th class="right">Allocated</th><th class="right">Packed</th></tr></thead>
+    <tbody>
+      {% for line in order.lines %}
+        <tr>
+          <td class="mono">{{ line.upc }}</td>
+          <td>{{ line.sku or '—' }}</td>
+          <td>{{ line.description or '—' }}</td>
+          <td class="right num-cell">{{ line.qty_ordered }}</td>
+          <td class="right num-cell">{{ line.qty_allocated }}</td>
+          <td class="right num-cell">{{ line.qty_packed }}</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="card">
+  <div class="btn-row">
+    {% if order.status == 'CLOSED' %}
+      {% if closure %}
+        <a class="btn-secondary btn" href="{{ url_for('orders.order_document', document_id=closure.id) }}" target="_blank" rel="noopener">View Closure Report</a>
+        {% if can('DOCUMENT_REPRINT') %}
+        <form method="post" action="{{ url_for('orders.print_order_document', document_id=closure.id) }}">{% include "_csrf.html" %}<button class="btn-secondary" type="submit">Reprint Closure Report</button></form>
+        {% endif %}
+      {% endif %}
+      {% if packing %}
+        <a class="btn-secondary btn" href="{{ url_for('orders.order_document', document_id=packing.id) }}" target="_blank" rel="noopener">View Packing List</a>
+        {% if can('DOCUMENT_REPRINT') %}
+        <form method="post" action="{{ url_for('orders.print_order_document', document_id=packing.id) }}">{% include "_csrf.html" %}<button class="btn-secondary" type="submit">Reprint Packing List</button></form>
+        {% endif %}
+      {% endif %}
+      {% if can('SHIPPING_VIEW') %}
+        <a class="btn-secondary btn" href="{{ url_for('orders.shipping_detail', order_id=order.id) }}">Shipping & Tracking</a>
+      {% endif %}
+    {% endif %}
+    <a class="btn-secondary btn" href="{{ url_for('orders.index', client_id=order.client_id) }}">Back to Orders</a>
+  </div>
+</div>
+{% endblock %}

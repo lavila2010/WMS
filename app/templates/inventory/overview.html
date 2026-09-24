@@ -1,0 +1,61 @@
+{% extends "inventory/_layout.html" %}
+{% block title %}Inventory Overview{% endblock %}
+{% block inv_content %}
+<div class="kpis">
+  <div class="kpi"><div class="num">{{ kpis.on_hand }}</div><div class="label">On Hand</div></div>
+  <div class="kpi"><div class="num">{{ kpis.available }}</div><div class="label">Available</div></div>
+  <div class="kpi"><div class="num">{{ kpis.reserved }}</div><div class="label">Reserved</div></div>
+  <div class="kpi"><div class="num">{{ kpis.packed }}</div><div class="label">Packed</div></div>
+  <div class="kpi"><div class="num">{{ kpis.unique_upcs }}</div><div class="label">Unique UPCs</div></div>
+  <div class="kpi"><div class="num">{{ kpis.unique_skus }}</div><div class="label">Unique SKUs</div></div>
+  <div class="kpi"><div class="num">{{ kpis.locations }}</div><div class="label">Locations</div></div>
+</div>
+
+{% if comparison %}
+<div class="panel">
+  <h2>Warehouse Comparison</h2>
+  <table>
+    <thead><tr><th>Warehouse</th><th class="right">Available</th><th class="right">Reserved</th><th class="right">Packed</th><th class="right">On Hand</th></tr></thead>
+    <tbody>
+      {% for w in comparison %}
+        <tr><td>{{ w.warehouse }}</td><td class="right">{{ w.available }}</td><td class="right">{{ w.reserved }}</td><td class="right">{{ w.packed }}</td><td class="right">{{ w.on_hand }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+<div class="panel">
+  <h2>Inventory by Client + Warehouse + UPC + Location</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>UPC</th><th>SKU</th><th>Description</th><th>Style</th><th>Color</th><th>Size</th>
+        <th class="right">Available</th><th class="right">Reserved</th><th class="right">Packed</th><th class="right">On Hand</th>
+        <th>Location</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in by_location %}
+        <tr>
+          <td class="mono">
+            <a href="{{ url_for('inventory.upc_view', client_id=scope.client_id or r.client_id, warehouse_id=scope.warehouse_id or None, upc=r.upc) }}">{{ r.upc }}</a>
+          </td>
+          <td>{{ r.sku or '—' }}</td>
+          <td>{{ r.description or '—' }}</td>
+          <td>{{ r.style or '—' }}</td>
+          <td>{{ r.color or '—' }}</td>
+          <td>{{ r.size or '—' }}</td>
+          <td class="right">{{ r.available }}</td>
+          <td class="right">{{ r.reserved }}</td>
+          <td class="right">{{ r.packed }}</td>
+          <td class="right"><b>{{ r.on_hand }}</b></td>
+          <td>{{ r.location }}</td>
+        </tr>
+      {% else %}
+        <tr><td colspan="11" class="sub">No inventory in scope. Select Client and Warehouse, then upload inventory.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

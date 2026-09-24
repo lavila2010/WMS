@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block title %}Allocate {{ order.wms_order_id }}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div class="section-title">
+    <h1>Allocate · {{ order.wms_order_id }}</h1>
+    <span class="badge badge-{{ order.status }}">{{ order.status }}</span>
+  </div>
+  <p class="sub">
+    Client {{ order.client.client_code if order.client else '—' }} ·
+    Warehouse {{ order.warehouse.warehouse_code if order.warehouse else '—' }} ·
+    Division {{ order.division.code if order.division else '—' }} ·
+    Client order {{ order.client_order_number }}
+  </p>
+</div>
+
+<div class="card">
+  <h2>Run allocation</h2>
+  {% if qty.remaining > 0 and can('ALLOCATION_EXECUTE') %}
+    <form method="post" action="{{ url_for('allocation.run', order_id=order.id) }}">
+      {% include "_csrf.html" %}
+      <button type="submit">Reserve available units</button>
+    </form>
+  {% else %}
+    <p class="muted">Order is {{ order.status }}; allocation is closed.</p>
+  {% endif %}
+  {% if can_approve and can('PARTIAL_ALLOCATION_APPROVE') %}
+    <a class="btn" href="{{ url_for('allocation.approve_partial', order_id=order.id) }}">Approve Partial Allocation</a>
+  {% endif %}
+  {% if pick_ticket_ready and can('PICK_TICKET_VIEW') %}
+    <a class="btn btn-secondary" href="{{ url_for('orders.pick_tickets', client_id=pick_tickets_args.client_id, division_id=pick_tickets_args.division_id, warehouse_id=pick_tickets_args.warehouse_id) }}">Go to Pick Tickets</a>
+  {% endif %}
+  <p class="muted">Ordered {{ qty.ordered }} · Shipped {{ qty.shipped }} · Allocated {{ qty.currently_allocated }} · Remaining {{ qty.remaining }}</p>
+</div>
+
+<div class="card">
+  <h2>Lines</h2>
+  <table>
+    <thead><tr><th>UPC</th><th>SKU</th><th>Description</th><th class="right">Ordered</th><th class="right">Shipped</th><th class="right">Allocated</th><th class="right">Remaining</th></tr></thead>
+    <tbody>
+      {% for line in qty.upc_rows %}
+        <tr>
+          <td class="mono">{{ line.upc }}</td>
+          <td>{{ line.sku or '—' }}</td>
+          <td>{{ line.description or '—' }}</td>
+          <td class="right num-cell">{{ line.ordered_qty }}</td>
+          <td class="right num-cell">{{ line.shipped_qty }}</td>
+          <td class="right num-cell">{{ line.allocated_qty }}</td>
+          <td class="right num-cell">{{ line.remaining_qty }}</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% if shortages %}
+    <p class="muted">Shortages by UPC:
+      {% for s in shortages %}<span class="mono">{{ s.upc }}×{{ s.remaining_qty }}</span>{% if not loop.last %}, {% endif %}{% endfor %}
+    </p>
+  {% endif %}
+</div>
+
+<div class="card">
+  <h2>Reserved units ({{ allocations|length }})</h2>
+  <table>
+    <thead><tr><th>Unit</th><th>UPC</th><th>Location</th><th></th></tr></thead>
+    <tbody>
+      {% for a in allocations %}
+        <tr>
+          <td class="mono">{{ a.inventory_unit_id }}</td>
+          <td class="mono">{{ a.upc }}</td>
+          <td>{{ a.location }}</td>
+          <td class="right">
+            {% if can('ALLOCATION_RELEASE') %}
+            <form method="post" action="{{ url_for('allocation.release', allocation_id=a.id) }}">{% include "_csrf.html" %}<button class="btn-danger btn" type="submit">Release</button></form>
+            {% endif %}
+          </td>
+        </tr>
+      {% else %}
+        <tr><td colspan="4" class="muted">No units reserved yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}
